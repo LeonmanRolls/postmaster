@@ -162,6 +162,14 @@ function planningLink(name: string): string {
   return String(p?.review_link ?? "");
 }
 
+function planningStories(name: string): string {
+  const cfg = tryTomlFile(join(tmp, `${name}.toml`));
+  if (!cfg) return "";
+  const p = cfg.planning as Record<string, unknown> | undefined;
+  if (!p || !Object.hasOwn(p, "stories")) return "(absent)";
+  return String(p.stories ?? "");
+}
+
 describe("positive controls", () => {
   test("setup lists confine, asks once after the probe, and defaults it to off", () => {
     const keys = run(SELF, ["setup", "--keys"]);
@@ -373,6 +381,14 @@ describe("positive controls", () => {
     const planlinkRc = runSetup("planlink");
     expect(planlinkRc).toBe(0);
     expect(planningLink("planlink")).toBe("https://code.example/open?file={path}");
+  });
+
+  test("planning stories stay unset unless answered, and land under [planning]", () => {
+    expect(planningStories("plain")).toBe("(absent)");
+    answers("planstories", "planning.stories=off");
+    const rc = runSetup("planstories");
+    expect(rc).toBe(0);
+    expect(planningStories("planstories")).toBe("off");
   });
 
   test("launch memory and process caps default to 8G and 512", () => {
@@ -662,6 +678,15 @@ describe("negative controls", () => {
     expect(existsSync(join(tmp, "badlink.toml"))).toBe(false);
     expect(out).toContain("planning.review_link must contain {path}");
   });
+
+  test("a planning stories value other than on or off is refused", () => {
+    answers("badstories", "planning.stories=yes");
+    const rc = runSetup("badstories");
+    const out = readFileSync(join(tmp, "badstories.out"), "utf8");
+    expect(rc).toBe(1);
+    expect(existsSync(join(tmp, "badstories.toml"))).toBe(false);
+    expect(out).toContain("planning.stories must be on or off");
+  });
 });
 
 describe("project mode", () => {
@@ -749,6 +774,20 @@ review_link = ""
     const data = settingsData(s.repo);
     expect(tableOf(data.tracker).kind).toBe("local");
     expect(Object.hasOwn(data, "lanes")).toBe(false);
+  });
+
+  test("answered planning keys share one [planning] section", () => {
+    const s = stageProject();
+    const r = runProject(
+      s.repo,
+      s.config,
+      "planning.review_link=https://code.example/open?file={path}\nplanning.stories=off",
+    );
+    expect(r.code).toBe(0);
+    const data = settingsData(s.repo);
+    expect(tableOf(data.planning).review_link).toBe("https://code.example/open?file={path}");
+    expect(tableOf(data.planning).stories).toBe("off");
+    expect(settingsOf(s.repo).split("[planning]").length - 1).toBe(1);
   });
 
   test("a second run merges: earlier settings stay, new answers land", () => {

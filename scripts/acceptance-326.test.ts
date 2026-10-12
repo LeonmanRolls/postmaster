@@ -298,7 +298,9 @@ describe("setup-verifiers usage", () => {
       gitOrThrow(repo, "checkout", "-b", "feature");
       const dispatch = mkdtempSync(join(dir, "dispatch-"));
       const config = writeMinimalConfig(dir);
-      const r = run(RUN, ["setup-verifiers", repo, "cli", "--run", dispatch], {
+      // The repository landing needs the default checkout; the local keep
+      // does not, so the refusal is the --repository route's.
+      const r = run(RUN, ["setup-verifiers", repo, "cli", "--run", dispatch, "--repository"], {
         env: { POSTMASTER_HOST: "none", POSTMASTER_CONFIG: config },
       });
       expect(r.code).toBe(2);

@@ -20,7 +20,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "./lib/proc.ts";
 import { processState } from "./lib/processes.ts";
-import { DETAIL_RE, RESULT_RE, shlexQuote, ticketPart } from "./verify.ts";
+import { DETAIL_RE, ensureCommonExclude, RESULT_RE, shlexQuote, ticketPart } from "./verify.ts";
 
 const SELF = join(import.meta.dir, "run");
 const HERE = import.meta.dir;
@@ -668,6 +668,19 @@ describe("record, arm and run", () => {
     expect(existsSync(join(tmp, "proj", ".postmaster", "runs", "T-1", "actions.jsonl"))).toBe(
       false,
     );
+  });
+});
+
+describe("ensureCommonExclude", () => {
+  test("adds one entry idempotently to the common exclude", () => {
+    const repo = join(tmp, "excl");
+    mkRepo(repo);
+    ensureCommonExclude(repo, ".postmaster/verifier");
+    ensureCommonExclude(repo, ".postmaster/verifier");
+    const exclude = readFileSync(join(repo, ".git", "info", "exclude"), "utf-8");
+    expect(exclude.split("\n").filter((l) => l === ".postmaster/verifier/")).toEqual([
+      ".postmaster/verifier/",
+    ]);
   });
 });
 

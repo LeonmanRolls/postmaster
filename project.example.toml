@@ -3,8 +3,8 @@
 # What a project requires of every run against it, declared once for everyone who works on it.
 # It is the only project data file in `.postmaster/` intended for sharing, so it names no
 # credential, path on anyone's machine or role assignment. A project without it is discovered,
-# and that is the normal case. `.postmaster/.gitignore` ignores the whole folder; sharing is an
-# explicit `git add -f .postmaster/project.toml`.
+# and that is the normal case. `.postmaster/.gitignore` ignores the folder's records,
+# drafts and local verifiers; sharing is an explicit `git add -f .postmaster/project.toml`.
 #
 # [project] describes project-owned facts that discovery cannot know: what `default` means in a
 # ticket and the risk surfaces the security lens should probe. `[tracker].binding` names the

@@ -2,10 +2,22 @@
 // detection and the wall scan. The live session stays out; acceptance-323 covers the
 // command boundary as a subprocess.
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { commitAll, gitOrThrow, initRepo, RUN, writeRepoFile } from "./acceptance-323.ts";
+import { cutWorktree, expectCode, scratchApp } from "./acceptance-478.ts";
 import { run } from "./lib/proc.ts";
 import {
   UNLIMITED_WAIT_CHUNK_SECONDS,
@@ -22,10 +34,14 @@ import {
   type ClassifiedEntry,
   checkMultiVerifiers,
   classifyEntries,
+  classifyKeepFile,
   commitsPastBase,
   committedFeaturePages,
+  compareTrees,
   confirmedSha,
+  copyKeptIntoProject,
   correctedClaims,
+  countNoun,
   decideCheap,
   decideChecks,
   defaultBase,
@@ -42,17 +58,26 @@ import {
   indexBullets,
   indexFileFor,
   indexNames,
+  indexNamesFolder,
+  indexStrays,
   isFeaturePage,
   isSetupDispatch,
   isSurface,
   joinBodies,
+  keptTreeLink,
   kindProse,
   landTarget,
   lastLine,
   listVerifiers,
+  localDestCollisions,
+  localDestLink,
+  localScopeStrays,
+  localTag,
   matchDependedFiles,
   mergeAuthorityOf,
+  mergeFileThreeWay,
   modeBlocks,
+  type NamedSurface,
   normalizeFolder,
   orderKinds,
   outsideAdded,
@@ -62,6 +87,8 @@ import {
   parseArgs,
   parseFilesList,
   parseHandover,
+  parseSurfaceName,
+  parseSurfaces,
   parseUpkeepReport,
   parseVerifyResults,
   pickBranch,
@@ -69,11 +96,13 @@ import {
   pickUpkeepWorktree,
   pickWorktree,
   presentVerifierFolders,
-  proseList,
   pruneWorktrees,
+  readVerifierTree,
   refuseLine,
   remoteFromSymbolicRef,
+  removeKeptPaths,
   removeProvisioning,
+  renderChangesSection,
   renderListing,
   renderPrompt,
   renderTemplate,
@@ -81,17 +110,27 @@ import {
   roleHarness,
   scopeVdirs,
   scrubGitEnv,
+  segOfRel,
   sendText,
   sendVerdict,
   sessionFolder,
+  sessionLabel,
   spanNamesDir,
+  spanSegs,
   spawnCommand,
+  stampConfirmed,
   strayUncommitted,
   strayVerifierPaths,
+  surfaceFolder,
+  surfaceFromIndex,
   surfaceFromReadme,
   surfaceKind,
+  surfaceLabel,
+  surfaceList,
   surfaceProse,
+  surfaceRule,
   timeoutMs,
+  type TreeValue,
   UPKEEP_LINE,
   unlistedSentence,
   unrunProject,
@@ -101,6 +140,7 @@ import {
   upkeepScope,
   upkeepSendText,
   UPKEEP_HEADLESS_UNASKED,
+  validateLocalSession,
   verdictUpkeep,
   verifierHandle,
   verifyDirName,
@@ -121,22 +161,46 @@ describe("parseArgs", () => {
   test("prompt takes a repo and a surface", () => {
     expect(parseArgs(["prompt", "/r", "cli"])).toEqual({
       ok: true,
-      req: { cmd: "prompt", repo: "/r", surfaces: ["cli"], headless: false },
+      req: { cmd: "prompt", repo: "/r", surfaces: [{ kind: "cli", name: "" }], headless: false },
     });
   });
 
   test("prompt takes several surfaces as distinct kinds in canonical order", () => {
     expect(parseArgs(["prompt", "/r", "web", "cli"])).toEqual({
       ok: true,
-      req: { cmd: "prompt", repo: "/r", surfaces: ["cli", "web"], headless: false },
+      req: {
+        cmd: "prompt",
+        repo: "/r",
+        surfaces: [
+          { kind: "cli", name: "" },
+          { kind: "web", name: "" },
+        ],
+        headless: false,
+      },
     });
     expect(parseArgs(["prompt", "/r", "cli", "cli-examples"])).toEqual({
       ok: true,
-      req: { cmd: "prompt", repo: "/r", surfaces: ["cli"], headless: false },
+      req: { cmd: "prompt", repo: "/r", surfaces: [{ kind: "cli", name: "" }], headless: false },
     });
     expect(parseArgs(["prompt", "/r", "browser-suite", "web-journey"])).toEqual({
       ok: true,
-      req: { cmd: "prompt", repo: "/r", surfaces: ["web"], headless: false },
+      req: { cmd: "prompt", repo: "/r", surfaces: [{ kind: "web", name: "" }], headless: false },
+    });
+  });
+
+  test("prompt takes named surfaces, ordered by kind then name", () => {
+    expect(parseArgs(["prompt", "/r", "web:shop", "backend:api", "web:admin"])).toEqual({
+      ok: true,
+      req: {
+        cmd: "prompt",
+        repo: "/r",
+        surfaces: [
+          { kind: "web", name: "admin" },
+          { kind: "web", name: "shop" },
+          { kind: "backend", name: "api" },
+        ],
+        headless: false,
+      },
     });
   });
 
@@ -153,7 +217,7 @@ describe("parseArgs", () => {
     expect(parseArgs(["prompt", "/r", "telegraph"])).toEqual({
       ok: false,
       error:
-        "unknown surface: telegraph (cli, web, library, cli-examples, browser-suite, web-journey or library-tests)",
+        "unknown surface: telegraph (cli, web, library, backend, cli-examples, browser-suite, web-journey or library-tests)",
     });
     expect(parseArgs(["prompt", "/r", "cli", "telegraph"]).ok).toBe(false);
   });
@@ -168,7 +232,7 @@ describe("parseArgs", () => {
   test("prompt takes --headless and refuses any other flag", () => {
     expect(parseArgs(["prompt", "/r", "cli", "--headless"])).toEqual({
       ok: true,
-      req: { cmd: "prompt", repo: "/r", surfaces: ["cli"], headless: true },
+      req: { cmd: "prompt", repo: "/r", surfaces: [{ kind: "cli", name: "" }], headless: true },
     });
     expect(parseArgs(["prompt", "/r", "cli", "--fresh"])).toEqual({
       ok: false,
@@ -178,27 +242,62 @@ describe("parseArgs", () => {
       ok: false,
       error: "prompt takes a repo and a surface",
     });
+    expect(parseArgs(["prompt", "/r", "cli", "--repository"])).toEqual({
+      ok: false,
+      error: "unknown flag for prompt: --repository",
+    });
   });
 
   test("make needs --run and defaults the timeout", () => {
     expect(parseArgs(["make", "/r", "web", "--run", "/d"])).toEqual({
       ok: true,
-      req: { cmd: "make", repo: "/r", surfaces: ["web"], dispatch: "/d", timeout: 3600 },
+      req: {
+        cmd: "make",
+        repo: "/r",
+        surfaces: [{ kind: "web", name: "" }],
+        dispatch: "/d",
+        timeout: 3600,
+      },
     });
     expect(parseArgs(["make", "/r", "web", "--run", "/d", "--timeout", "60"])).toEqual({
       ok: true,
-      req: { cmd: "make", repo: "/r", surfaces: ["web"], dispatch: "/d", timeout: 60 },
+      req: {
+        cmd: "make",
+        repo: "/r",
+        surfaces: [{ kind: "web", name: "" }],
+        dispatch: "/d",
+        timeout: 60,
+      },
     });
     expect(parseArgs(["make", "/r", "cli-examples", "browser-suite", "--run", "/d"])).toEqual({
       ok: true,
       req: {
         cmd: "make",
         repo: "/r",
-        surfaces: ["cli", "web"],
+        surfaces: [
+          { kind: "cli", name: "" },
+          { kind: "web", name: "" },
+        ],
         dispatch: "/d",
         timeout: 3600,
       },
     });
+  });
+
+  test("make takes --repository, unset when absent", () => {
+    expect(parseArgs(["make", "/r", "web", "--run", "/d", "--repository"])).toEqual({
+      ok: true,
+      req: {
+        cmd: "make",
+        repo: "/r",
+        surfaces: [{ kind: "web", name: "" }],
+        dispatch: "/d",
+        timeout: 3600,
+        repository: true,
+      },
+    });
+    const local = parseArgs(["make", "/r", "web", "--run", "/d"]);
+    expect(local.ok && "repository" in (local as { ok: true; req: object }).req).toBe(false);
   });
 
   test("make without --run fails", () => {
@@ -240,7 +339,13 @@ describe("parseArgs", () => {
   test("make takes 0 to wait without a limit; check and land need seconds past zero", () => {
     expect(parseArgs(["make", "/r", "web", "--run", "/d", "--timeout", "0"])).toEqual({
       ok: true,
-      req: { cmd: "make", repo: "/r", surfaces: ["web"], dispatch: "/d", timeout: 0 },
+      req: {
+        cmd: "make",
+        repo: "/r",
+        surfaces: [{ kind: "web", name: "" }],
+        dispatch: "/d",
+        timeout: 0,
+      },
     });
     expect(
       parseArgs(["check", "/r", "b", "--run", "/d", "--handover", "/h", "--timeout", "0"]),
@@ -328,15 +433,106 @@ describe("matchDependedFiles", () => {
 });
 
 describe("surfaces", () => {
-  test("the three surfaces and their prose", () => {
+  test("the four surfaces and their prose", () => {
     expect(isSurface("cli")).toBe(true);
     expect(isSurface("web")).toBe(true);
     expect(isSurface("library")).toBe(true);
+    expect(isSurface("backend")).toBe(true);
     expect(isSurface("telegraph")).toBe(false);
     expect(surfaceProse("cli")).toBe("command line");
     expect(surfaceProse("web")).toBe("web pages");
     expect(surfaceProse("library")).toBe("library interface");
+    expect(surfaceProse("backend")).toBe("backend service");
     expect(() => surfaceProse("telegraph")).toThrow("unknown surface: telegraph");
+  });
+});
+
+describe("parseSurfaceName", () => {
+  test("a kind parses unnamed, a kind:name parses named", () => {
+    expect(parseSurfaceName("cli")).toEqual({ ok: true, surface: { kind: "cli", name: "" } });
+    expect(parseSurfaceName("web:admin")).toEqual({
+      ok: true,
+      surface: { kind: "web", name: "admin" },
+    });
+    expect(parseSurfaceName("backend:api")).toEqual({
+      ok: true,
+      surface: { kind: "backend", name: "api" },
+    });
+    expect(parseSurfaceName("browser-suite:shop")).toEqual({
+      ok: true,
+      surface: { kind: "web", name: "shop" },
+    });
+  });
+
+  test("a bare backend, a bad name and a reserved name fail", () => {
+    expect(parseSurfaceName("backend")).toEqual({
+      ok: false,
+      error: "backend takes a name, as backend:api",
+    });
+    expect(parseSurfaceName("web:")).toEqual({
+      ok: false,
+      error: "bad surface name: web: (a name follows the colon, as web:admin)",
+    });
+    expect(parseSurfaceName("web:Admin").ok).toBe(false);
+    expect(parseSurfaceName("web:a:b").ok).toBe(false);
+    expect(parseSurfaceName("web:cli")).toEqual({
+      ok: false,
+      error: "bad surface name: cli is a surface kind",
+    });
+    expect(parseSurfaceName("web:cli-examples")).toEqual({
+      ok: false,
+      error: "bad surface name: cli-examples is a surface kind",
+    });
+    expect(parseSurfaceName("telegraph:x").ok).toBe(false);
+  });
+});
+
+describe("parseSurfaces", () => {
+  test("exact duplicates drop, kind order wins, names sort within a kind", () => {
+    expect(parseSurfaces(["web", "cli", "web", "cli-examples"])).toEqual({
+      ok: true,
+      surfaces: [
+        { kind: "cli", name: "" },
+        { kind: "web", name: "" },
+      ],
+    });
+    expect(parseSurfaces(["web:shop", "backend:api", "web:admin"])).toEqual({
+      ok: true,
+      surfaces: [
+        { kind: "web", name: "admin" },
+        { kind: "web", name: "shop" },
+        { kind: "backend", name: "api" },
+      ],
+    });
+  });
+
+  test("two surfaces sharing one folder fail", () => {
+    expect(parseSurfaces(["web:admin", "cli:admin"])).toEqual({
+      ok: false,
+      error: "surfaces web:admin and cli:admin share a folder: verifier/admin/",
+    });
+  });
+
+  test("labels and folders read from the surface", () => {
+    expect(surfaceLabel({ kind: "cli", name: "" })).toBe("cli");
+    expect(surfaceLabel({ kind: "web", name: "admin" })).toBe("web:admin");
+    expect(surfaceFolder({ kind: "cli", name: "" })).toBe("cli");
+    expect(surfaceFolder({ kind: "web", name: "admin" })).toBe("admin");
+    expect(
+      sessionLabel([
+        { kind: "web", name: "admin" },
+        { kind: "backend", name: "api" },
+      ]),
+    ).toBe("admin-api");
+    expect(countNoun(1)).toBe("1 verifier");
+    expect(countNoun(3)).toBe("3 verifiers");
+  });
+
+  test("only a backend carries a rule of its own", () => {
+    expect(surfaceRule("cli")).toBe("");
+    expect(surfaceRule("web")).toBe("");
+    expect(surfaceRule("library")).toBe("");
+    expect(surfaceRule("backend")).toContain("through the requests it answers");
   });
 });
 
@@ -1075,9 +1271,21 @@ describe("waitForMarker", () => {
 
 describe("sessionFolder", () => {
   test("one surface keeps its own folder, several share one", () => {
-    expect(sessionFolder("/x/app", ["cli"])).toBe("verify-app");
-    expect(sessionFolder("/x/app", ["cli", "web"])).toBe("verifier");
-    expect(sessionFolder("/x/app", ["cli", "web", "library"])).toBe("verifier");
+    expect(sessionFolder("/x/app", [{ kind: "cli", name: "" }])).toBe("verify-app");
+    expect(
+      sessionFolder("/x/app", [
+        { kind: "cli", name: "" },
+        { kind: "web", name: "" },
+      ]),
+    ).toBe("verifier");
+    expect(
+      sessionFolder("/x/app", [
+        { kind: "cli", name: "" },
+        { kind: "web", name: "" },
+        { kind: "library", name: "" },
+      ]),
+    ).toBe("verifier");
+    expect(sessionFolder("/x/app", [{ kind: "backend", name: "api" }])).toBe("verify-app");
   });
 });
 
@@ -1104,6 +1312,19 @@ describe("presentVerifierFolders", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  test("the local folder reports last, whatever it holds", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      mkdirSync(join(repo, ".postmaster", "verifier"), { recursive: true });
+      expect(presentVerifierFolders(repo)).toEqual([".postmaster/verifier"]);
+      mkdirSync(join(repo, "verifier"), { recursive: true });
+      expect(presentVerifierFolders(repo)).toEqual(["verifier", ".postmaster/verifier"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("failureOutcome", () => {
@@ -1116,6 +1337,17 @@ describe("failureOutcome", () => {
 
   test("a failure before any session cleans up", () => {
     expect(failureOutcome(false, "/x/app-verify-cli", "verify-cli")).toEqual({
+      cleanup: true,
+      suffix: "",
+    });
+  });
+
+  test("a detached working copy is named alone, with no branch", () => {
+    expect(failureOutcome(true, "/x/app-verify-cli", null)).toEqual({
+      cleanup: false,
+      suffix: "; the worktree /x/app-verify-cli was left behind",
+    });
+    expect(failureOutcome(false, "/x/app-verify-cli", null)).toEqual({
       cleanup: true,
       suffix: "",
     });
@@ -1135,6 +1367,23 @@ describe("removeProvisioning", () => {
       expect(removeProvisioning(repo, wt, "verify-cli")).toBe("");
       expect(existsSync(wt)).toBe(false);
       expect(gitOrThrow(repo, "branch", "--list", "verify-cli").trim()).toBe("");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a null branch removes only the detached working copy", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      initRepo(repo);
+      writeRepoFile(repo, "README.md", "# app\n");
+      commitAll(repo, "first");
+      const wt = join(dir, "app-verify-cli");
+      gitOrThrow(repo, "worktree", "add", "--detach", wt, "main");
+      expect(removeProvisioning(repo, wt, null)).toBe("");
+      expect(existsSync(wt)).toBe(false);
+      expect(gitOrThrow(repo, "branch", "--list", "verify-*").trim()).toBe("");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -1277,6 +1526,7 @@ describe("surfaceKind", () => {
     expect(surfaceKind("cli")).toBe("cli");
     expect(surfaceKind("web")).toBe("web");
     expect(surfaceKind("library")).toBe("library");
+    expect(surfaceKind("backend")).toBe("backend");
     expect(surfaceKind("cli-examples")).toBe("cli");
     expect(surfaceKind("browser-suite")).toBe("web");
     expect(surfaceKind("web-journey")).toBe("web");
@@ -1291,9 +1541,10 @@ describe("surfaceKind", () => {
 });
 
 describe("orderKinds", () => {
-  test("dedups to canonical cli, web, library order", () => {
+  test("dedups to canonical cli, web, library, backend order", () => {
     expect(orderKinds(["web", "cli"])).toEqual(["cli", "web"]);
     expect(orderKinds(["library", "library", "cli"])).toEqual(["cli", "library"]);
+    expect(orderKinds(["backend", "cli"])).toEqual(["cli", "backend"]);
     expect(orderKinds([])).toEqual([]);
   });
 });
@@ -1360,36 +1611,639 @@ describe("indexNames", () => {
   test("folder and prose on different lines read unnamed", () => {
     expect(indexNames("- [cli](cli/)\n- the command line verifier", "cli")).toBe(false);
   });
+
+  test("a bullet wrapped past its first line still reads named", () => {
+    expect(
+      indexNamesFolder(
+        "- The command line verifier in\n  .postmaster/verifier/cli/: drives it.",
+        "command line",
+        ".postmaster/verifier/cli",
+      ),
+    ).toBe(true);
+    expect(
+      indexNamesFolder(
+        "- The command line verifier in\n  .postmaster/verifier/cli/: drives it.",
+        "web pages",
+        ".postmaster/verifier/cli",
+      ),
+    ).toBe(false);
+  });
+
+  test("a named folder and prose together read named", () => {
+    expect(
+      indexNamesFolder(
+        "- The web pages verifier in .postmaster/verifier/admin/: drives it.",
+        "web pages",
+        ".postmaster/verifier/admin",
+      ),
+    ).toBe(true);
+    expect(
+      indexNamesFolder(
+        "- [api](api/) verifies the backend service.",
+        "backend service",
+        ".postmaster/verifier/api",
+      ),
+    ).toBe(true);
+    expect(
+      indexNamesFolder(
+        "- The web pages verifier in .postmaster/verifier/admin-extra/: drives it.",
+        "web pages",
+        ".postmaster/verifier/admin",
+      ),
+    ).toBe(false);
+    expect(
+      indexNamesFolder(
+        "- The web pages verifier in .postmaster/verifier/admin/: drives it.",
+        "command line",
+        ".postmaster/verifier/admin",
+      ),
+    ).toBe(false);
+  });
 });
 
-describe("proseList", () => {
-  test("joins the prose with commas", () => {
-    expect(proseList(["cli", "web"])).toBe("command line, web pages");
-    expect(proseList(["library"])).toBe("library interface");
+describe("spanSegs", () => {
+  test("names the folders a bullet's first line carries", () => {
+    expect(
+      spanSegs(["- The command line verifier in .postmaster/verifier/cli/: drives it."]),
+    ).toEqual(["cli"]);
+    expect(spanSegs(["- [api](api/) verifies the backend service."])).toEqual(["api"]);
+    expect(spanSegs(["- See also the index."])).toEqual([]);
+    expect(spanSegs([])).toEqual([]);
+  });
+
+  test("project paths and page links name no folder", () => {
+    expect(
+      spanSegs([
+        "- `.postmaster/verifier/cli/` (command line). Files: src/verifier/run.ts, lib/x.ts",
+      ]),
+    ).toEqual(["cli"]);
+    expect(
+      spanSegs([
+        "- `.postmaster/verifier/cli/` (command line), see [docs](docs/x.md). Files: README.md",
+      ]),
+    ).toEqual(["cli"]);
+    expect(spanSegs(["- [api](api/ 'title') verifies the backend service."])).toEqual(["api"]);
+  });
+
+  test("a folder on a wrapped continuation line is named", () => {
+    expect(
+      spanSegs(["- The command line verifier in", "  .postmaster/verifier/cli/: drives it."]),
+    ).toEqual(["cli"]);
+    expect(
+      spanSegs(["- The command line verifier in", "  .postmaster/verifier/cli/ and src/x.ts"]),
+    ).toEqual(["cli"]);
+  });
+});
+
+describe("indexStrays", () => {
+  test("kept folders pass, dropped dangle, unlisted fail", () => {
+    const text = [
+      "# Verifiers",
+      "",
+      "- [cli](cli/) verifies the command line.",
+      "- [web](web/) verifies the web pages.",
+      "- [eve](eve/) verifies the web pages.",
+      "- See also the guide.",
+    ].join("\n");
+    expect(indexStrays(text, ["cli", "web"], ["cli", "web"])).toEqual({
+      dangling: [],
+      unlisted: ["eve"],
+    });
+    expect(indexStrays(text, ["cli", "web", "eve"], ["cli"])).toEqual({
+      dangling: ["eve", "web"],
+      unlisted: [],
+    });
+    expect(indexStrays(text, ["cli", "web", "eve"], ["cli", "web", "eve"])).toEqual({
+      dangling: [],
+      unlisted: [],
+    });
+  });
+
+  test("a Files path under a verifier/ directory strays nothing", () => {
+    const text = [
+      "# Verifiers",
+      "",
+      "- `.postmaster/verifier/cli/` (command line). Files: src/verifier/run.ts, lib/x.ts",
+      "",
+    ].join("\n");
+    expect(indexStrays(text, ["cli"], ["cli"])).toEqual({ dangling: [], unlisted: [] });
+  });
+
+  test("wrapped folders still dangle and stray", () => {
+    const text = [
+      "# Verifiers",
+      "",
+      "- The command line verifier in .postmaster/verifier/cli/: drives it.",
+      "- The web pages verifier in",
+      "  .postmaster/verifier/web/: drives it.",
+      "- The backend service verifier in",
+      "  .postmaster/verifier/gone/: drives it.",
+      "",
+    ].join("\n");
+    expect(indexStrays(text, ["cli", "web"], ["cli"])).toEqual({
+      dangling: ["web"],
+      unlisted: ["gone"],
+    });
+  });
+});
+
+describe("localScopeStrays", () => {
+  test("the root and the hand-over pass, everything else strays", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      initRepo(repo);
+      writeRepoFile(repo, "README.md", "# app\n");
+      commitAll(repo, "first");
+      expect(localScopeStrays(repo)).toEqual([]);
+      writeRepoFile(repo, ".postmaster/verifier/cli/README.md", "# cli\n");
+      writeRepoFile(repo, "HANDOVER.md", "# handover\n");
+      expect(localScopeStrays(repo)).toEqual([]);
+      writeRepoFile(repo, "stray.md", "stray\n");
+      writeRepoFile(repo, "README.md", "# app changed\n");
+      expect(localScopeStrays(repo).sort()).toEqual(["README.md", "stray.md"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("localDestCollisions", () => {
+  test("the held index and folders collide, the rest do not", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      initRepo(repo);
+      const surfaces: NamedSurface[] = [
+        { kind: "cli", name: "" },
+        { kind: "web", name: "shop" },
+      ];
+      expect(localDestCollisions(repo, surfaces)).toEqual([]);
+      writeRepoFile(repo, ".postmaster/verifier/cli/README.md", "# cli\n");
+      expect(localDestCollisions(repo, surfaces)).toEqual([".postmaster/verifier/cli"]);
+      writeRepoFile(repo, ".postmaster/verifier/README.md", "# Verifiers\n");
+      writeRepoFile(repo, ".postmaster/verifier/shop/README.md", "# shop\n");
+      expect(localDestCollisions(repo, surfaces)).toEqual([
+        ".postmaster/verifier/README.md",
+        ".postmaster/verifier/cli",
+        ".postmaster/verifier/shop",
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("localDestLink", () => {
+  const folders = [".postmaster/verifier/cli"];
+
+  test("no link anywhere reports null", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      mkdirSync(repo, { recursive: true });
+      expect(localDestLink(repo, folders)).toBeNull();
+      writeRepoFile(repo, ".postmaster/verifier/cli/README.md", "# cli\n");
+      expect(localDestLink(repo, folders)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a link at the root, a folder, the index or the settings dir reports it", () => {
+    const dir = tempDir();
+    try {
+      const outside = join(dir, "outside");
+      mkdirSync(outside, { recursive: true });
+      const repo = join(dir, "app");
+      mkdirSync(join(repo, ".postmaster"), { recursive: true });
+      symlinkSync(outside, join(repo, ".postmaster", "verifier"));
+      expect(localDestLink(repo, folders)).toBe(".postmaster/verifier");
+      rmSync(join(repo, ".postmaster", "verifier"));
+      mkdirSync(join(repo, ".postmaster", "verifier"), { recursive: true });
+      symlinkSync(outside, join(repo, ".postmaster", "verifier", "cli"));
+      expect(localDestLink(repo, folders)).toBe(".postmaster/verifier/cli");
+      rmSync(join(repo, ".postmaster", "verifier", "cli"));
+      writeFileSync(join(outside, "README.md"), "# Verifiers\n");
+      symlinkSync(join(outside, "README.md"), join(repo, ".postmaster", "verifier", "README.md"));
+      expect(localDestLink(repo, folders)).toBe(".postmaster/verifier/README.md");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a dangling folder link reports it", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      mkdirSync(join(repo, ".postmaster", "verifier"), { recursive: true });
+      symlinkSync(join(dir, "nowhere"), join(repo, ".postmaster", "verifier", "cli"));
+      expect(localDestLink(repo, folders)).toBe(".postmaster/verifier/cli");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("copyKeptIntoProject", () => {
+  const folders = [".postmaster/verifier/cli", ".postmaster/verifier/web"];
+  const index = ".postmaster/verifier/README.md";
+
+  function seedWt(wt: string): void {
+    for (const folder of folders) {
+      writeRepoFile(wt, `${folder}/README.md`, `# ${folder}\n`);
+      writeRepoFile(wt, `${folder}/features/README.md`, "Files: README.md\n");
+      writeRepoFile(wt, `${folder}/features/f1.md`, "# f1\n");
+    }
+    writeRepoFile(wt, index, "# Verifiers\n");
+  }
+
+  test("copies the folders and the index", () => {
+    const dir = tempDir();
+    try {
+      const wt = join(dir, "wt");
+      const repo = join(dir, "app");
+      mkdirSync(wt, { recursive: true });
+      mkdirSync(repo, { recursive: true });
+      seedWt(wt);
+      copyKeptIntoProject(wt, repo, folders, index);
+      for (const folder of folders) {
+        expect(existsSync(join(repo, folder, "features", "f1.md"))).toBe(true);
+      }
+      expect(existsSync(join(repo, index))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a failed copy leaves nothing behind", () => {
+    const dir = tempDir();
+    try {
+      const wt = join(dir, "wt");
+      const repo = join(dir, "app");
+      mkdirSync(wt, { recursive: true });
+      mkdirSync(repo, { recursive: true });
+      seedWt(wt);
+      chmodSync(join(wt, folders[1], "features", "f1.md"), 0o000);
+      expect(() => copyKeptIntoProject(wt, repo, folders, index)).toThrow(
+        /could not be kept.*partial keep was removed/u,
+      );
+      expect(existsSync(join(repo, ".postmaster", "verifier"))).toBe(false);
+    } finally {
+      chmodSync(join(dir, "wt", folders[1], "features", "f1.md"), 0o644);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a failed copy removes the in-progress folder under a held root", () => {
+    const dir = tempDir();
+    try {
+      const wt = join(dir, "wt");
+      const repo = join(dir, "app");
+      mkdirSync(wt, { recursive: true });
+      mkdirSync(repo, { recursive: true });
+      seedWt(wt);
+      writeRepoFile(repo, ".postmaster/verifier/keep-me.txt", "mine\n");
+      chmodSync(join(wt, folders[1], "features", "f1.md"), 0o000);
+      expect(() => copyKeptIntoProject(wt, repo, folders, index)).toThrow(
+        /could not be kept.*partial keep was removed/u,
+      );
+      expect(existsSync(join(repo, folders[0]))).toBe(false);
+      expect(existsSync(join(repo, folders[1]))).toBe(false);
+      expect(existsSync(join(repo, index))).toBe(false);
+      expect(existsSync(join(repo, ".postmaster", "verifier", "keep-me.txt"))).toBe(true);
+    } finally {
+      chmodSync(join(dir, "wt", folders[1], "features", "f1.md"), 0o644);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("removeKeptPaths", () => {
+  test("removes the paths, and the root only when the keep created it", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      mkdirSync(repo, { recursive: true });
+      writeRepoFile(repo, ".postmaster/verifier/cli/README.md", "# cli\n");
+      writeRepoFile(repo, ".postmaster/verifier/README.md", "# Verifiers\n");
+      const rels = [".postmaster/verifier/cli", ".postmaster/verifier/README.md"];
+      expect(removeKeptPaths(repo, rels, true)).toBe("");
+      expect(existsSync(join(repo, ".postmaster", "verifier"))).toBe(true);
+      writeRepoFile(repo, ".postmaster/verifier/cli/README.md", "# cli\n");
+      expect(removeKeptPaths(repo, rels, false)).toBe("");
+      expect(existsSync(join(repo, ".postmaster", "verifier"))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("keptTreeLink", () => {
+  const folders = [".postmaster/verifier/cli"];
+  const index = ".postmaster/verifier/README.md";
+
+  function seedWt(wt: string): void {
+    writeRepoFile(wt, `${folders[0]}/README.md`, "# cli\n");
+    writeRepoFile(wt, `${folders[0]}/features/README.md`, "Files: README.md\n");
+    writeRepoFile(wt, `${folders[0]}/features/f1.md`, "# f1\n");
+    writeRepoFile(wt, index, "# Verifiers\n");
+  }
+
+  test("a clean tree reports null", () => {
+    const dir = tempDir();
+    try {
+      const wt = join(dir, "wt");
+      mkdirSync(wt, { recursive: true });
+      seedWt(wt);
+      expect(keptTreeLink(wt, folders, index)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a live or dangling page link reports it", () => {
+    const dir = tempDir();
+    try {
+      const wt = join(dir, "wt");
+      const outside = join(dir, "outside.txt");
+      writeFileSync(outside, "elsewhere\n");
+      mkdirSync(wt, { recursive: true });
+      seedWt(wt);
+      const page = join(wt, folders[0], "features", "evil.md");
+      symlinkSync(outside, page);
+      expect(keptTreeLink(wt, folders, index)).toBe(`${folders[0]}/features/evil.md`);
+      rmSync(page);
+      symlinkSync(join(dir, "nowhere.md"), join(wt, folders[0], "features", "ghost.md"));
+      expect(keptTreeLink(wt, folders, index)).toBe(`${folders[0]}/features/ghost.md`);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a linked folder or index reports it", () => {
+    const dir = tempDir();
+    try {
+      const wt = join(dir, "wt");
+      const outside = join(dir, "outside");
+      mkdirSync(outside, { recursive: true });
+      mkdirSync(wt, { recursive: true });
+      seedWt(wt);
+      rmSync(join(wt, folders[0]), { recursive: true });
+      symlinkSync(outside, join(wt, folders[0]));
+      expect(keptTreeLink(wt, folders, index)).toBe(folders[0]);
+      rmSync(join(wt, folders[0]));
+      mkdirSync(join(wt, folders[0]), { recursive: true });
+      seedWt(wt);
+      rmSync(join(wt, index));
+      symlinkSync(join(outside, "README.md"), join(wt, index));
+      expect(keptTreeLink(wt, folders, index)).toBe(index);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("localTag", () => {
+  test("the label alone, or with the worktree's number", () => {
+    expect(localTag("/x/app", "cli", "/x/app-verify-cli")).toBe("cli");
+    expect(localTag("/x/app", "cli", "/x/app-verify-cli-2")).toBe("cli-2");
+    expect(localTag("/x/app", "cli-web", "/x/app-verify-cli-web-3")).toBe("cli-web-3");
+    expect(localTag("/x/app", "cli", "/x/app-verify-web")).toBe("cli");
+    expect(localTag("/x/app", "cli", "/elsewhere/wt")).toBe("cli");
+  });
+});
+
+describe("validateLocalSession", () => {
+  const CLI: NamedSurface = { kind: "cli", name: "" };
+  const WEB: NamedSurface = { kind: "web", name: "" };
+
+  function seed(files: Record<string, string>): { dir: string; repo: string; cutAt: number } {
+    const dir = tempDir();
+    const repo = join(dir, "app");
+    initRepo(repo);
+    writeRepoFile(repo, "README.md", "# app\n");
+    commitAll(repo, "first");
+    // Ten seconds in the past: these tests judge content, and a cut taken at
+    // the wall clock flakes when the clock steps under load. Freshness itself
+    // is handoverFresh's unit-covered job, plus the backdated case below.
+    const cutAt = Date.now() - 10_000;
+    for (const [rel, text] of Object.entries(files)) writeRepoFile(repo, rel, text);
+    return { dir, repo, cutAt };
+  }
+
+  function goodFiles(proof: string): Record<string, string> {
+    return {
+      ".postmaster/verifier/README.md":
+        "# Verifiers\n\n- The command line verifier in .postmaster/verifier/cli/: drives it.\n",
+      ".postmaster/verifier/cli/README.md": `# cli\n\nDrives it.\n\n${UPKEEP_LINE}\n`,
+      ".postmaster/verifier/cli/features/README.md": "# features\n",
+      ".postmaster/verifier/cli/features/a.md": "# a\n",
+      ".postmaster/verifier/cli/features/b.md": "# b\n",
+      ".postmaster/verifier/cli/features/c.md": "# c\n",
+      "HANDOVER.md": `# Handover\n\n## Verifier: cli\nFolder: .postmaster/verifier/cli\nProof: ${proof}\n`,
+    };
+  }
+
+  test("a proven verifier judges kept, an unproven one judges left out", () => {
+    const { dir, repo, cutAt } = seed({});
+    try {
+      const proof = join(dir, "proof.log");
+      writeFileSync(proof, "driven\n");
+      const files = goodFiles(proof);
+      files["HANDOVER.md"] +=
+        "\n## Verifier: web\nFolder: .postmaster/verifier/web\nProof: none: no drive\n";
+      for (const [rel, text] of Object.entries(files)) writeRepoFile(repo, rel, text);
+      const judged = validateLocalSession(repo, cutAt, [CLI, WEB]);
+      expect(judged.kept.map((e) => e.name)).toEqual(["cli"]);
+      expect(judged.leftOut.map((e) => e.name)).toEqual(["web"]);
+      expect(judged.leftOut[0]?.failReason).toBe("no proof file");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("no proven verifier, no hand-over and no index fail", () => {
+    const { dir, repo, cutAt } = seed({});
+    try {
+      const none = goodFiles("none: no drive");
+      for (const [rel, text] of Object.entries(none)) writeRepoFile(repo, rel, text);
+      expect(() => validateLocalSession(repo, cutAt, [CLI])).toThrow(/proved no verifier/u);
+      rmSync(join(repo, "HANDOVER.md"));
+      expect(() => validateLocalSession(repo, cutAt, [CLI])).toThrow(/no HANDOVER/u);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("an incomplete folder, a dangling index and a stray file fail", () => {
+    const { dir, repo, cutAt } = seed({});
+    try {
+      const proof = join(dir, "proof.log");
+      writeFileSync(proof, "driven\n");
+      const incomplete = goodFiles(proof);
+      delete incomplete[".postmaster/verifier/cli/features/c.md"];
+      for (const [rel, text] of Object.entries(incomplete)) writeRepoFile(repo, rel, text);
+      expect(() => validateLocalSession(repo, cutAt, [CLI])).toThrow(/fewer than 3 feature pages/u);
+      writeRepoFile(repo, ".postmaster/verifier/cli/features/c.md", "# c\n");
+      writeRepoFile(
+        repo,
+        ".postmaster/verifier/README.md",
+        "# Verifiers\n\n- The command line verifier in .postmaster/verifier/cli/: drives it.\n- [web](web/) verifies the web pages.\n",
+      );
+      const handover =
+        `# Handover\n\n## Verifier: cli\nFolder: .postmaster/verifier/cli\nProof: ${proof}\n\n` +
+        "## Verifier: web\nFolder: .postmaster/verifier/web\nProof: none: no drive\n";
+      writeRepoFile(repo, "HANDOVER.md", handover);
+      expect(() => validateLocalSession(repo, cutAt, [CLI, WEB])).toThrow(/with no proof/u);
+      writeRepoFile(
+        repo,
+        ".postmaster/verifier/README.md",
+        "# Verifiers\n\n- The command line verifier in .postmaster/verifier/cli/: drives it.\n",
+      );
+      writeRepoFile(repo, "stray.md", "stray\n");
+      expect(() => validateLocalSession(repo, cutAt, [CLI])).toThrow(/outside/u);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("an unlisted folder and an unlisted index entry fail", () => {
+    const { dir, repo, cutAt } = seed({});
+    try {
+      const proof = join(dir, "proof.log");
+      writeFileSync(proof, "driven\n");
+      const files = goodFiles(proof);
+      files["HANDOVER.md"] =
+        `# Handover\n\n## Verifier: eve\nFolder: .postmaster/verifier/eve\nProof: ${proof}\n`;
+      for (const [rel, text] of Object.entries(files)) writeRepoFile(repo, rel, text);
+      expect(() => validateLocalSession(repo, cutAt, [CLI])).toThrow(/unlisted folder/u);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a symlink in the kept tree fails", () => {
+    const { dir, repo, cutAt } = seed({});
+    try {
+      const proof = join(dir, "proof.log");
+      writeFileSync(proof, "driven\n");
+      const files = goodFiles(proof);
+      for (const [rel, text] of Object.entries(files)) writeRepoFile(repo, rel, text);
+      symlinkSync(
+        join(dir, "proof.log"),
+        join(repo, ".postmaster", "verifier", "cli", "features", "evil.md"),
+      );
+      expect(() => validateLocalSession(repo, cutAt, [CLI])).toThrow(/symlink/u);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a hand-over backdated past the cut fails as predating", () => {
+    const { dir, repo } = seed({});
+    try {
+      const proof = join(dir, "proof.log");
+      writeFileSync(proof, "driven\n");
+      const files = goodFiles(proof);
+      for (const [rel, text] of Object.entries(files)) writeRepoFile(repo, rel, text);
+      const past = new Date(Date.now() - 60_000);
+      utimesSync(join(repo, "HANDOVER.md"), past, past);
+      expect(() => validateLocalSession(repo, Date.now(), [CLI])).toThrow(/predates/u);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("surfaceList", () => {
+  test("joins each surface as prose with its label", () => {
+    expect(
+      surfaceList([
+        { kind: "cli", name: "" },
+        { kind: "web", name: "" },
+      ]),
+    ).toBe("command line (cli), web pages (web)");
+    expect(surfaceList([{ kind: "library", name: "" }])).toBe("library interface (library)");
+    expect(
+      surfaceList([
+        { kind: "web", name: "admin" },
+        { kind: "backend", name: "api" },
+      ]),
+    ).toBe("web pages (web:admin), backend service (backend:api)");
   });
 });
 
 describe("dirLines", () => {
   test("one mapping line per kind", () => {
-    expect(dirLines(["cli", "web"])).toBe(
+    expect(
+      dirLines([
+        { kind: "cli", name: "" },
+        { kind: "web", name: "" },
+      ]),
+    ).toBe(
       "- the command line (cli) verifier goes in verifier/cli/\n- the web pages (web) verifier goes in verifier/web/",
+    );
+  });
+
+  test("named surfaces map to their own folders under a root", () => {
+    expect(
+      dirLines(
+        [
+          { kind: "web", name: "admin" },
+          { kind: "backend", name: "api" },
+        ],
+        ".postmaster/verifier",
+      ),
+    ).toBe(
+      "- the web pages (web:admin) verifier goes in .postmaster/verifier/admin/\n- the backend service (backend:api) verifier goes in .postmaster/verifier/api/",
     );
   });
 });
 
 describe("unlistedSentence", () => {
   test("none left out leaves no sentence", () => {
-    expect(unlistedSentence(["cli", "web", "library"])).toBe("");
+    expect(
+      unlistedSentence([
+        { kind: "cli", name: "" },
+        { kind: "web", name: "" },
+        { kind: "library", name: "" },
+      ]),
+    ).toBe("");
+  });
+
+  test("a named backend changes nothing: the sentence guards the trio", () => {
+    expect(
+      unlistedSentence([
+        { kind: "cli", name: "" },
+        { kind: "web", name: "" },
+        { kind: "library", name: "" },
+        { kind: "backend", name: "api" },
+      ]),
+    ).toBe("");
+    expect(
+      unlistedSentence([
+        { kind: "backend", name: "api" },
+        { kind: "cli", name: "" },
+      ]),
+    ).toBe(
+      "- Make no verifier for the web pages and the library interface. If you notice them while you work, leave them out.",
+    );
   });
 
   test("one left out is named", () => {
-    expect(unlistedSentence(["cli", "web"])).toBe(
+    expect(
+      unlistedSentence([
+        { kind: "cli", name: "" },
+        { kind: "web", name: "" },
+      ]),
+    ).toBe(
       "- Make no verifier for the library interface. If you notice it while you work, leave it out.",
     );
   });
 
   test("two left out share the sentence", () => {
-    expect(unlistedSentence(["web"])).toBe(
+    expect(unlistedSentence([{ kind: "web", name: "" }])).toBe(
       "- Make no verifier for the command line and the library interface. If you notice them while you work, leave them out.",
     );
   });
@@ -1399,11 +2253,11 @@ describe("joinBodies", () => {
   test("numbers each body and separates with rules", () => {
     expect(
       joinBodies([
-        { kind: "cli", text: "CLI BODY" },
-        { kind: "web", text: "WEB BODY" },
+        { surface: { kind: "cli", name: "" }, text: "CLI BODY" },
+        { surface: { kind: "web", name: "admin" }, text: "WEB BODY" },
       ]),
     ).toBe(
-      "---\n\n**Verifier 1 of 2: command line (cli).**\n\nCLI BODY\n\n---\n\n**Verifier 2 of 2: web pages (web).**\n\nWEB BODY",
+      "---\n\n**Verifier 1 of 2: command line (cli).**\n\nCLI BODY\n\n---\n\n**Verifier 2 of 2: web pages (web:admin).**\n\nWEB BODY",
     );
   });
 });
@@ -1479,10 +2333,24 @@ describe("strayVerifierPaths", () => {
           "verifier/api/README.md",
           "verifier/notes.md",
         ],
-        ["cli", "web"],
+        [
+          { kind: "cli", name: "" },
+          { kind: "web", name: "" },
+        ],
       ).sort(),
     ).toEqual(["verifier/api/README.md", "verifier/library/README.md", "verifier/notes.md"]);
-    expect(strayVerifierPaths(["verifier/README.md", "verifier/cli/x.md"], ["cli"])).toEqual([]);
+    expect(
+      strayVerifierPaths(["verifier/README.md", "verifier/cli/x.md"], [{ kind: "cli", name: "" }]),
+    ).toEqual([]);
+    expect(
+      strayVerifierPaths(
+        ["verifier/README.md", "verifier/admin/x.md", "verifier/shop/x.md"],
+        [
+          { kind: "web", name: "admin" },
+          { kind: "web", name: "shop" },
+        ],
+      ),
+    ).toEqual([]);
   });
 });
 
@@ -1511,25 +2379,35 @@ function seedMultiBranch(
   return { base, branch: "verify-cli-web" };
 }
 
-function goodVerifiers(
-  kinds: ("cli" | "web" | "library")[] = ["cli", "web"],
-): Record<string, string> {
+const CLI_WEB: NamedSurface[] = [
+  { kind: "cli", name: "" },
+  { kind: "web", name: "" },
+];
+
+const CLI_LIBRARY: NamedSurface[] = [
+  { kind: "cli", name: "" },
+  { kind: "library", name: "" },
+];
+
+function goodVerifiers(surfaces: NamedSurface[] = CLI_WEB): Record<string, string> {
   const prose: Record<string, string> = {
     cli: "command line",
     web: "web pages",
     library: "library interface",
+    backend: "backend service",
   };
+  const seg = (s: NamedSurface): string => (s.name === "" ? s.kind : s.name);
   const files: Record<string, string> = {
-    "verifier/README.md": `# Verifiers\n\n${kinds
-      .map((k) => `- [${k}](${k}/) verifies the ${prose[k]}.`)
+    "verifier/README.md": `# Verifiers\n\n${surfaces
+      .map((s) => `- [${seg(s)}](${seg(s)}/) verifies the ${prose[s.kind]}.`)
       .join("\n")}\n`,
     "HANDOVER.md": "proved both\n",
   };
-  for (const kind of kinds) {
-    files[`verifier/${kind}/README.md`] = `# ${kind}\n\nDrives it.\n\n${UPKEEP_LINE}\n`;
-    files[`verifier/${kind}/features/README.md`] = "# features\n";
+  for (const s of surfaces) {
+    files[`verifier/${seg(s)}/README.md`] = `# ${seg(s)}\n\nDrives it.\n\n${UPKEEP_LINE}\n`;
+    files[`verifier/${seg(s)}/features/README.md`] = "# features\n";
     for (const page of ["a.md", "b.md", "c.md"]) {
-      files[`verifier/${kind}/features/${page}`] = "# f\n";
+      files[`verifier/${seg(s)}/features/${page}`] = "# f\n";
     }
   }
   return files;
@@ -1538,7 +2416,7 @@ function goodVerifiers(
 function checkBranch(
   baseFiles: Record<string, string>,
   branchFiles: Record<string, string>,
-  surfaces: ("cli" | "web" | "library")[],
+  surfaces: NamedSurface[],
 ): () => void {
   const dir = tempDir();
   const repo = join(dir, "app");
@@ -1555,41 +2433,41 @@ function checkBranch(
 
 describe("checkMultiVerifiers", () => {
   test("a branch adding two complete verifiers passes", () => {
-    expect(checkBranch({ "README.md": "# app\n" }, goodVerifiers(), ["cli", "web"])).not.toThrow();
+    expect(checkBranch({ "README.md": "# app\n" }, goodVerifiers(), CLI_WEB)).not.toThrow();
   });
 
   test("a missing index fails", () => {
     const files = goodVerifiers();
     delete files["verifier/README.md"];
-    expect(checkBranch({ "README.md": "# app\n" }, files, ["cli", "web"])).toThrow();
+    expect(checkBranch({ "README.md": "# app\n" }, files, CLI_WEB)).toThrow();
   });
 
   test("a missing verifier README fails", () => {
     const files = goodVerifiers();
     delete files["verifier/cli/README.md"];
-    expect(checkBranch({ "README.md": "# app\n" }, files, ["cli", "web"])).toThrow();
+    expect(checkBranch({ "README.md": "# app\n" }, files, CLI_WEB)).toThrow();
   });
 
   test("a missing features index fails", () => {
     const files = goodVerifiers();
     delete files["verifier/cli/features/README.md"];
-    expect(checkBranch({ "README.md": "# app\n" }, files, ["cli", "web"])).toThrow();
+    expect(checkBranch({ "README.md": "# app\n" }, files, CLI_WEB)).toThrow();
   });
 
   test("a missing feature page fails", () => {
     const files = goodVerifiers();
     delete files["verifier/cli/features/c.md"];
-    expect(checkBranch({ "README.md": "# app\n" }, files, ["cli", "web"])).toThrow();
+    expect(checkBranch({ "README.md": "# app\n" }, files, CLI_WEB)).toThrow();
   });
 
   test("a missing upkeep line and a wrong index entry fail", () => {
     const noUpkeep = goodVerifiers();
     noUpkeep["verifier/cli/README.md"] = "# cli\n\nDrives it.\n";
-    expect(checkBranch({ "README.md": "# app\n" }, noUpkeep, ["cli", "web"])).toThrow(/upkeep/u);
+    expect(checkBranch({ "README.md": "# app\n" }, noUpkeep, CLI_WEB)).toThrow(/upkeep/u);
     const wrongIndex = goodVerifiers();
     wrongIndex["verifier/README.md"] =
       "# Verifiers\n\n- [cli](verifier/cli-extra/): command line.\n- [web](web/) verifies the web pages.\n";
-    expect(checkBranch({ "README.md": "# app\n" }, wrongIndex, ["cli", "web"])).toThrow(
+    expect(checkBranch({ "README.md": "# app\n" }, wrongIndex, CLI_WEB)).toThrow(
       /names no command line/u,
     );
   });
@@ -1597,14 +2475,12 @@ describe("checkMultiVerifiers", () => {
   test("an added unlisted verifier fails, pre-existing content passes", () => {
     const stray = goodVerifiers();
     stray["verifier/library/README.md"] = "# library\n";
-    expect(checkBranch({ "README.md": "# app\n" }, stray, ["cli", "web"])).toThrow(
-      /unlisted library/u,
-    );
+    expect(checkBranch({ "README.md": "# app\n" }, stray, CLI_WEB)).toThrow(/unlisted library/u);
     expect(
       checkBranch(
         { "README.md": "# app\n", "verifier/web/README.md": "# old web\n" },
-        goodVerifiers(["cli", "library"]),
-        ["cli", "library"],
+        goodVerifiers(CLI_LIBRARY),
+        CLI_LIBRARY,
       ),
     ).not.toThrow();
   });
@@ -1612,10 +2488,10 @@ describe("checkMultiVerifiers", () => {
   test("an unknown verifier folder and a stray index sibling fail", () => {
     const api = goodVerifiers();
     api["verifier/api/README.md"] = "# api\n";
-    expect(checkBranch({ "README.md": "# app\n" }, api, ["cli", "web"])).toThrow(/unlisted api/u);
+    expect(checkBranch({ "README.md": "# app\n" }, api, CLI_WEB)).toThrow(/unlisted api/u);
     const sibling = goodVerifiers();
     sibling["verifier/notes.md"] = "stray\n";
-    expect(checkBranch({ "README.md": "# app\n" }, sibling, ["cli", "web"])).toThrow(
+    expect(checkBranch({ "README.md": "# app\n" }, sibling, CLI_WEB)).toThrow(
       /unlisted notes\.md/u,
     );
   });
@@ -1623,16 +2499,11 @@ describe("checkMultiVerifiers", () => {
   test("files added outside verifier/ fail, wherever they land", () => {
     const top = goodVerifiers();
     top["verifier-cli/README.md"] = "# stray\n";
-    expect(checkBranch({ "README.md": "# app\n" }, top, ["cli", "web"])).toThrow(
-      /outside verifier/u,
-    );
+    expect(checkBranch({ "README.md": "# app\n" }, top, CLI_WEB)).toThrow(/outside verifier/u);
     const nested = goodVerifiers();
     nested["verify-app/extra.md"] = "stray\n";
     expect(
-      checkBranch({ "README.md": "# app\n", "verify-app/README.md": "# old\n" }, nested, [
-        "cli",
-        "web",
-      ]),
+      checkBranch({ "README.md": "# app\n", "verify-app/README.md": "# old\n" }, nested, CLI_WEB),
     ).toThrow(/outside verifier/u);
   });
 
@@ -1642,12 +2513,31 @@ describe("checkMultiVerifiers", () => {
       const repo = join(dir, "app");
       initRepo(repo);
       const { base } = seedMultiBranch(repo, { "README.md": "# app\n" }, goodVerifiers());
-      expect(() => checkMultiVerifiers(repo, "nope", base, ["cli", "web"])).toThrow(
-        /cannot be compared/u,
-      );
+      expect(() => checkMultiVerifiers(repo, "nope", base, CLI_WEB)).toThrow(/cannot be compared/u);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  test("named surfaces check their own folders and prose", () => {
+    const surfaces: NamedSurface[] = [
+      { kind: "web", name: "admin" },
+      { kind: "backend", name: "api" },
+    ];
+    expect(
+      checkBranch({ "README.md": "# app\n" }, goodVerifiers(surfaces), surfaces),
+    ).not.toThrow();
+    const missing = goodVerifiers(surfaces);
+    delete missing["verifier/api/README.md"];
+    expect(checkBranch({ "README.md": "# app\n" }, missing, surfaces)).toThrow(
+      /no verifier\/api\/README/u,
+    );
+    const wrongIndex = goodVerifiers(surfaces);
+    wrongIndex["verifier/README.md"] =
+      "# Verifiers\n\n- [admin](admin/) verifies the web pages.\n- [api](api/) verifies the web pages.\n";
+    expect(checkBranch({ "README.md": "# app\n" }, wrongIndex, surfaces)).toThrow(
+      /names no backend service \(backend:api\)/u,
+    );
   });
 });
 
@@ -2121,6 +3011,7 @@ describe("kindProse", () => {
     expect(kindProse("cli")).toBe("command line");
     expect(kindProse("web")).toBe("web pages");
     expect(kindProse("library")).toBe("library interface");
+    expect(kindProse("backend")).toBe("backend service");
     expect(kindProse("telegraph")).toBeNull();
   });
 });
@@ -2130,6 +3021,7 @@ describe("surfaceFromReadme", () => {
     expect(surfaceFromReadme("# todo on the command line\n")).toBe("command line");
     expect(surfaceFromReadme("# Driving the web pages\n")).toBe("web pages");
     expect(surfaceFromReadme("# Notes on the library interface\n")).toBe("library interface");
+    expect(surfaceFromReadme("# Driving the backend service\n")).toBe("backend service");
   });
 
   test("the earliest phrase wins over a later aside", () => {
@@ -2149,10 +3041,34 @@ describe("surfaceFromReadme", () => {
     expect(surfaceFromReadme("Driven through the project's own library.\n")).toBeNull();
   });
 
+  test("a bare backend names nothing, like a bare library", () => {
+    expect(surfaceFromReadme("Driven through the project's own backend.\n")).toBeNull();
+  });
+
   test("past the head, and an empty file, name nothing", () => {
     const buried = `${"filler\n".repeat(30)}on the command line\n`;
     expect(surfaceFromReadme(buried)).toBeNull();
     expect(surfaceFromReadme("")).toBeNull();
+  });
+});
+
+describe("surfaceFromIndex", () => {
+  test("the bullet naming the folder states its surface", () => {
+    const index = [
+      "# Verifiers",
+      "",
+      "- The backend service verifier in .postmaster/verifier/api/: drives it. Files: README.md",
+      "- The command line verifier in .postmaster/verifier/cli/: drives it. Files: README.md",
+      "",
+    ].join("\n");
+    expect(surfaceFromIndex(index, "api")).toBe("backend service");
+    expect(surfaceFromIndex(index, "cli")).toBe("command line");
+    expect(surfaceFromIndex(index, "shop")).toBeNull();
+  });
+
+  test("a bullet without prose states nothing", () => {
+    const index = ["# Verifiers", "", "- [api](api/) verifies it.", ""].join("\n");
+    expect(surfaceFromIndex(index, "api")).toBeNull();
   });
 });
 
@@ -2281,6 +3197,30 @@ describe("listVerifiers", () => {
       plant(root, "verify-notes.txt", "not a verifier\n");
       mkdirSync(join(root, "verify-empty"));
       expect(listVerifiers(root)).toEqual({ indexes: [], verifiers: [] });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("local: the .postmaster index with one verifier per folder", () => {
+    const root = tempDir();
+    try {
+      plant(root, ".postmaster/verifier/README.md", "# Verifiers\n");
+      plant(root, ".postmaster/verifier/api/README.md", "# Driving the backend service\n");
+      plant(root, ".postmaster/verifier/api/features/add.md", "# add\n");
+      plant(root, ".postmaster/verifier/api/features/README.md", "# features\n");
+      plant(root, ".postmaster/verifier/cli/README.md", "# cli\n");
+      expect(listVerifiers(root)).toEqual({
+        indexes: [".postmaster/verifier/README.md"],
+        verifiers: [
+          {
+            folder: ".postmaster/verifier/api",
+            surface: "backend service",
+            pages: [".postmaster/verifier/api/features/add.md"],
+          },
+          { folder: ".postmaster/verifier/cli", surface: "command line", pages: [] },
+        ],
+      });
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -3669,5 +4609,452 @@ describe("upkeepCorrectSendText", () => {
     expect(text).toContain("/d/logs/verifier-upkeep-prompt.txt");
     expect(text).toMatch(/correcting upkeep pass/u);
     expect(text.endsWith("\n")).toBe(true);
+  });
+});
+
+describe("run-copy parseArgs", () => {
+  test("record takes a repo and a dispatch", () => {
+    expect(parseArgs(["record", "r", "d"])).toEqual({
+      ok: true,
+      req: { cmd: "record", repo: "r", dispatch: "d" },
+    });
+    for (const argv of [["record"], ["record", "r"], ["record", "r", "d", "x"]]) {
+      expect(parseArgs(argv)).toEqual({ ok: false, error: "record takes a repo and a dispatch" });
+    }
+  });
+
+  test("arm takes a worktree and a dispatch", () => {
+    expect(parseArgs(["arm", "w", "d"])).toEqual({
+      ok: true,
+      req: { cmd: "arm", wt: "w", dispatch: "d" },
+    });
+    for (const argv of [["arm"], ["arm", "w"], ["arm", "w", "d", "x"]]) {
+      expect(parseArgs(argv)).toEqual({ ok: false, error: "arm takes a worktree and a dispatch" });
+    }
+  });
+
+  test("changes takes a worktree, a dispatch and an optional freeze", () => {
+    expect(parseArgs(["changes", "w", "d"])).toEqual({
+      ok: true,
+      req: { cmd: "changes", wt: "w", dispatch: "d" },
+    });
+    expect(parseArgs(["changes", "w", "d", "--freeze"])).toEqual({
+      ok: true,
+      req: { cmd: "changes", wt: "w", dispatch: "d", freeze: true },
+    });
+    expect(parseArgs(["changes", "w"])).toEqual({
+      ok: false,
+      error: "changes takes a worktree and a dispatch",
+    });
+    expect(parseArgs(["changes", "w", "d", "--at"])).toEqual({
+      ok: false,
+      error: "unknown flag for changes: --at",
+    });
+  });
+
+  test("keep takes a repo with a run and a commit", () => {
+    expect(parseArgs(["keep", "r", "--run", "d", "--at", "m"])).toEqual({
+      ok: true,
+      req: { cmd: "keep", repo: "r", dispatch: "d", at: "m" },
+    });
+    expect(parseArgs(["keep"])).toEqual({ ok: false, error: "keep takes a repo" });
+    expect(parseArgs(["keep", "r", "--at", "m"])).toEqual({
+      ok: false,
+      error: "keep needs --run <dispatch>",
+    });
+    expect(parseArgs(["keep", "r", "--run", "d"])).toEqual({
+      ok: false,
+      error: "keep needs --at <commit>",
+    });
+    expect(parseArgs(["keep", "r", "--run", "d", "--at", "m", "--freeze"])).toEqual({
+      ok: false,
+      error: "unknown flag for keep: --freeze",
+    });
+  });
+});
+
+describe("readVerifierTree and compareTrees", () => {
+  test("reads files and labels symlinks without following them", () => {
+    const dir = tempDir();
+    try {
+      writeRepoFile(dir, "t/a.md", "# a\n");
+      writeRepoFile(dir, "t/sub/b.md", "# b\n");
+      symlinkSync("a.md", join(dir, "t/link.md"));
+      const tree = readVerifierTree(join(dir, "t"));
+      expect([...tree.keys()].sort()).toEqual(["a.md", "link.md", "sub/b.md"]);
+      expect(tree.get("a.md")).toEqual({ kind: "file", bytes: Buffer.from("# a\n") });
+      expect(tree.get("link.md")).toEqual({ kind: "other", label: "symlink -> a.md" });
+      expect(readVerifierTree(join(dir, "missing")).size).toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("compareTrees sorts added, removed and changed", () => {
+    const file = (s: string): TreeValue => ({ kind: "file", bytes: Buffer.from(s) });
+    const base = new Map([
+      ["b.md", file("b")],
+      ["c.md", file("c1")],
+      ["d.md", file("d")],
+    ]);
+    const next = new Map([
+      ["a.md", file("a")],
+      ["c.md", file("c2")],
+      ["d.md", file("d")],
+    ]);
+    expect(compareTrees(base, next)).toEqual({
+      added: ["a.md"],
+      removed: ["b.md"],
+      changed: ["c.md"],
+    });
+    expect(compareTrees(base, base)).toEqual({ added: [], removed: [], changed: [] });
+  });
+});
+
+describe("renderChangesSection", () => {
+  test("renders each group and skips the empty ones", () => {
+    const section = renderChangesSection(
+      [{ rel: "c.md", diff: ["@@ -1 +1 @@", "-a", "+b"] }],
+      ["n.md"],
+      [],
+    );
+    expect(section).toBe(
+      "## Verifier changes\n\nChanged:\n\n- c.md\n```diff\n@@ -1 +1 @@\n-a\n+b\n```\n\nAdded:\n\n- n.md",
+    );
+    expect(section).not.toContain("Removed:");
+  });
+
+  test("no change renders as the one line", () => {
+    expect(renderChangesSection([], [], [])).toBe("verifiers unchanged");
+  });
+});
+
+describe("classifyKeepFile", () => {
+  const file = (s: string): TreeValue => ({ kind: "file", bytes: Buffer.from(s) });
+  const other: TreeValue = { kind: "other", label: "symlink -> x" };
+
+  test("a path the run never had is untouched", () => {
+    expect(classifyKeepFile(undefined, undefined, undefined)).toEqual({ kind: "untouched" });
+    expect(classifyKeepFile(undefined, undefined, file("c"))).toEqual({ kind: "untouched" });
+  });
+
+  test("a removal lands when the project left the file alone", () => {
+    expect(classifyKeepFile(file("b"), undefined, undefined)).toEqual({ kind: "untouched" });
+    expect(classifyKeepFile(file("b"), undefined, file("b"))).toEqual({ kind: "take-remove" });
+    expect(classifyKeepFile(file("b"), undefined, file("c"))).toEqual({
+      kind: "clash",
+      reason: "changed in the project",
+    });
+  });
+
+  test("an addition lands when the project lacks it", () => {
+    expect(classifyKeepFile(undefined, file("f"), undefined)).toEqual({ kind: "take-add" });
+    expect(classifyKeepFile(undefined, file("f"), file("f"))).toEqual({ kind: "untouched" });
+    expect(classifyKeepFile(undefined, file("f"), file("g"))).toEqual({
+      kind: "clash",
+      reason: "added on both sides",
+    });
+    expect(classifyKeepFile(undefined, other, undefined)).toEqual({
+      kind: "clash",
+      reason: "not a regular file",
+    });
+  });
+
+  test("a change takes, merges or clashes", () => {
+    expect(classifyKeepFile(file("b"), file("b"), file("c"))).toEqual({ kind: "untouched" });
+    expect(classifyKeepFile(file("b"), file("f"), undefined)).toEqual({
+      kind: "clash",
+      reason: "removed in the project",
+    });
+    expect(classifyKeepFile(file("b"), file("f"), file("b"))).toEqual({ kind: "take-change" });
+    expect(classifyKeepFile(file("b"), file("f"), file("f"))).toEqual({ kind: "untouched" });
+    expect(classifyKeepFile(file("b"), file("f"), file("c"))).toEqual({ kind: "merge" });
+    expect(classifyKeepFile(file("b"), other, file("b"))).toEqual({
+      kind: "clash",
+      reason: "not a regular file",
+    });
+  });
+});
+
+describe("mergeFileThreeWay", () => {
+  test("merges disjoint changes and reports a clash", () => {
+    const clean = mergeFileThreeWay(
+      Buffer.from("one\nTWO\nthree\nfour\nfive\n"),
+      Buffer.from("one\ntwo\nthree\nfour\nfive\n"),
+      Buffer.from("one\ntwo\nthree\nFOUR\nfive\n"),
+    );
+    expect(clean.ok).toBe(true);
+    if (clean.ok) expect(clean.merged.toString()).toBe("one\nTWO\nthree\nFOUR\nfive\n");
+    expect(mergeFileThreeWay(Buffer.from("x\n"), Buffer.from("a\n"), Buffer.from("y\n"))).toEqual({
+      ok: false,
+    });
+  });
+});
+
+describe("stampConfirmed", () => {
+  const SHA = "a".repeat(40);
+  const NEW = "b".repeat(40);
+  const INDEX = `# Verifiers\n\n- The command line verifier in .postmaster/verifier/cli/: drives it. Files: README.md, Confirmed: ${SHA}\n`;
+
+  test("replaces the bullet's sha", () => {
+    const stamped = stampConfirmed(INDEX, "cli", NEW) ?? "";
+    expect(stamped).toContain(`Confirmed: ${NEW}`);
+    expect(stamped).not.toContain(SHA);
+  });
+
+  test("adds the label when the bullet names none", () => {
+    const bare = `# Verifiers\n\n- The command line verifier in .postmaster/verifier/cli/: drives it. Files: README.md\n`;
+    expect(stampConfirmed(bare, "cli", NEW) ?? "").toContain(`Confirmed: ${NEW}`);
+  });
+
+  test("refuses zero or several bullets", () => {
+    expect(stampConfirmed("# Verifiers\n", "cli", NEW)).toBeNull();
+    expect(stampConfirmed(`${INDEX}${INDEX}`, "cli", NEW)).toBeNull();
+  });
+});
+
+describe("segOfRel", () => {
+  test("takes the first segment", () => {
+    expect(segOfRel("cli/features/f1.md")).toBe("cli");
+    expect(segOfRel("README.md")).toBeNull();
+  });
+});
+
+describe("run-copy symlink refusal", () => {
+  test("record refuses a verifier folder holding a symlink", () => {
+    const app = scratchApp();
+    try {
+      symlinkSync("cli/features/f1.md", join(app.repo, ".postmaster/verifier", "link.md"));
+      const r = run(RUN, ["verifier", "record", app.repo, app.dispatch]);
+      expect(r.code).toBe(1);
+      expect(r.err).toContain("must not hold symlinks");
+      expect(existsSync(join(app.dispatch, "verifier-at-dispatch"))).toBe(false);
+    } finally {
+      rmSync(app.dir, { recursive: true, force: true });
+    }
+  });
+
+  test("freeze refuses a copy holding a symlink", () => {
+    const app = scratchApp();
+    try {
+      expectCode(run(RUN, ["verifier", "record", app.repo, app.dispatch]), 0);
+      const syn = cutWorktree(app.repo, app.dir, "syn", "wsyn");
+      expectCode(run(RUN, ["verifier", "arm", syn, app.dispatch]), 0);
+      symlinkSync("cli/features/f1.md", join(syn, ".postmaster/verifier", "link.md"));
+      const r = run(RUN, ["verifier", "changes", syn, app.dispatch, "--freeze"]);
+      expect(r.code).toBe(1);
+      expect(r.err).toContain("must not hold symlinks");
+    } finally {
+      rmSync(app.dir, { recursive: true, force: true });
+    }
+  });
+
+  test("keep aborts before applying when the project holds a symlink", () => {
+    const app = scratchApp();
+    try {
+      expectCode(run(RUN, ["verifier", "record", app.repo, app.dispatch]), 0);
+      const syn = cutWorktree(app.repo, app.dir, "syn", "wsyn");
+      expectCode(run(RUN, ["verifier", "arm", syn, app.dispatch]), 0);
+      writeRepoFile(syn, ".postmaster/verifier/cli/features/f1.md", "# run edit\n");
+      expectCode(run(RUN, ["verifier", "changes", syn, app.dispatch, "--freeze"]), 0);
+      symlinkSync("cli/features/f1.md", join(app.repo, ".postmaster/verifier", "link.md"));
+      const before = readFileSync(
+        join(app.repo, ".postmaster/verifier/cli/features/f1.md"),
+        "utf8",
+      );
+      const r = run(RUN, ["verifier", "keep", app.repo, "--run", app.dispatch, "--at", app.sha]);
+      expect(r.code).toBe(1);
+      expect(r.err).toContain("must not hold symlinks");
+      expect(readFileSync(join(app.repo, ".postmaster/verifier/cli/features/f1.md"), "utf8")).toBe(
+        before,
+      );
+    } finally {
+      rmSync(app.dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("run-copy frozen snapshot presence", () => {
+  test("freeze refuses an absent copy while the record holds verifiers", () => {
+    const app = scratchApp();
+    try {
+      expectCode(run(RUN, ["verifier", "record", app.repo, app.dispatch]), 0);
+      const syn = cutWorktree(app.repo, app.dir, "syn", "wsyn");
+      expectCode(run(RUN, ["verifier", "arm", syn, app.dispatch]), 0);
+      rmSync(join(syn, ".postmaster/verifier"), { recursive: true, force: true });
+      const c = run(RUN, ["verifier", "changes", syn, app.dispatch, "--freeze"]);
+      expect(c.code).toBe(1);
+      expect(c.err).toContain("no copy to freeze");
+      expect(c.err).toContain("re-arm");
+      expect(existsSync(join(app.dispatch, "verifier-final"))).toBe(false);
+    } finally {
+      rmSync(app.dir, { recursive: true, force: true });
+    }
+  });
+
+  test("freeze with no copy and no record freezes nothing", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      initRepo(repo);
+      writeRepoFile(repo, "README.md", "# app\n");
+      commitAll(repo, "start");
+      const dispatch = join(dir, "dispatch");
+      mkdirSync(dispatch, { recursive: true });
+      writeFileSync(join(dispatch, "run.json"), JSON.stringify({ config: {} }));
+      const c = run(RUN, ["verifier", "changes", repo, dispatch, "--freeze"]);
+      expectCode(c, 0);
+      expect(c.out).toContain("verifiers unchanged");
+      expect(existsSync(join(dispatch, "verifier-final"))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("emptying the copy removes every verifier at keep", () => {
+    const app = scratchApp();
+    try {
+      expectCode(run(RUN, ["verifier", "record", app.repo, app.dispatch]), 0);
+      const syn = cutWorktree(app.repo, app.dir, "syn", "wsyn");
+      expectCode(run(RUN, ["verifier", "arm", syn, app.dispatch]), 0);
+      const copy = join(syn, ".postmaster/verifier");
+      rmSync(copy, { recursive: true, force: true });
+      mkdirSync(copy, { recursive: true });
+      const c = run(RUN, ["verifier", "changes", syn, app.dispatch, "--freeze"]);
+      expectCode(c, 0);
+      expect(c.out).toContain("Removed:");
+      const k = run(RUN, ["verifier", "keep", app.repo, "--run", app.dispatch, "--at", app.sha]);
+      expectCode(k, 0);
+      expect(k.out).toContain("removed cli/features/f1.md");
+      expect(existsSync(join(app.repo, ".postmaster/verifier/cli/features/f1.md"))).toBe(false);
+    } finally {
+      rmSync(app.dir, { recursive: true, force: true });
+    }
+  });
+
+  test("keep fails when the run never froze its copy", () => {
+    const app = scratchApp();
+    try {
+      expectCode(run(RUN, ["verifier", "record", app.repo, app.dispatch]), 0);
+      const syn = cutWorktree(app.repo, app.dir, "syn", "wsyn");
+      expectCode(run(RUN, ["verifier", "arm", syn, app.dispatch]), 0);
+      writeRepoFile(syn, ".postmaster/verifier/cli/features/f1.md", "# run edit\n");
+      const r = run(RUN, ["verifier", "keep", app.repo, "--run", app.dispatch, "--at", app.sha]);
+      expect(r.code).toBe(1);
+      expect(r.err).toContain("never froze");
+    } finally {
+      rmSync(app.dir, { recursive: true, force: true });
+    }
+  });
+
+  test("keep with no verifiers recorded and no freeze keeps nothing", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      initRepo(repo);
+      writeRepoFile(repo, "README.md", "# app\n");
+      commitAll(repo, "start");
+      const sha = gitOrThrow(repo, "rev-parse", "HEAD").trim();
+      const dispatch = join(dir, "dispatch");
+      mkdirSync(dispatch, { recursive: true });
+      writeFileSync(join(dispatch, "run.json"), JSON.stringify({ config: {} }));
+      const r = run(RUN, ["verifier", "keep", repo, "--run", dispatch, "--at", sha]);
+      expectCode(r, 0);
+      expect(r.out).toContain("nothing to keep");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("run-copy keep confirmation", () => {
+  test("removing a whole verifier keeps clean with no clash", () => {
+    const app = scratchApp();
+    try {
+      expectCode(run(RUN, ["verifier", "record", app.repo, app.dispatch]), 0);
+      const syn = cutWorktree(app.repo, app.dir, "syn", "wsyn");
+      expectCode(run(RUN, ["verifier", "arm", syn, app.dispatch]), 0);
+      rmSync(join(syn, ".postmaster/verifier/cli"), { recursive: true, force: true });
+      const idx = join(syn, ".postmaster/verifier/README.md");
+      writeFileSync(
+        idx,
+        readFileSync(idx, "utf8")
+          .split("\n")
+          .filter((l) => !l.includes("verifier/cli"))
+          .join("\n"),
+      );
+      expectCode(run(RUN, ["verifier", "changes", syn, app.dispatch, "--freeze"]), 0);
+      const r = run(RUN, ["verifier", "keep", app.repo, "--run", app.dispatch, "--at", app.sha]);
+      expectCode(r, 0);
+      expect(r.out).not.toContain("not kept");
+      expect(existsSync(join(app.repo, ".postmaster/verifier/cli/features/f1.md"))).toBe(false);
+      expect(readFileSync(join(app.repo, ".postmaster/verifier/README.md"), "utf8")).not.toContain(
+        "verifier/cli",
+      );
+    } finally {
+      rmSync(app.dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a segment with clashed files is kept in part and still confirmed", () => {
+    const app = scratchApp();
+    try {
+      expectCode(run(RUN, ["verifier", "record", app.repo, app.dispatch]), 0);
+      const syn = cutWorktree(app.repo, app.dir, "syn", "wsyn");
+      expectCode(run(RUN, ["verifier", "arm", syn, app.dispatch]), 0);
+      writeRepoFile(syn, ".postmaster/verifier/cli/features/f1.md", "run version of f1\n");
+      writeRepoFile(syn, ".postmaster/verifier/cli/features/f2.md", "run version of f2\n");
+      writeRepoFile(app.repo, ".postmaster/verifier/cli/features/f1.md", "project version of f1\n");
+      writeRepoFile(app.repo, "note.md", "a second commit to keep at\n");
+      commitAll(app.repo, "second");
+      const merge = gitOrThrow(app.repo, "rev-parse", "HEAD").trim();
+      expectCode(run(RUN, ["verifier", "changes", syn, app.dispatch, "--freeze"]), 0);
+      const r = run(RUN, ["verifier", "keep", app.repo, "--run", app.dispatch, "--at", merge]);
+      expect(r.code).toBe(1);
+      expect(r.out).toContain("changed cli/features/f2.md");
+      expect(r.out).toContain("not kept: cli/features/f1.md (changed on both sides)");
+      // The kept change confirms the segment at the merge: the stale check
+      // diffs depended files from the confirmed commit, so skipping would
+      // flag the run's own feature changes as staleness. A fully clashed
+      // segment never reaches the stamp, since untouched segments confirm
+      // nothing.
+      expect(r.out).toContain(`confirmed cli at ${merge}`);
+      expect(readFileSync(join(app.repo, ".postmaster/verifier/README.md"), "utf8")).toContain(
+        `Confirmed: ${merge}`,
+      );
+      expect(readFileSync(join(app.repo, ".postmaster/verifier/cli/features/f2.md"), "utf8")).toBe(
+        "run version of f2\n",
+      );
+    } finally {
+      rmSync(app.dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("run-copy keep pruning", () => {
+  test("removing a verifier prunes the empty directories it leaves", () => {
+    const app = scratchApp();
+    try {
+      expectCode(run(RUN, ["verifier", "record", app.repo, app.dispatch]), 0);
+      const syn = cutWorktree(app.repo, app.dir, "syn", "wsyn");
+      expectCode(run(RUN, ["verifier", "arm", syn, app.dispatch]), 0);
+      rmSync(join(syn, ".postmaster/verifier/cli"), { recursive: true, force: true });
+      const idx = join(syn, ".postmaster/verifier/README.md");
+      writeFileSync(
+        idx,
+        readFileSync(idx, "utf8")
+          .split("\n")
+          .filter((l) => !l.includes("verifier/cli"))
+          .join("\n"),
+      );
+      expectCode(run(RUN, ["verifier", "changes", syn, app.dispatch, "--freeze"]), 0);
+      expectCode(
+        run(RUN, ["verifier", "keep", app.repo, "--run", app.dispatch, "--at", app.sha]),
+        0,
+      );
+      expect(existsSync(join(app.repo, ".postmaster/verifier/cli"))).toBe(false);
+    } finally {
+      rmSync(app.dir, { recursive: true, force: true });
+    }
   });
 });
