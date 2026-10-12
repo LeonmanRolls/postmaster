@@ -308,8 +308,11 @@ const GIT_ENV = {
 };
 
 /** A shared clone of this repository for landing tests: every object
- * shared, with a local main at the default branch, so branches from the
- * head land against it. */
+ * shared, with a local main cut from the clone's own head, so probe
+ * branches land against the commit they start from. It must not depend
+ * on a ref only a full clone has: CI checks out detached with no main
+ * and no origin refs. Forced, so it also holds where main is already
+ * checked out. */
 export function makeClone(): string {
   const dir = mkdtempSync(join(tmpdir(), "postmaster-424-clone-"));
   const clone = spawnSync("git", ["clone", "--shared", "-q", repoRoot(), dir], {
@@ -317,11 +320,11 @@ export function makeClone(): string {
     encoding: "utf8",
   });
   if (clone.status !== 0) throw new Error(`probe-424: git clone failed: ${clone.stderr}`);
-  const main = spawnSync("git", ["-C", dir, "branch", "-q", "main", "origin/main"], {
+  const main = spawnSync("git", ["-C", dir, "branch", "-q", "-f", "main", "HEAD"], {
     env: GIT_ENV,
     encoding: "utf8",
   });
-  if (main.status !== 0) throw new Error(`probe-424: no origin/main to land on: ${main.stderr}`);
+  if (main.status !== 0) throw new Error(`probe-424: cannot cut main: ${main.stderr}`);
   return dir;
 }
 
