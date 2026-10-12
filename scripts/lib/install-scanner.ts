@@ -138,36 +138,54 @@ export interface RecordedRefusal {
   socketFlagged: boolean;
 }
 
+/** The joined scan as a computation: Socket's advisories concatenated with
+ * the approval refusals, failing closed when the scan cannot answer and the
+ * install brings anything outside the lockfile. Socket's scanner drains the
+ * packages array it is given before it answers, so the fail-closed decision
+ * is computed from the pre-scan list. */
+export async function joinedScan(
+  root: string,
+  packages: ScanPackage[],
+  scan: (pkgs: ScanPackage[]) => Promise<ScanAdvisory[]>,
+  record?: string,
+): Promise<ScanAdvisory[]> {
+  const refusals = approvalScan(root, packages);
+  const locked = lockfileSet(root);
+  const failClosed =
+    refusals.length > 0 || packages.some((pkg) => !locked.has(`${pkg.name}@${pkg.version}`));
+  let advisories: ScanAdvisory[];
+  try {
+    advisories = await scan(packages);
+  } catch (error) {
+    if (failClosed) throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(
+      `install-scanner: cannot scan, allowing the pinned set without a scan: ${message}`,
+    );
+    return refusals;
+  }
+  if (record !== undefined) {
+    const refused = refusals.map((advisory) => {
+      const description = advisory.description ?? "";
+      return description.slice("refusing ".length).split(":")[0]!;
+    });
+    const report: RecordedRefusal = {
+      refused,
+      socketFlagged: advisories.length > 0,
+    };
+    writeFileSync(record, JSON.stringify(report));
+  }
+  return [...advisories, ...refusals];
+}
+
 export const scanner: Scanner = {
   version: "1",
   async scan({ packages }) {
-    const root = process.cwd();
-    const refusals = approvalScan(root, packages);
-    let advisories: ScanAdvisory[];
-    try {
-      advisories = await socketScanOnly(packages);
-    } catch (error) {
-      if (refusals.length > 0) throw error;
-      const locked = lockfileSet(root);
-      if (packages.some((pkg) => !locked.has(`${pkg.name}@${pkg.version}`))) throw error;
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(
-        `install-scanner: cannot scan, allowing the pinned set without a scan: ${message}`,
-      );
-      return refusals;
-    }
-    const record = process.env["POSTMASTER_RECORD_FILE"];
-    if (record !== undefined) {
-      const refused = refusals.map((advisory) => {
-        const description = advisory.description ?? "";
-        return description.slice("refusing ".length).split(":")[0]!;
-      });
-      const report: RecordedRefusal = {
-        refused,
-        socketFlagged: advisories.length > 0,
-      };
-      writeFileSync(record, JSON.stringify(report));
-    }
-    return [...advisories, ...refusals];
+    return joinedScan(
+      process.cwd(),
+      packages,
+      socketScanOnly,
+      process.env["POSTMASTER_RECORD_FILE"],
+    );
   },
 };

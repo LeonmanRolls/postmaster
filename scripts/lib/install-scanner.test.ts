@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { approvalScan, recordedScan, scanner } from "./install-scanner.ts";
+import { approvalScan, joinedScan, recordedScan, scanner } from "./install-scanner.ts";
 
 const PACKAGES = [{ name: "left-pad", version: "1.3.0" }];
 
@@ -247,6 +247,34 @@ describe("scanner.scan", () => {
     } finally {
       delete process.env["POSTMASTER_SCAN_FIXTURE"];
       process.chdir(cwd);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a scan that drains its packages still fails closed on new ones", async () => {
+    const dir = scanRoot();
+    mkdirSync(join(dir, ".postmaster"), { recursive: true });
+    writeFileSync(
+      join(dir, ".postmaster", "library-approvals.json"),
+      JSON.stringify({ version: 1, approvals: { "is-odd@3.0.1": {} } }),
+    );
+    // Socket's scanner drains the array it is given before it answers, so a
+    // scan that throws can leave nothing behind to judge.
+    const draining = async (pkgs: Array<{ name: string; version: string }>) => {
+      pkgs.splice(0);
+      throw new Error("socket unreachable");
+    };
+    try {
+      let thrown = "";
+      try {
+        await joinedScan(dir, [{ name: "is-odd", version: "3.0.1" }], draining);
+      } catch (error) {
+        thrown = error instanceof Error ? error.message : String(error);
+      }
+      expect(thrown).toContain("socket unreachable");
+      const pinned = await joinedScan(dir, [{ name: "left-pad", version: "1.3.0" }], draining);
+      expect(pinned).toEqual([]);
+    } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
