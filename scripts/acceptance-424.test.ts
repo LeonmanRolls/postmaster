@@ -175,6 +175,26 @@ describe("C3: nothing installs or copies in without the recorded yes", () => {
     }
   });
 
+  test("bun add of a cached approval is refused while the scanner is down", async () => {
+    const registry = startStubRegistry();
+    try {
+      const dir = makeInstallScratch(registry.url);
+      try {
+        const scan = writeScanFixture(dir, { error: "probe-424: socket unreachable" });
+        writeApprovals(dir, ["left-pad@1.3.0"]);
+        const r = await runBun(["add", "left-pad@1.3.0"], dir, {
+          POSTMASTER_SCAN_FIXTURE: scan,
+        });
+        expect(r.code).not.toBe(0);
+        expect(existsSync(join(dir, "node_modules", "left-pad"))).toBe(false);
+      } finally {
+        cleanup(dir);
+      }
+    } finally {
+      registry.stop();
+    }
+  });
+
   test("record refuses a library the user did not approve", () => {
     const dispatch = makeDispatch();
     try {
@@ -237,6 +257,53 @@ describe("C3: nothing installs or copies in without the recorded yes", () => {
         expect(add.code).toBe(0);
         expect(existsSync(join(dir, "node_modules", "is-odd"))).toBe(true);
         expect(existsSync(join(dir, "node_modules", "is-number"))).toBe(true);
+      } finally {
+        cleanup(dir);
+      }
+    } finally {
+      registry.stop();
+      cleanup(dispatch, join(dispatch, ".."));
+    }
+  }, 180000);
+
+  test("record of a flagged library caches nothing", async () => {
+    const registry = startStubRegistry();
+    const dispatch = makeDispatch();
+    try {
+      const dir = makeInstallScratch(registry.url);
+      try {
+        const scan = writeScanFixture(dir, {
+          advisories: {
+            "left-pad@1.3.0": [
+              {
+                level: "fatal",
+                package: "left-pad",
+                url: null,
+                description: "probe-424 flags this package",
+              },
+            ],
+          },
+        });
+        const id = runTool(["libraries", "identity", "left-pad", "1.3.0"]);
+        expect(id.code).toBe(0);
+        const approval = runTool([
+          "log-action",
+          dispatch,
+          "postmaster",
+          "library",
+          id.out.trim(),
+          "approved",
+          "library left-pad 1.3.0 added",
+          "yes, take it",
+        ]);
+        expect(approval.code).toBe(0);
+        const r = await runToolAsync(
+          ["libraries", "record", "left-pad", "1.3.0", "--dispatch", dispatch, "--wt", dir],
+          { POSTMASTER_SCAN_FIXTURE: scan },
+        );
+        expect(r.code).toBe(2);
+        expect(`${r.out}\n${r.err}`).toContain("not recording it");
+        expect(existsSync(join(dir, ".postmaster", "library-approvals.json"))).toBe(false);
       } finally {
         cleanup(dir);
       }
