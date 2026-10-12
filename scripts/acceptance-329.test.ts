@@ -36,6 +36,7 @@ import {
   scratchDir,
   removeDir,
   setStandin,
+  sh,
   standinCalls,
   type CopyLayout,
   type CopyOpts,
@@ -628,6 +629,23 @@ describe("C5: a missing survey never holds up the question", () => {
     });
   });
 
+  check("an exit-0 call that kept a no-answer record still asks the question", () => {
+    const r342 = RISES[4]!;
+    withCopy(r342.run, r342.round, {}, (lay) => {
+      setStandin(lay, "answer", { answer: "No answer: the lane declined.\n" });
+      const s = reviewSurvey(lay, [
+        "survey",
+        lay.dispatch,
+        lay.repo,
+        String(r342.round),
+        "--snapshot",
+        r342.sha,
+      ]);
+      expect(s.code).toBe(3);
+      surveyedMissing(lay, "the lane declined.");
+    });
+  });
+
   check("a lane stopped at the deadline still asks the question with its reason", () => {
     const r342 = RISES[4]!;
     withCopy(r342.run, r342.round, {}, (lay) => {
@@ -1014,6 +1032,19 @@ describe("idempotency", () => {
       const staged = calls.map((c) => materialsOf(c.argv).pop() ?? "");
       expect(staged[0]).not.toBe(staged[1]);
       expect(readFileSync(first.out.trim(), "utf8")).toContain("What the findings share");
+    });
+  });
+
+  check("the stand-in refuses a name already recorded, like the surveyor", () => {
+    const r342 = RISES[4]!;
+    withCopy(r342.run, r342.round, { reports: false, ticket: false, decoys: false }, (lay) => {
+      setStandin(lay, "answer", { answer: FULL_ANSWER });
+      const entry = lay.env.POSTMASTER_SURVEYOR_RUN ?? "";
+      const args = ["surveyor", "call", lay.dispatch, lay.repo, "--name", "rise-r9"];
+      expect(sh(entry, args, lay.env).code).toBe(0);
+      const second = sh(entry, args, lay.env);
+      expect(second.code).toBe(2);
+      expect(second.err).toContain("survey rise-r9 is already recorded");
     });
   });
 

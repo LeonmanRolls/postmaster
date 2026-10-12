@@ -248,6 +248,11 @@ for a in "$@"; do
   prev="$a"
 done
 record="$dispatch/surveys/$name.md"
+if [ -e "$record" ]; then
+  echo "surveyor: survey $name is already recorded" >&2
+  echo "exit=2" >> "$STANDIN_RECORD"
+  exit 2
+fi
 case "$STANDIN_MODE" in
   answer)
     mkdir -p "$dispatch/surveys"
