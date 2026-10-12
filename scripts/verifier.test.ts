@@ -5148,9 +5148,7 @@ describe("local verifier upkeep", () => {
       writeRepoFile(root, ".postmaster/verifier/cli/features/f1.md", "# f1\n");
       writeRepoFile(root, ".postmaster/verifier/empty/README.md", "# empty\n");
       writeRepoFile(root, ".postmaster/verifier/nofront/features/f1.md", "# f1\n");
-      expect(scopeVdirsLocal(root, ".postmaster/verifier")).toEqual([
-        ".postmaster/verifier/cli",
-      ]);
+      expect(scopeVdirsLocal(root, ".postmaster/verifier")).toEqual([".postmaster/verifier/cli"]);
       expect(scopeVdirsLocal(root, ".postmaster/verifier/cli")).toEqual([
         ".postmaster/verifier/cli",
       ]);

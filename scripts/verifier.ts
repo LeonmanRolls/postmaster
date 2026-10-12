@@ -2287,12 +2287,7 @@ export function bulletConfirm(text: string, vdir: string): string | null {
 export function indexFileFor(vdir: string, shared: boolean, localShared = false): string {
   const seg = vdir.split("/");
   if (shared && seg.length === 2 && seg[0] === "verifier") return "verifier/README.md";
-  if (
-    localShared &&
-    seg.length === 3 &&
-    seg[0] === ".postmaster" &&
-    seg[1] === "verifier"
-  ) {
+  if (localShared && seg.length === 3 && seg[0] === ".postmaster" && seg[1] === "verifier") {
     return LOCAL_VERIFIER_INDEX;
   }
   return `${vdir}/features/README.md`;
@@ -3356,9 +3351,7 @@ function validateCorrectingLocalTree(
 ): void {
   const wtRoot = join(wt, LOCAL_VERIFIER_ROOT);
   const after = readVerifierTree(wtRoot);
-  const bad = sortedRels(after).filter(
-    (rel) => (after.get(rel) as TreeValue).kind !== "file",
-  );
+  const bad = sortedRels(after).filter((rel) => (after.get(rel) as TreeValue).kind !== "file");
   if (bad.length > 0) {
     throw new RunError(
       `the pass left ${bad.join(", ")} under ${LOCAL_VERIFIER_ROOT}/: must not hold symlinks or special files`,
@@ -3367,9 +3360,7 @@ function validateCorrectingLocalTree(
   const before = readVerifierTree(join(repo, LOCAL_VERIFIER_ROOT));
   const diff = compareTrees(before, after);
   const touched = new Set(
-    [...diff.added, ...diff.removed, ...diff.changed].map(
-      (rel) => `${LOCAL_VERIFIER_ROOT}/${rel}`,
-    ),
+    [...diff.added, ...diff.removed, ...diff.changed].map((rel) => `${LOCAL_VERIFIER_ROOT}/${rel}`),
   );
   const untouched = mended.filter((c) => !touched.has(c.page));
   if (untouched.length > 0) {
@@ -3700,9 +3691,7 @@ function runUpkeepLaunches(
     print: ({ final, handle, promptFile }) => {
       const verdict = decided as UpkeepVerdict;
       const lines =
-        branch === null
-          ? [`base ${head}`]
-          : [`branch ${branch}`, `base ${head}`, `worktree ${wt}`];
+        branch === null ? [`base ${head}`] : [`branch ${branch}`, `base ${head}`, `worktree ${wt}`];
       if (correcting && branch === null) lines.unshift(`kept ${LOCAL_VERIFIER_ROOT}`);
       if (final === null) {
         lines.push("role coachman", `handle ${handle}`);
