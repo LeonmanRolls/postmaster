@@ -92,7 +92,7 @@ export function parseLockfile(text: string): ParsedLockfile {
       }
       const meta = entry[2];
       if (isRecord(meta)) {
-        const deps = new Set<string>();
+        const deps = edges.get(name) ?? new Set<string>();
         for (const block of EDGE_BLOCKS) {
           const table = meta[block];
           if (isRecord(table)) {
@@ -127,17 +127,23 @@ export function readApprovalCache(root: string): Set<string> {
   return out;
 }
 
+/** Every name@version the worktree's bun.lock resolves. A missing
+ * lockfile resolves nothing; one that does not parse throws. */
+export function lockfileSet(root: string): Set<string> {
+  const out = new Set<string>();
+  const lockPath = join(root, "bun.lock");
+  if (!existsSync(lockPath)) return out;
+  const parsed = parseLockfile(readFileSync(lockPath, "utf8"));
+  for (const [name, versions] of parsed.resolved) {
+    for (const version of versions) out.add(`${name}@${version}`);
+  }
+  return out;
+}
+
 /** Every name@version an install in root may take: the lockfile's resolved
  * set plus the run's cached yeses. */
 export function approvedSet(root: string): Set<string> {
-  const out = new Set<string>();
-  const lockPath = join(root, "bun.lock");
-  if (existsSync(lockPath)) {
-    const parsed = parseLockfile(readFileSync(lockPath, "utf8"));
-    for (const [name, versions] of parsed.resolved) {
-      for (const version of versions) out.add(`${name}@${version}`);
-    }
-  }
+  const out = lockfileSet(root);
   for (const key of readApprovalCache(root)) out.add(key);
   return out;
 }

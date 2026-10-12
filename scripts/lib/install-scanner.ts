@@ -12,13 +12,14 @@
 // advisories answer for each scanned package. Unset everywhere else, where
 // the scan goes to Socket (free mode without SOCKET_API_TOKEN).
 //
-// A scan Socket cannot answer throws when the install brings anything new,
-// and warns past the pinned set when it brings nothing: a fresh clone
-// reproduces its lockfile with the scanner not installed yet, while a new
-// package is never taken unscanned. Anything else the scan cannot check
-// throws, and Bun cancels the install.
+// A scan Socket cannot answer throws when the install brings anything outside
+// the lockfile's resolved set, and warns past the pinned set when it brings
+// nothing new: a fresh clone reproduces its lockfile with the scanner not
+// installed yet, while a new package — cached yes or not — is never taken
+// unscanned. Anything else the scan cannot check throws, and Bun cancels
+// the install.
 import { readFileSync, writeFileSync } from "node:fs";
-import { approvedSet } from "./library-approvals.ts";
+import { approvedSet, lockfileSet } from "./library-approvals.ts";
 
 export interface ScanPackage {
   name: string;
@@ -147,6 +148,8 @@ export const scanner: Scanner = {
       advisories = await socketScanOnly(packages);
     } catch (error) {
       if (refusals.length > 0) throw error;
+      const locked = lockfileSet(root);
+      if (packages.some((pkg) => !locked.has(`${pkg.name}@${pkg.version}`))) throw error;
       const message = error instanceof Error ? error.message : String(error);
       console.error(
         `install-scanner: cannot scan, allowing the pinned set without a scan: ${message}`,

@@ -56,8 +56,11 @@ export type ScanFn = (packages: ScanPackage[]) => Promise<ScanAdvisory[]>;
 export interface FactsOptions {
   registry?: string;
   fixtureDir?: string;
+  timeoutMs?: number;
   scan: ScanFn;
 }
+
+const REGISTRY_TIMEOUT_MS = 30000;
 
 /** The facts for one name@version. Under fixtureDir the packument comes
  * from <encodeURIComponent(name)>@<version>.json beside the verdict file,
@@ -84,7 +87,9 @@ export async function readFacts(
     }
   } else {
     try {
-      const response = await fetch(`${registry}/${name}`);
+      const response = await fetch(`${registry}/${name}`, {
+        signal: AbortSignal.timeout(options.timeoutMs ?? REGISTRY_TIMEOUT_MS),
+      });
       if (response.status === 404) {
         note = `no registry record for ${name}`;
       } else if (!response.ok) {

@@ -5,6 +5,7 @@ import { describe, expect, test } from "bun:test";
 import {
   diffDirect,
   diffTransitives,
+  extraDirectVersions,
   manifestSpecs,
   reachable,
   renderLibraries,
@@ -71,6 +72,80 @@ describe("diffDirect", () => {
       ["fresh", "added", null, "2.0.0"],
       ["raised", "changed", "1.0.0", "1.1.0"],
     ]);
+  });
+
+  test("an entry's version is new when several resolve; same-resolution changes list nothing", () => {
+    const changes = diffDirect(
+      new Map([
+        ["multi", "1.10.0"],
+        ["respec", "1.0.0"],
+        ["pruned", "^1.0.0"],
+      ]),
+      new Map([
+        ["multi", "1.10.0"],
+        ["respec", "^1.0.0"],
+        ["pruned", "^1.0.0"],
+      ]),
+      resolved([
+        ["multi", ["1.10.0"]],
+        ["respec", ["1.0.0"]],
+        ["pruned", ["1.0.0", "2.0.0"]],
+      ]),
+      resolved([
+        ["multi", ["1.10.0", "1.9.0"]],
+        ["respec", ["1.0.0"]],
+        ["pruned", ["1.0.0"]],
+      ]),
+    );
+    expect(changes).toEqual([
+      { name: "multi", kind: "changed", old: "1.10.0", next: "1.10.0, 1.9.0", version: "1.9.0" },
+    ]);
+  });
+});
+
+describe("extraDirectVersions", () => {
+  test("names new versions under direct names the entries do not cover", () => {
+    const changes = diffDirect(
+      new Map([["multi", "1.10.0"]]),
+      new Map([
+        ["multi", "1.10.0"],
+        ["fresh", "2.0.0"],
+      ]),
+      resolved([["multi", ["1.10.0"]]]),
+      resolved([
+        ["multi", ["1.10.0", "1.9.0", "1.8.0"]],
+        ["fresh", ["2.0.0", "2.1.0"]],
+      ]),
+    );
+    expect(
+      extraDirectVersions(
+        resolved([["multi", ["1.10.0"]]]),
+        resolved([
+          ["multi", ["1.10.0", "1.9.0", "1.8.0"]],
+          ["fresh", ["2.0.0", "2.1.0"]],
+        ]),
+        changes,
+      ),
+    ).toEqual([
+      { name: "fresh", version: "2.1.0" },
+      { name: "multi", version: "1.9.0" },
+    ]);
+  });
+
+  test("nothing extra when every new version has its entry", () => {
+    const changes = diffDirect(
+      new Map([["raised", "1.0.0"]]),
+      new Map([["raised", "1.1.0"]]),
+      resolved([["raised", ["1.0.0"]]]),
+      resolved([["raised", ["1.1.0"]]]),
+    );
+    expect(
+      extraDirectVersions(
+        resolved([["raised", ["1.0.0"]]]),
+        resolved([["raised", ["1.1.0"]]]),
+        changes,
+      ),
+    ).toEqual([]);
   });
 });
 

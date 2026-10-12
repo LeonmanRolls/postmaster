@@ -221,6 +221,36 @@ describe("scanner.scan", () => {
     }
   });
 
+  test("an unreachable scan throws for a cached approval new to the lockfile", async () => {
+    const dir = scanRoot();
+    mkdirSync(join(dir, ".postmaster"), { recursive: true });
+    writeFileSync(
+      join(dir, ".postmaster", "library-approvals.json"),
+      JSON.stringify({ version: 1, approvals: { "is-odd@3.0.1": {} } }),
+    );
+    const verdict = join(dir, "verdict.json");
+    writeFileSync(verdict, JSON.stringify({ error: "socket unreachable" }));
+    const cwd = process.cwd();
+    process.chdir(dir);
+    process.env["POSTMASTER_SCAN_FIXTURE"] = verdict;
+    delete process.env["POSTMASTER_RECORD_FILE"];
+    try {
+      let thrown = "";
+      try {
+        await scanner.scan({ packages: [{ name: "is-odd", version: "3.0.1" }] });
+      } catch (error) {
+        thrown = error instanceof Error ? error.message : String(error);
+      }
+      expect(thrown).toContain("socket unreachable");
+      const pinned = await scanner.scan({ packages: [{ name: "left-pad", version: "1.3.0" }] });
+      expect(pinned).toEqual([]);
+    } finally {
+      delete process.env["POSTMASTER_SCAN_FIXTURE"];
+      process.chdir(cwd);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("record mode writes the refused set beside the verdict", async () => {
     const dir = scanRoot();
     const verdict = join(dir, "verdict.json");

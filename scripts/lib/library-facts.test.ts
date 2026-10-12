@@ -157,4 +157,24 @@ describe("readFacts", () => {
     expect(facts.published).toBe(null);
     expect(facts.note).toContain("cannot reach the registry");
   });
+
+  test("a hanging registry times out with its note", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch(): Promise<Response> {
+        return new Promise<Response>(() => {});
+      },
+    });
+    try {
+      const facts = await readFacts("left-pad", "1.3.0", {
+        registry: `http://127.0.0.1:${server.port}`,
+        scan: CLEAN,
+        timeoutMs: 50,
+      });
+      expect(facts.published).toBe(null);
+      expect(facts.note).toContain("cannot reach the registry");
+    } finally {
+      server.stop();
+    }
+  });
 });

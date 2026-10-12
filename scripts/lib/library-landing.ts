@@ -60,10 +60,9 @@ export function manifestSpecs(text: string | null): Map<string, string> {
   return out;
 }
 
-function firstResolved(resolved: Map<string, Set<string>>, name: string): string | null {
-  const versions = resolved.get(name);
-  if (versions === undefined || versions.size === 0) return null;
-  return [...versions].sort()[0]!;
+function newVersions(base: Set<string> | undefined, head: Set<string> | undefined): string[] {
+  const before = base ?? new Set<string>();
+  return [...(head ?? new Set<string>())].filter((v) => !before.has(v)).sort();
 }
 
 function sameSet(a: Set<string> | undefined, b: Set<string> | undefined): boolean {
@@ -83,7 +82,9 @@ export interface DirectChange {
 }
 
 /** The direct changes between two manifests: added, changed, or resolved to
- * new versions under an unchanged spec. A removal is safe and lists nothing.
+ * new versions under an unchanged spec. A removal is safe and lists nothing,
+ * as is a change that resolves identically. One entry per name, covering its
+ * first new resolved version; the rest land through extraDirectVersions.
  * The version is what lands: the resolved one where the lockfile names it,
  * else the spec itself. */
 export function diffDirect(
@@ -99,33 +100,45 @@ export function diffDirect(
     const head = headSpecs.get(name);
     if (head === undefined) continue;
     if (base === head && sameSet(baseResolved.get(name), headResolved.get(name))) continue;
-    const resolved = firstResolved(headResolved, name);
+    const headVersions = headResolved.get(name) ?? new Set<string>();
+    const fresh = newVersions(baseResolved.get(name), headResolved.get(name));
+    if (headVersions.size > 0 && fresh.length === 0) continue;
+    const version = fresh.length > 0 ? fresh[0]! : head;
     if (base === undefined) {
-      out.push({
-        name,
-        kind: "added",
-        old: null,
-        next: resolved ?? head,
-        version: resolved ?? head,
-      });
+      out.push({ name, kind: "added", old: null, next: version, version });
     } else if (base !== head) {
-      out.push({
-        name,
-        kind: "changed",
-        old: base,
-        next: resolved ?? head,
-        version: resolved ?? head,
-      });
+      out.push({ name, kind: "changed", old: base, next: version, version });
     } else {
       const oldResolved = [...(baseResolved.get(name) ?? new Set<string>())].sort().join(", ");
-      const newResolved = [...(headResolved.get(name) ?? new Set<string>())].sort().join(", ");
+      const newResolved = [...headVersions].sort().join(", ");
       out.push({
         name,
         kind: "changed",
         old: oldResolved === "" ? base : oldResolved,
         next: newResolved === "" ? head : newResolved,
-        version: resolved ?? head,
+        version,
       });
+    }
+  }
+  return out;
+}
+
+/** New versions under direct names the direct entries do not cover: each
+ * lands on its own entry, so one approval never clears two versions. */
+export function extraDirectVersions(
+  baseResolved: Map<string, Set<string>>,
+  headResolved: Map<string, Set<string>>,
+  direct: DirectChange[],
+): Array<{ name: string; version: string }> {
+  const covered = new Map<string, string>();
+  for (const change of direct) covered.set(change.name, change.version);
+  const out: Array<{ name: string; version: string }> = [];
+  for (const name of [...headResolved.keys()].sort()) {
+    if (!covered.has(name)) continue;
+    const base = baseResolved.get(name) ?? new Set<string>();
+    for (const version of [...(headResolved.get(name) ?? new Set<string>())].sort()) {
+      if (base.has(version) || covered.get(name) === version) continue;
+      out.push({ name, version });
     }
   }
   return out;
@@ -267,6 +280,17 @@ export async function inspectLibraries(options: {
     pending.push({
       name: item.name,
       kind: "transitive",
+      old: null,
+      next: item.version,
+      version: item.version,
+      brings: [],
+      identity: libraryIdentity(item.name, item.version),
+    });
+  }
+  for (const item of extraDirectVersions(baseParsed.resolved, headParsed.resolved, direct)) {
+    pending.push({
+      name: item.name,
+      kind: "added",
       old: null,
       next: item.version,
       version: item.version,

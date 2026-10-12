@@ -64,6 +64,20 @@ describe("parseLockfile", () => {
     expect(() => parseLockfile("not jsonc {")).toThrow("does not parse");
     expect(() => parseLockfile("[]")).toThrow("not an object");
   });
+
+  test("edges unite the dependency sets of every resolved version", () => {
+    const parsed = parseLockfile(`{
+  "lockfileVersion": 2,
+  "workspaces": {},
+  "packages": {
+    "foo@1": ["foo@1.9.0", "", { "dependencies": { "left": "1.0.0" } }, "sha512-x"],
+    "foo@2": ["foo@1.10.0", "", { "dependencies": { "right": "1.0.0" } }, "sha512-y"],
+  },
+}
+`);
+    expect(parsed.resolved.get("foo")).toEqual(new Set(["1.9.0", "1.10.0"]));
+    expect(parsed.edges.get("foo")).toEqual(new Set(["left", "right"]));
+  });
 });
 
 describe("readApprovalCache", () => {

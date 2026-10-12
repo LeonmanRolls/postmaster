@@ -14,9 +14,10 @@
 // POSTMASTER_FACTS_FIXTURE, from the recorded packuments beside the
 // recorded verdict. record caches an approved library with the packages it
 // brings, so the install takes them: it refuses without the user's
-// recorded word, or when Socket flags the library, and never caches what
-// it was not asked to record. --vendored caches a copied-in library,
-// which no install resolves, without running one.
+// recorded word, or when Socket flags the library, caching only what the
+// scan passed, and never caches what it was not asked to record.
+// --vendored caches a copied-in library, which no install resolves,
+// without running one.
 //
 //   exit 0  listed; the identity printed; the facts printed; recorded
 //   exit 1  usage; an unreadable ticket, dispatch or worktree; the install failed
@@ -182,8 +183,8 @@ function recordCmd(argv: string[]): void {
   if (decision !== "approved") refuse(`no recorded approval for ${a.name}@${a.version}`);
   const wt = resolve(a.wt);
   const runId = basename(resolve(a.dispatch));
-  writeCache(wt, [`${a.name}@${a.version}`], identity, runId);
   if (a.vendored) {
+    writeCache(wt, [`${a.name}@${a.version}`], identity, runId);
     console.log(`recorded: ${a.name}@${a.version}`);
     return;
   }
