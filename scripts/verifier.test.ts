@@ -136,6 +136,7 @@ import {
   surfaceProse,
   surfaceRule,
   timeoutMs,
+  toolPlacedIgnore,
   type TreeValue,
   UPKEEP_LINE,
   unlistedSentence,
@@ -4452,6 +4453,10 @@ describe("strayUncommitted", () => {
   test("either side of a rename strays", () => {
     expect(strayUncommitted("R  new.md\0old.md\0", ["UPKEEP.md"])).toEqual(["new.md", "old.md"]);
   });
+
+  test("a rename's old path reads whole with a space inside it", () => {
+    expect(strayUncommitted("R  new.md\0ab cdef\0", ["UPKEEP.md"])).toEqual(["new.md", "ab cdef"]);
+  });
 });
 
 describe("index confirmation", () => {
@@ -5112,14 +5117,26 @@ describe("local verifier upkeep", () => {
 
   test("localDrivenVdirs reads the pages' dirs", () => {
     expect(
-      localDrivenVdirs([
-        ".postmaster/verifier/cli/features/f1.md",
-        ".postmaster/verifier/cli/features/nested/f2.md",
-        ".postmaster/verifier/web/features/h.md",
-        "verify-app/features/a.md",
-      ]),
+      localDrivenVdirs(
+        [
+          ".postmaster/verifier/cli/features/f1.md",
+          ".postmaster/verifier/cli/features/nested/f2.md",
+          ".postmaster/verifier/web/features/h.md",
+          "verify-app/features/a.md",
+        ],
+        [".postmaster/verifier/cli", ".postmaster/verifier/web"],
+      ),
     ).toEqual([".postmaster/verifier/cli", ".postmaster/verifier/web"]);
-    expect(localDrivenVdirs([])).toEqual([]);
+    expect(localDrivenVdirs([], [".postmaster/verifier/cli"])).toEqual([]);
+  });
+
+  test("localDrivenVdirs settles a kind named features on the frozen dirs", () => {
+    const pages = [".postmaster/verifier/features/features/login.md"];
+    expect(
+      localDrivenVdirs(pages, [".postmaster/verifier", ".postmaster/verifier/features"]),
+    ).toEqual([".postmaster/verifier/features"]);
+    expect(localDrivenVdirs(pages, [".postmaster/verifier"])).toEqual([".postmaster/verifier"]);
+    expect(localDrivenVdirs(pages, [])).toEqual([]);
   });
 
   test("strayOutsideLocal allows the report and the local folders", () => {
@@ -5137,6 +5154,28 @@ describe("local verifier upkeep", () => {
       "new.md",
       "old.md",
     ]);
+    expect(
+      strayOutsideLocal(
+        "R  .postmaster/verifier/cli/features/new.md\0.postmaster/verifier/cli/features/ab cdef\0",
+        [".postmaster/verifier"],
+      ),
+    ).toEqual([]);
+  });
+
+  test("toolPlacedIgnore allows the copied ignore file unchanged", () => {
+    const dir = tempDir();
+    try {
+      const repo = join(dir, "app");
+      const wt = join(dir, "wt");
+      writeRepoFile(repo, ".postmaster/.gitignore", "verifier/\n");
+      writeRepoFile(wt, ".postmaster/.gitignore", "verifier/\n");
+      expect(toolPlacedIgnore(repo, wt, ".postmaster/.gitignore")).toBe(true);
+      expect(toolPlacedIgnore(repo, wt, "src/cli.txt")).toBe(false);
+      writeRepoFile(wt, ".postmaster/.gitignore", "verifier/\n*.log\n");
+      expect(toolPlacedIgnore(repo, wt, ".postmaster/.gitignore")).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("scopeVdirsLocal reads verifier dirs from disk", () => {
