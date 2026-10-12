@@ -47,4 +47,4 @@ resolved.
   address, a link to this machine, or a value from `~/.config`, `~/.claude` or `~/.postmaster`.
 - Write one project's rows to another project's page.
 - Delete a page without the user's word.
-- Record a page's link in a repository.
+- Commit a page's link to a repository.
