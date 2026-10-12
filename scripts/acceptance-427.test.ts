@@ -9,6 +9,8 @@
 // library before listing it. Covered: C1-C5.
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { rmSync } from "node:fs";
+import { dirname } from "node:path";
 import {
   prepareSection,
   readRepo,
@@ -96,18 +98,22 @@ describe("C3: the ticket template carries a Libraries section", () => {
     const body = templateExample().replace("<base sha>", "0123abc");
     expect(body).toContain("## Libraries");
     const file = writeTempTicket(body);
-    const parts = runTool(["ticket-parts", file, "--final"]);
-    expect(parts.code).toBe(0);
-    const check = runTool([
-      "ticket-check",
-      "--body",
-      file,
-      "--title",
-      "T",
-      "--project",
-      repoRoot(),
-    ]);
-    expect(check.code).toBe(0);
+    try {
+      const parts = runTool(["ticket-parts", file, "--final"]);
+      expect(parts.code).toBe(0);
+      const check = runTool([
+        "ticket-check",
+        "--body",
+        file,
+        "--title",
+        "T",
+        "--project",
+        repoRoot(),
+      ]);
+      expect(check.code).toBe(0);
+    } finally {
+      rmSync(dirname(file), { recursive: true, force: true });
+    }
   });
 });
 
