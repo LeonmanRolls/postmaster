@@ -35,9 +35,11 @@ export const POSTMASTER_OFFER =
   "stale query reads the landing's own index, then run `<tool>/scripts/run verifier " +
   "stale <repo> --at <merge>` once; for the verifiers it marks, offer one correcting " +
   "upkeep pass (`run verifier upkeep <repo> --run <dispatch> --correct`), naming the " +
-  "changed files, and a yes starts it; when the pass completes, land its branch " +
-  "(`run verifier land <repo> <branch> --run <dispatch> --report <report>`), so the " +
-  "new confirmation reaches the default branch; a landing it clears offers nothing.";
+  "changed files, and a yes starts it; when the pass completes, land the pass's branch " +
+  "only where the pass printed one (`run verifier land <repo> <branch> --run <dispatch> " +
+  "--report <report>`), so the new confirmation reaches the default branch; for local " +
+  "verifiers the pass prints no branch and the corrections are already kept, so report " +
+  "them as kept. A landing it clears offers nothing.";
 
 // The rule the clerk's runbook carries, word for word (line wrapping aside): a
 // verifier step the ticket leaves alone that fails at the base is reported,
