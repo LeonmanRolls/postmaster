@@ -36,6 +36,7 @@ import {
   shape,
   Tree,
   textOf,
+  unwrapRootDiv,
 } from "./plane";
 
 const wrapper = join(import.meta.dir, "run");
@@ -210,6 +211,38 @@ describe("positive controls", () => {
     expect(editOut.includes("<h2>Direction</h2>")).toBe(true);
     expect(editOut.split("<li>").length - 1).toBe(2);
   });
+
+  test("read shows the same text whether or not Plane wrapped the description in a div", () => {
+    expect(htmlToText(`<div>${editor}</div>`)).toBe(baseText);
+  });
+
+  test("edit sees through the one bare div Plane puts around a description", () => {
+    const proposed = `${baseText}\n\n## Direction\n\nNone: any approach that meets the criteria.\n`;
+    const [plainCode, plainOut] = planEdit(editor, `${baseText}\n`, proposed);
+    expect(plainCode).toBe(0);
+    for (const wrapped of [`<div>${editor}</div>`, `\n<div>${editor}</div>\n`]) {
+      const [code, out] = planEdit(wrapped, `${htmlToText(wrapped)}\n`, proposed);
+      expect(code).toBe(plainCode);
+      expect(out).toBe(plainOut);
+    }
+    expect(plainOut.includes("<div")).toBe(false);
+  });
+
+  test("what edit writes is accepted by the next edit once Plane has wrapped it", () => {
+    // ticket-ready confirms its write with a no-op edit: the signed text as base and as body.
+    const [code, out] = planEdit(`<div>${outHtml}</div>`, once, once);
+    expect(code).toBe(0);
+    expect(htmlToText(out)).toBe(once);
+  });
+
+  test("unwrapRootDiv gives what the one bare div holds, and anything else unchanged", () => {
+    expect(unwrapRootDiv("<div><p>x</p></div>")).toBe("<p>x</p>");
+    expect(unwrapRootDiv(" \n<div><p>x</p>\n</div>\n")).toBe("<p>x</p>\n");
+    const unchanged = ["", "<p>x</p>", '<div class="a">x</div>', "<div>a</div><div>b</div>"];
+    for (const html of unchanged) {
+      expect(unwrapRootDiv(html)).toBe(html);
+    }
+  });
 });
 
 describe("negative controls", () => {
@@ -220,6 +253,29 @@ describe("negative controls", () => {
     for (const s of ["<em>", "<table>", "<img>", "an HTML comment"]) {
       expect(why.includes(s)).toBe(true);
     }
+  });
+
+  test("edit still refuses a div that is more than Plane's wrapper, and names it", () => {
+    const cases: Array<[string, string]> = [
+      ["attributes on the wrapper", '<div class="callout"><p>x</p></div>'],
+      ["content beside the wrapper", "<div><p>x</p></div><p>y</p>"],
+      ["a second wrapper", "<div><p>x</p></div><div><p>y</p></div>"],
+      ["a div inside the wrapper", "<div><div><p>x</p></div></div>"],
+      ["a wrapper left open", "<div><p>x</p>"],
+    ];
+    for (const [what, stored] of cases) {
+      const [code, why] = planEdit(stored, htmlToText(stored), "## Direction\n\nNone.");
+      expect([what, code]).toEqual([what, 1]);
+      expect([what, why.includes("<div>")]).toEqual([what, true]);
+    }
+  });
+
+  test("edit names what is inside Plane's wrapper, not the wrapper", () => {
+    const stored = "<div><p>x <em>y</em></p></div>";
+    const [code, why] = planEdit(stored, htmlToText(stored), "## Direction\n\nNone.");
+    expect(code).toBe(1);
+    expect(why.includes("<em>")).toBe(true);
+    expect(why.includes("<div>")).toBe(false);
   });
 
   test("edit refuses a description read does not show as stored", () => {
@@ -569,9 +625,12 @@ function stubItem(n: number): StubItem {
   };
 }
 
+// wrapDescriptions stores a description inside one bare div, as Plane's API does with the
+// description_html it is given.
 function startStub(
   items: Record<string, StubItem>,
   seedLabels: Array<{ id: string; name: string }>,
+  opts: { wrapDescriptions?: boolean } = {},
 ) {
   const labels = [...seedLabels];
   const requests: Array<{ method: string; path: string; body: string }> = [];
@@ -617,6 +676,11 @@ function startStub(
           if (typeof patch.name === "string") it.name = patch.name;
           if (Array.isArray(patch.labels)) it.labels = patch.labels as string[];
           if (typeof patch.state === "string") it.state = patch.state;
+          if (typeof patch.description_html === "string") {
+            it.description_html = opts.wrapDescriptions
+              ? `<div>${patch.description_html}</div>`
+              : patch.description_html;
+          }
         }
         return j({});
       }
@@ -780,6 +844,40 @@ describe("labels and titles through a stub API", () => {
       const back = requests.filter((q) => q.method === "PATCH");
       expect(back.length).toBe(1);
       expect(JSON.parse(back[0]?.body ?? "{}")).toEqual({ state: "s-todo", labels: ["l-1"] });
+    } finally {
+      server.stop(true);
+    }
+  });
+});
+
+describe("edit through an API that wraps a description in a div, as Plane does", () => {
+  test("a second edit, and the no-op edit that confirms a write, are accepted", async () => {
+    const { server, requests, url } = startStub({ "PM-1": stubItem(1) }, [], {
+      wrapDescriptions: true,
+    });
+    try {
+      const dir = join(root, "plane-edit-wrapped");
+      mkdirSync(dir, { recursive: true });
+      const cfg = join(dir, "config.toml");
+      writeFileSync(cfg, `[tracker]\nkind = "plane"\nurl = "${url}"\nworkspace = "ws"\n`);
+      const env = penv(cfg, dir);
+      const text = "## Direction\n\nNone: any approach that meets the criteria.\n";
+      const base = join(dir, "base.md");
+      const next = join(dir, "next.md");
+      writeFileSync(base, "Hi\n");
+      writeFileSync(next, text);
+      const first = await clix(["edit", "PM-1", next, base], env, dir);
+      expect(first.code).toBe(0);
+      const read = await clix(["read", "PM-1", "--body"], env, dir);
+      expect(read.out).toBe(text);
+      const confirm = await clix(["edit", "PM-1", next, next], env, dir);
+      expect(confirm.err).toBe("");
+      expect(confirm.code).toBe(0);
+      const patches = requests.filter((q) => q.method === "PATCH");
+      expect(patches.length).toBe(2);
+      for (const q of patches) {
+        expect(JSON.parse(q.body).description_html.includes("<div")).toBe(false);
+      }
     } finally {
       server.stop(true);
     }

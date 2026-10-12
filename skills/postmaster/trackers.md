@@ -172,12 +172,13 @@ projects, and `<tool>/scripts/run probe-trackers` runs it.
   with the same words and structure.
 - **Edit:** `edit` renders the body file as `create` does and replaces the description, and
   never the title. `<base-file>` is the body as `read --body` printed it when the change was
-  drafted: if the work item no longer matches it, `edit` writes nothing and exits 4. It
-  refuses, exit 1, a work item whose description `read` does not show as Plane stores it:
-  markup `read` does not render, such as a table, an image, emphasis or an HTML comment,
-  which it names, or text it would read back as something else. The user makes that change
-  in Plane. It also refuses an empty body, and one that would not read back with the same
-  words and structure.
+  drafted: if the work item no longer matches it, `edit` writes nothing and exits 4. Plane's
+  API stores a description it is given inside one bare `<div>`; `edit` sees through that
+  wrapper, so it can edit what it wrote before. It refuses, exit 1, a work item whose
+  description `read` does not show as Plane stores it: markup `read` does not render, such as
+  a table, an image, emphasis, an HTML comment or any other `<div>`, which it names, or text
+  it would read back as something else. The user makes that change in Plane. It also refuses
+  an empty body, and one that would not read back with the same words and structure.
 - **Set state:** `state`, one API call per change; `blocked` is the label. State changes leave
   other labels alone.
 - **Labels:** `label`, which adds or removes a label without changing the work item's state. The

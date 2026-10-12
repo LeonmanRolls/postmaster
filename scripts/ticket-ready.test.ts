@@ -714,7 +714,12 @@ type StubItem = {
   created_at: string;
 };
 
-function startPlaneStub(items: Record<string, StubItem>) {
+// wrapDescriptions stores a description inside one bare div, as Plane's API does with the
+// description_html it is given.
+function startPlaneStub(
+  items: Record<string, StubItem>,
+  opts: { wrapDescriptions?: boolean } = {},
+) {
   const labels = [
     { id: "l-1", name: "ready" },
     { id: "l-2", name: "blocked, ready" },
@@ -752,7 +757,11 @@ function startPlaneStub(items: Record<string, StubItem>) {
       if (req.method === "PATCH" && mPatch) {
         const it = Object.values(items).find((v) => v.id === mPatch[1]);
         if (!it) return new Response("no such item", { status: 404 });
-        Object.assign(it, JSON.parse(await req.text()) as Record<string, unknown>);
+        const patch = JSON.parse(await req.text()) as Record<string, unknown>;
+        if (opts.wrapDescriptions && typeof patch.description_html === "string") {
+          patch.description_html = `<div>${patch.description_html}</div>`;
+        }
+        Object.assign(it, patch);
         return j(it);
       }
       return new Response(`stub plane: unexpected ${req.method} ${p}`, { status: 500 });
@@ -817,6 +826,39 @@ describe("the matrix through the plane double", () => {
       // semantics: the no-op edit must match the rendered body.
       expect((await readyAsync(["mark", repoPl, "PM-1"], env)).code).toBe(0);
       expect((await readyAsync([repoPl, "PM-1"], env)).code).toBe(0);
+    } finally {
+      server.stop(true);
+    }
+  });
+});
+
+describe("the mark through a plane double that wraps descriptions in a div", () => {
+  test("a mark that writes the body confirms its own write, then labels the ticket", async () => {
+    const items = { "PM-6": planeItem(6, join(tmp, "c.md"), []) };
+    const { server, url } = startPlaneStub(items, { wrapDescriptions: true });
+    try {
+      const dir = join(tmp, "plane-wrapping-double");
+      mkdirSync(dir, { recursive: true });
+      const repoPl = join(dir, "repo");
+      mkdirSync(repoPl, { recursive: true });
+      if (run("git", ["init", "-q", repoPl]).code !== 0) throw new Error("git init failed");
+      const cfg = join(dir, "config.toml");
+      writeFileSync(cfg, `[tracker]\nkind = "plane"\nurl = "${url}"\nworkspace = "ws"\n`);
+      const env: Record<string, string | undefined> = {
+        ...process.env,
+        POSTMASTER_CONFIG: cfg,
+        PLANE_API_KEY: "self-test",
+      };
+      delete env.POSTMASTER_PROJECT;
+      env.GIT_CEILING_DIRECTORIES = dir;
+      // The stored body differs from the draft, so the mark writes it; the double then wraps
+      // it, and the no-op edit that confirms the write has to accept the wrapped description.
+      const marked = await readyAsync(["mark", repoPl, "PM-6", "--body", join(tmp, "a.md")], env);
+      expect(marked.out).toContain("PM-6 marked ready and queued");
+      expect(marked.code).toBe(0);
+      expect(items["PM-6"].description_html.startsWith("<div>")).toBe(true);
+      expect(items["PM-6"].labels).toEqual(["l-1"]);
+      expect((await readyAsync([repoPl, "PM-6"], env)).code).toBe(0);
     } finally {
       server.stop(true);
     }

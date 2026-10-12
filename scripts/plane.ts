@@ -31,8 +31,9 @@
 // lists, code blocks with their language, bold, inline code and links. create and edit refuse a
 // body that would not read back with the same words and structure. edit refuses a description
 // holding anything read does not show as Plane stores it, such as emphasis, a table, an image or
-// an HTML comment. It also refuses a work item whose body no longer matches the base file, the
-// body as `read --body` printed it when the change was drafted.
+// an HTML comment. Plane's API stores a description it is given inside one bare div; edit sees
+// through that wrapper and refuses any other div. It also refuses a work item whose body no
+// longer matches the base file, the body as `read --body` printed it when the change was drafted.
 //
 //   exit 0  ok
 //   exit 1  usage, config or key missing, the API refused or was unreachable, unknown
@@ -968,9 +969,24 @@ function normText(t: string): string {
   return lines.join("\n");
 }
 
+// Plane's API stores a description inside one bare div, whatever it was given. A wrapper that
+// holds the whole description and nothing else carries no content, so edit sees through it. Any
+// other div (one with attributes, one beside other content, one inside the description) is
+// still markup read does not render.
+export function unwrapRootDiv(stored: string): string {
+  const html = stored.trim();
+  if (!html.startsWith("<div>") || !html.endsWith("</div>")) return stored;
+  const top = new Tree(html).root.children.filter((c) => typeof c !== "string" || c.trim() !== "");
+  const only = top.length === 1 ? top[0] : undefined;
+  return typeof only === "object" && only.tag === "div"
+    ? html.slice("<div>".length, -"</div>".length)
+    : stored;
+}
+
 export function planEdit(stored: string, base: string, body: string): [number, string] {
   if (!body.trim()) return [1, "the body file is empty"];
-  const tree = new Tree(stored);
+  const html = unwrapRootDiv(stored);
+  const tree = new Tree(html);
   const lost = [...tree.tags]
     .filter((t) => !RENDERED.has(t))
     .sort()
@@ -982,7 +998,7 @@ export function planEdit(stored: string, base: string, body: string): [number, s
       `its description holds ${lostTags.join(", ")}, which read does not render, so writing it back would lose it; the user edits it in Plane`,
     ];
   }
-  const diff = firstDifference(shape(stored), shape(mdToHtml(htmlToText(stored))));
+  const diff = firstDifference(shape(html), shape(mdToHtml(htmlToText(html))));
   if (diff) {
     return [
       1,
