@@ -456,6 +456,30 @@ describe("C3: the token and the chat never appear", () => {
     }
   });
 
+  test("an origin holding the token is refused without leaking it", async () => {
+    const sb = makeNotifySandbox();
+    try {
+      writeFileSync(
+        sb.tokenFile,
+        `TELEGRAM_BOT_TOKEN=${sb.token}\nTELEGRAM_CHAT_ID=${sb.chat}\nTELEGRAM_API_ORIGIN=${sb.token}\n`,
+      );
+      const r = await notifyTest(sb);
+      expect(r.code).not.toBe(0);
+      expect(sendBodies(sb).length).toBe(0);
+      expect(r.err).toContain("TELEGRAM_API_ORIGIN");
+      expectNoSecrets(
+        sweepSandbox(sb, [
+          { where: "test stdout", text: r.out },
+          { where: "test stderr", text: r.err },
+        ]),
+        sb.token,
+        sb.chat,
+      );
+    } finally {
+      removeSandbox(sb);
+    }
+  });
+
   test("the test message leaks nothing", async () => {
     const sb = makeNotifySandbox();
     try {
