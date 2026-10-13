@@ -236,6 +236,12 @@ describe("positive controls", () => {
     }
   }, 120000);
 
+  test("unanswered answers-only keys print their own defaults", () => {
+    const out = readFileSync(join(tmp, "plain.out"), "utf8");
+    expect(out).toContain("Stories with ticket drafts (on, off): on (default)");
+    expect(out).toContain("Draft pull requests (on, off): off (default)");
+  });
+
   test("the adding verb inserts clerk in [team] and preserves the other config lines", () => {
     const before = `[team]\nworkhorses = ["alpha", "beta"]\npostmaster = { harness = "claude", model = "pm" }\n\n[postmaster]\npoll_seconds = 9\n`;
     writeFileSync(join(tmp, "legacy.toml"), before);

@@ -253,10 +253,11 @@ function blankLinkClear(k: string, optional: boolean): boolean {
   return optional && (k === "review_link" || k === "planning.review_link");
 }
 
-// answersOnly <prompt> <k> <opts>: an answers-file key that is never asked,
-// so it stays out of the setup conversation. Missing or blank reads unset;
-// a found value is validated by the caller.
-function answersOnly(prompt: string, k: string, opts: AskOpts): string {
+// answersOnly <prompt> <k> <opts> <def>: an answers-file key that is never
+// asked, so it stays out of the setup conversation. Missing or blank reads
+// unset; a found value is validated by the caller. <def> is the effective
+// default an unanswered key prints in global mode, since callers differ.
+function answersOnly(prompt: string, k: string, opts: AskOpts, def: string): string {
   if (opts.answers === "") return "";
   let found: string | undefined;
   try {
@@ -271,7 +272,7 @@ function answersOnly(prompt: string, k: string, opts: AskOpts): string {
     /* fall through */
   }
   if (found === undefined || found === "") {
-    console.log(`${prompt}: ${PROJECT !== "" ? "(not set)" : "on (default)"}`);
+    console.log(`${prompt}: ${PROJECT !== "" ? "(not set)" : `${def} (default)`}`);
     return "";
   }
   if (PROJECT !== "") GIVEN.add(k);
@@ -1033,13 +1034,13 @@ const PRL = ask(
 if (PRL && !PRL.includes("{path}")) die("setup: planning.review_link must contain {path}", 1);
 // Stories start on and stay out of the setup conversation: the key is
 // answered by file or hand-edited, never asked.
-const STORIES = answersOnly("Stories with ticket drafts (on, off)", "planning.stories", opts);
+const STORIES = answersOnly("Stories with ticket drafts (on, off)", "planning.stories", opts, "on");
 if (STORIES !== "" && STORIES !== "on" && STORIES !== "off") {
   die("setup: planning.stories must be on or off", 1);
 }
 // Draft pull requests start off and stay out of the setup conversation: the
 // key is answered by file or hand-edited, never asked.
-const DPR = answersOnly("Draft pull requests (on, off)", "draft_pull_requests", opts);
+const DPR = answersOnly("Draft pull requests (on, off)", "draft_pull_requests", opts, "off");
 if (DPR !== "" && DPR !== "on" && DPR !== "off") {
   die("setup: draft_pull_requests must be on or off", 1);
 }
