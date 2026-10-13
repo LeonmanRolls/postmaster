@@ -1264,10 +1264,19 @@ export function loopRuleMarkdown(
   const first = sets[0]?.[1] ?? [];
   const fromScript = first.filter((r) => ruleOfRun.get(r.run) !== "until-clean");
   const laterSet = sets[1]?.[1] ?? [];
+  const both = [...fromScript, ...laterSet];
   const afterScript: Array<[string, readonly RunInput[]]> = [
     [`The ${fromScript.length} runs from the script`, fromScript],
     ["The later set", laterSet],
-    [`Both, ${fromScript.length + laterSet.length} runs`, [...fromScript, ...laterSet]],
+    [`Both, ${both.length} runs`, both],
+    [
+      `Both, several workhorses, ${both.filter((r) => r.mode === "synthesis").length} runs`,
+      both.filter((r) => r.mode === "synthesis"),
+    ],
+    [
+      `Both, single thread, ${both.filter((r) => r.mode === "single-thread").length} runs`,
+      both.filter((r) => r.mode === "single-thread"),
+    ],
   ];
   const groups = [...new Set(first.map((r) => eraOf(r)))].sort();
   out.push(

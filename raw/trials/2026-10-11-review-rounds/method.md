@@ -201,7 +201,8 @@ counts the runs with five or more serious findings in round 1. `render.ts` print
 comparisons of the preparation table, into `results/loop-rule.md`. It also bands the runs from the
 script on by their criteria. Controls: the two parts of A add to the whole (34 runs, 169 rounds),
 and the whole equals the A row of `features.md`, as B does; the criteria bands add to the 48 runs
-and 171 rounds from the script, the 18 and 74 of the later set, and the 66 and 245 of both.
+and 171 rounds from the script, the 18 and 74 of the later set, and the 66 and 245 of both; by
+mode they add to the 66 runs (34 with several workhorses and 32 single thread).
 
 **What this does not do.** The replay is after the fact. In the 61 runs no ruling was made because
 of a rise: the older rules ran to the cap of three and stopped for a ruling there, where 3 of the

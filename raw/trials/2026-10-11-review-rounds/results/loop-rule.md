@@ -89,6 +89,14 @@ The 13 runs before the script are left out, as they differ in more than the coun
 | Both, 66 runs | 4 to 5 | 31 | 105 | 3.39 | 3.0 | 3 | 3.0 | 4.0 |
 | Both, 66 runs | 6 to 8 | 14 | 59 | 4.21 | 4.0 | 4 | 3.0 | 5.0 |
 | Both, 66 runs | 9 or more | 13 | 67 | 5.15 | 4.0 | 4 | 4.0 | 9.0 |
+| Both, several workhorses, 34 runs | 1 to 3 | 3 | 5 | 1.67 | 2.0 | 0 | 1.0 | 1.0 |
+| Both, several workhorses, 34 runs | 4 to 5 | 11 | 47 | 4.27 | 3.0 | 1 | 3.0 | 7.0 |
+| Both, several workhorses, 34 runs | 6 to 8 | 8 | 27 | 3.38 | 3.0 | 1 | 2.5 | 3.0 |
+| Both, several workhorses, 34 runs | 9 or more | 12 | 65 | 5.42 | 4.0 | 4 | 4.0 | 9.5 |
+| Both, single thread, 32 runs | 1 to 3 | 5 | 9 | 1.80 | 2.0 | 0 | 0.0 | 1.0 |
+| Both, single thread, 32 runs | 4 to 5 | 20 | 58 | 2.90 | 2.5 | 2 | 2.5 | 3.0 |
+| Both, single thread, 32 runs | 6 to 8 | 6 | 32 | 5.33 | 5.5 | 3 | 5.0 | 11.0 |
+| Both, single thread, 32 runs | 9 or more | 1 | 2 | 2.00 | 2.0 | 0 | 1.0 | 1.0 |
 
 ## Round 1 as a warning: five or more serious findings in round 1
 
