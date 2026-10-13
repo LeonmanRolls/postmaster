@@ -257,12 +257,42 @@ export function makeDispatchRun(sb: NotifySandbox, name: string): string {
 }
 
 // --- driving ----------------------------------------------------------------------
+/** Async spawn for commands that reach the stand-in: it can only answer while
+ * this loop runs, and spawnSync would block it for the child's whole life. */
+export async function runAsync(
+  cmd: string,
+  args: string[],
+  env: Record<string, string | undefined>,
+): Promise<RunResult> {
+  const clean: Record<string, string> = {};
+  for (const [k, v] of Object.entries({ ...process.env, ...env })) {
+    if (v !== undefined) clean[k] = v;
+  }
+  const p = Bun.spawn([cmd, ...args], { env: clean, stdout: "pipe", stderr: "pipe" });
+  const [out, err, code] = await Promise.all([
+    new Response(p.stdout).text(),
+    new Response(p.stderr).text(),
+    p.exited,
+  ]);
+  return { code, out, err, timedOut: false };
+}
+
 /** One look of the watcher over the sandbox root. */
 export function look(
   sb: NotifySandbox,
   extraEnv: Record<string, string | undefined> = {},
-): RunResult {
-  return run(RUN, ["runs-watch", "--timeout", "0", sb.runs], { env: { ...sb.env, ...extraEnv } });
+): Promise<RunResult> {
+  return runAsync(RUN, ["runs-watch", "--timeout", "0", sb.runs], { ...sb.env, ...extraEnv });
+}
+
+/** The test-message command against the sandbox config. */
+export function notifyTest(sb: NotifySandbox): Promise<RunResult> {
+  return runAsync(RUN, ["notify", "test"], sb.env);
+}
+
+/** The clerk's message command for a ticket in the sandbox repo. */
+export function notifyClerk(sb: NotifySandbox, ticket: string): Promise<RunResult> {
+  return runAsync(RUN, ["notify", "clerk", sb.repo, ticket], sb.env);
 }
 
 export interface SendBody {
