@@ -1067,11 +1067,13 @@ describe("the shim never recurses", () => {
         POSTMASTER_GUARD_SOCKET_API: registry.socketUrl,
       };
       // A recursing shim forks without end, so this run carries two bounds:
-      // `timeout 60`, and a group-size trip that kills the tree and fails the
+      // a 60s wall clock enforced below (there is no `timeout` binary on
+      // macOS), and a group-size trip that kills the tree and fails the
       // test within seconds instead of filling the machine.
       const TRIP = 60;
+      const WALL_MS = 60000;
       const started = Date.now();
-      const child = Bun.spawn(["timeout", "60", join(bin, "bun"), "--version"], {
+      const child = Bun.spawn([join(bin, "bun"), "--version"], {
         cwd: project,
         env,
         stdin: "ignore",
@@ -1086,6 +1088,10 @@ describe("the shim never recurses", () => {
         if (tree.length > TRIP) {
           killTree(child.pid);
           throw new Error(`the shimmed bun grew past ${TRIP} processes: the shim is recursing`);
+        }
+        if (Date.now() - started > WALL_MS) {
+          killTree(child.pid);
+          throw new Error("the shimmed bun did not answer within 60s: the shim is recursing");
         }
         const done = await Promise.race([
           child.exited.then((c) => ({ done: true, code: c })),
