@@ -172,7 +172,8 @@ function isLoopbackHost(host: string): boolean {
       .slice(1)
       .every((p) => Number(p) <= 255);
   }
-  return host === "::1";
+  // URL keeps the brackets on an IPv6 hostname.
+  return host === "::1" || host === "[::1]";
 }
 
 /** Why an API origin cannot be used, or null when it can: http(s) to loopback. */
