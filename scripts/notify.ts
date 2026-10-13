@@ -334,7 +334,7 @@ function notifyTable(root: string, configPath: string): { channel: string; envFi
   if (repo !== "") {
     // Silent here: the watcher already said the notice and the error, every look.
     const resolved = effectiveConfigForProject(repo, configPath);
-    if (resolved.config !== null && resolved.error !== null) {
+    if (resolved.config !== null && resolved.error === null) {
       const t = (resolved.config as Record<string, unknown>).notify;
       if (isRecord(t)) {
         if (typeof t.channel === "string") channel = t.channel;
