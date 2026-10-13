@@ -599,6 +599,22 @@ export function plain514(html: string): string {
     .trim();
 }
 
+/** A code row's text: entities unescaped, whitespace exactly as rendered. */
+export function codeText(escaped: string): string {
+  return escaped
+    .replace(/&lt;/gu, "<")
+    .replace(/&gt;/gu, ">")
+    .replace(/&quot;/gu, '"')
+    .replace(/&amp;/gu, "&");
+}
+
+/** The page's visible text: style and script blocks out, tags stripped. */
+export function visibleText(html: string): string {
+  return plain514(
+    html.replace(/<style>[\s\S]*?<\/style>/gu, "").replace(/<script[\s\S]*?<\/script>/gu, ""),
+  );
+}
+
 /**
  * Changed lines on no step and not in the closing list, from the page's
  * rendered rows: git's truth against the page's data keys.

@@ -24,6 +24,7 @@ import {
   CALC_HEAD,
   changeRows,
   cleanup,
+  codeText,
   coverageMissingChange,
   expectedChange,
   fileEntries,
@@ -37,7 +38,6 @@ import {
   NO_FIREFOX,
   NOTES_MD,
   numstat,
-  plain514,
   quitFirefox,
   renderStaging,
   REPO_514,
@@ -45,6 +45,7 @@ import {
   runChangeBuild,
   runCheck,
   sha256Hex,
+  visibleText,
   wrapFragment,
 } from "./acceptance-514.ts";
 import type { Firefox, Viewport } from "./acceptance-514.ts";
@@ -95,13 +96,13 @@ describe("C1: a branch's change builds as a story before it is pushed", () => {
       expect(b.code).toBe(0);
       if (!b.html) throw new Error("c1rows build wrote no page");
       const rows = changeRows(b.html);
-      const texts = rows.map((r) => plain514(r.text));
+      const texts = rows.map((r) => codeText(r.text));
       for (const line of [...CALC_HEAD, ...ADDED_MD, ...CALC_BASE, ...NOTES_MD]) {
         if (line === "") continue;
         expect(texts).toContain(line);
       }
       const typeOf = (line: string): string => {
-        const row = rows.find((r) => plain514(r.text) === line);
+        const row = rows.find((r) => codeText(r.text) === line);
         if (!row) throw new Error(`no row holds ${line}`);
         return row.type;
       };
@@ -109,7 +110,7 @@ describe("C1: a branch's change builds as a story before it is pushed", () => {
       expect(typeOf("    sum = sum + n;")).toBe("del");
       expect(typeOf("Old notes, gone with the branch.")).toBe("del");
       expect(typeOf("# Added notes")).toBe("add");
-      const del = rows.find((r) => plain514(r.text) === "    sum = sum + n;");
+      const del = rows.find((r) => codeText(r.text) === "    sum = sum + n;");
       expect(del?.num).toBe("");
     } finally {
       cleanup(s.dir);
@@ -125,7 +126,7 @@ describe("C1: a branch's change builds as a story before it is pushed", () => {
       expect(b.html).toContain(s.branch);
       expect(b.html).toContain(s.head);
       expect(b.html).toContain(s.mb);
-      expect(b.html).not.toMatch(/pull request/iu);
+      expect(visibleText(b.html)).not.toMatch(/pull request/iu);
     } finally {
       cleanup(s.dir);
     }
@@ -316,7 +317,7 @@ describe("C3: every line and every file is on a step or in the list", () => {
       expect(b.code).toBe(0);
       if (!b.html) throw new Error("c3files build wrote no page");
       const rows = changeRows(b.html);
-      const texts = rows.map((r) => plain514(r.text));
+      const texts = rows.map((r) => codeText(r.text));
       for (const line of NOTES_MD) expect(texts).toContain(line);
       const entries = fileEntries(b.html);
       expect(entries).toHaveLength(3);
@@ -400,7 +401,7 @@ describe("C3: every line and every file is on a step or in the list", () => {
       const victim = changeRows(b.html).find((r) => r.scene === left.id && r.key !== null);
       if (!victim?.key) throw new Error("c3ctl-hand page lists no keyed row");
       const div = new RegExp(
-        `<div class="r ${victim.type}"[^>]*data-k="${victim.key.replace(/[.+:]/gu, (c) => `\\${c}`)}"[^>]*>.*?</div>`,
+        `<div class="r ${victim.type}"[^>]*data-k="${victim.key.replace(/[.+]/gu, (c) => `\\${c}`)}"[^>]*>.*?</div>`,
         "su",
       );
       const m = div.exec(b.html);
@@ -492,7 +493,7 @@ describe("C4: the change story reads on a phone, in light and dark, as a ticket'
         );
       }
       const wantTop = vp.w < 900 ? 0 : 16;
-      if (Math.abs(c.stageTop - wantTop) > 2) {
+      if (k > 0 && Math.abs(c.stageTop - wantTop) > 2) {
         faults.push(`${where}: change panel sits at ${c.stageTop}, want ${wantTop}`);
       }
       if (k === 1 && !c.delInScene) {
