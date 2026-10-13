@@ -10,11 +10,14 @@
 //
 // A scan messages a run's waiting marker on its appearance (the ship card when
 // .card-ready sits beside it), each usage-limit wall once by its actions.jsonl
-// index, and each shipped stage line once the same way. What was messaged is
-// the run's own notify lines; what predates messages is the run's
+// index, and each shipped stage line once the same way. An appearance is the
+// marker's file identity plus a hash of its words, so a remove-and-rewrite
+// sends anew; only the hash is ever recorded, never the words. What was
+// messaged is the run's own notify lines; what predates messages is the run's
 // .notify-state.json, kept on every look, on or off, so switching messages on
 // sends no backlog. A waiting appearance while every unruled wall stands
-// messaged is the postmaster's wall step appending, and sends nothing more.
+// messaged, or changed words in a messaged file with a wall still unruled, is
+// the postmaster's wall step appending, and sends nothing more.
 // A failed send leaves its events unsent for the next look; the first failure
 // is written once to stderr (the watcher's watch.err) and once to the watched
 // root's ledger, and nothing more until a send succeeds.
@@ -29,6 +32,7 @@
 //   exit 0  sent, nothing to send, messages off, or a recorded failure (scan);
 //           the message went (test, clerk)
 //   exit 1  usage, a refused token file, or a send that failed (test, clerk)
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -437,10 +441,16 @@ interface NotifyEvent {
   line: string;
 }
 
+/** One waiting appearance: the marker's file identity and a hash of its words.
+ * Inodes are reused and clocks are coarse, so a remove-and-rewrite in the
+ * same millisecond reads identical by stat alone; the words tell it apart.
+ * Only the hash is ever recorded, never the words. */
 function waitingIdent(dispatch: string): string | null {
   try {
-    const st = statSync(join(dispatch, ".waiting-on-user"));
-    return `${st.dev}:${st.ino}`;
+    const p = join(dispatch, ".waiting-on-user");
+    const st = statSync(p);
+    const sha = createHash("sha256").update(readFileSync(p, "utf8")).digest("hex").slice(0, 16);
+    return `${st.dev}:${st.ino}:${st.birthtimeMs}:${sha}`;
   } catch {
     return null;
   }
@@ -505,7 +515,19 @@ function collectEvents(
     const kind: NotifyKind = existsSync(join(dispatch, ".card-ready")) ? "shipcard" : "question";
     if (!told("question", ident) && !told("shipcard", ident)) {
       const unruled = live.filter((w) => !w.ruled);
-      const suppress = unruled.length > 0 && unruled.every((w) => told("wall", String(w.index)));
+      // The flow's only in-place change to the marker is the postmaster's
+      // wall step appending beside the words already there, so changed words
+      // in the same file with a wall still unruled are that append, messaged
+      // or still waiting on a retry, and send nothing more.
+      const filePart = ident.split(":").slice(0, 3).join(":");
+      const sameFileMessaged = ["question", "shipcard"].some((k) =>
+        [...(messaged.get(k) ?? [])].some(
+          (ref) => ref.split(":").slice(0, 3).join(":") === filePart,
+        ),
+      );
+      const suppress =
+        unruled.length > 0 &&
+        (unruled.every((w) => told("wall", String(w.index))) || sameFileMessaged);
       if (!suppress) {
         events.push({
           run: runName,
