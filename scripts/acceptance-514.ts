@@ -19,6 +19,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { DRAWING_SVG, KNOWN_PNG_B64, REPO, RUN, STUB_ADAPTER_SH } from "./acceptance-352.ts";
 import { run } from "./lib/proc.ts";
+import { processIsLive } from "./lib/processes.ts";
 
 /** The checkout under test and its runner, shared with the #352 oracle. */
 export const REPO_514 = REPO;
@@ -467,6 +468,7 @@ export function numstat(repo: string, mb: string, head: string): NumstatRow[] {
   const out: NumstatRow[] = [];
   for (const line of git(repo, ["diff", "--numstat", "-M", mb, head]).split("\n")) {
     if (!line) continue;
+    // ASCII: git's numstat rows are machine-made ASCII digits and tabs.
     const m = /^(\d+|-)\t(\d+|-)\t(.*)$/u.exec(line);
     if (!m) throw new Error(`bad numstat row: ${line}`);
     out.push({
@@ -518,6 +520,7 @@ export function expectedChange(repo: string, mb: string, head: string): Expected
       if (p === "/dev/null") cur = minus === "/dev/null" ? null : minus.replace(/^a\//u, "");
       else cur = p.replace(/^b\//u, "");
     } else if (line.startsWith("@@ ") && cur !== null) {
+      // ASCII: hunk headers are ASCII digits and markers, which \d matches exactly.
       const m = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/u.exec(line);
       if (!m) throw new Error(`bad hunk header: ${line}`);
       oldNo = Number(m[1]);
@@ -595,7 +598,7 @@ export function plain514(html: string): string {
     .replace(/&gt;/gu, ">")
     .replace(/&quot;/gu, '"')
     .replace(/&amp;/gu, "&")
-    .replace(/\s+/gu, " ")
+    .replace(/\s+/gu, " ") // ASCII: runs collapse for comparison on both sides alike.
     .trim();
 }
 
@@ -610,9 +613,10 @@ export function codeText(escaped: string): string {
 
 /** The page's visible text: style and script blocks out, tags stripped. */
 export function visibleText(html: string): string {
-  return plain514(
-    html.replace(/<style>[\s\S]*?<\/style>/gu, "").replace(/<script[\s\S]*?<\/script>/gu, ""),
-  );
+  const bare = html
+    .replace(/<style>[\s\S]*?<\/style>/gu, "") // ASCII: [\s\S] spans any block text, newlines in.
+    .replace(/<script[\s\S]*?<\/script>/gu, ""); // ASCII: [\s\S] spans any block text, newlines in.
+  return plain514(bare);
 }
 
 /**
@@ -854,11 +858,7 @@ export async function quitFirefox(ff: Firefox): Promise<void> {
   }
   ff.bidi.close();
   for (let i = 0; i < 50; i++) {
-    try {
-      process.kill(ff.pid, 0);
-    } catch {
-      return;
-    }
+    if (!processIsLive(ff.pid)) return;
     try {
       if (i === 0) process.kill(ff.pid, "SIGTERM");
       if (i === 20) process.kill(ff.pid, "SIGKILL");
