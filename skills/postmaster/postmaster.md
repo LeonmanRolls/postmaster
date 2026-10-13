@@ -767,8 +767,10 @@ every project and does not change that project's gate.
      `refused <message>`, no draft pull request can open here: put the message and the
      question to the user in `.waiting-on-user`, offering to
      open the pull request ready for review instead, and open nothing until they answer;
-     on their yes, call `open-pr` again with `--ready` and go on as below, and on any
-     other answer keep waiting. Log a `note` with the push and
+     on their yes, log it with `<tool>/scripts/run log-action
+     <dispatch> postmaster note <the ticket branch>
+     open-ready <the user's words>`, then call `open-pr` again with `--ready`
+     and go on as below, and on any other answer keep waiting. Log a `note` with the push and
      pull-request URL, and leave a dated tracker comment linking the pull request and
      summarizing the same evidence, logging `ticket-comment`. Before saying it is ready to
      merge or writing merge instructions, ask the pull request's checks at the card's HEAD:
