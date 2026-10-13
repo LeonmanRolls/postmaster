@@ -36,8 +36,9 @@
 //       passed, as it does for GitHub's own merge readiness.
 //   run landing open-pr --repo <repo> --dispatch <dispatch> --base <branch> --head <branch>
 //       --title <title> --body-file <file> [--ready]
-//       adopt the open pull request naming the head branch, or open one against the base
-//       branch: a draft where the run's ship.draft_pull_requests says on, ready otherwise,
+//       adopt the open same-repository pull request for the head branch against the
+//       base branch, ignoring fork entries, or open one against the base branch:
+//       a draft where the run's ship.draft_pull_requests says on, ready otherwise,
 //       and ready whatever the run says with --ready. Prints `opened <url> draft|ready`,
 //       `adopted <url> draft|ready`, or `refused <message>` when the draft create fails,
 //       carrying the provider's first line; a failed ready create is never refused.
@@ -881,6 +882,7 @@ function pullRequestChecks(o: string[]): number {
 type PullRequestRef = {
   url?: unknown;
   isDraft?: unknown;
+  isCrossRepository?: unknown;
 };
 
 /** Whether the run opens its pull request as a draft: on only when run.json
@@ -934,7 +936,18 @@ function openPr(o: string[]): number {
   const draft = !forceReady && draftPullRequests(dispatch);
   const listed = run(
     "gh",
-    ["pr", "list", "--head", head, "--state", "open", "--json", "url,isDraft"],
+    [
+      "pr",
+      "list",
+      "--head",
+      head,
+      "--base",
+      base,
+      "--state",
+      "open",
+      "--json",
+      "url,isDraft,isCrossRepository",
+    ],
     {
       cwd: repo,
     },
@@ -947,15 +960,27 @@ function openPr(o: string[]): number {
     die(`cannot list pull requests: GitHub returned malformed JSON`);
   }
   if (!Array.isArray(open)) die(`cannot list pull requests: GitHub returned malformed JSON`);
-  const first = (open as PullRequestRef[])[0];
-  if (first !== undefined) {
-    if (typeof first.url !== "string" || first.url === "") {
+  // Adopt only the run's own pull request: the first same-repository entry.
+  // A fork can carry the same head branch name, and adopting it would offer
+  // another author's pull request for merge, so cross-repository entries are
+  // passed over and the run opens its own when none of its own is listed.
+  let own: { url: string; isDraft: boolean } | undefined;
+  for (const ref of open as PullRequestRef[]) {
+    if (typeof ref.url !== "string" || ref.url === "") {
       die(`cannot list pull requests: GitHub returned malformed JSON`);
     }
-    if (typeof first.isDraft !== "boolean") {
+    if (typeof ref.isDraft !== "boolean") {
       die(`cannot list pull requests: GitHub returned malformed JSON`);
     }
-    console.log(`adopted ${first.url} ${first.isDraft ? "draft" : "ready"}`);
+    if (typeof ref.isCrossRepository !== "boolean") {
+      die(`cannot list pull requests: GitHub returned malformed JSON`);
+    }
+    if (own === undefined && !ref.isCrossRepository) {
+      own = { url: ref.url, isDraft: ref.isDraft };
+    }
+  }
+  if (own !== undefined) {
+    console.log(`adopted ${own.url} ${own.isDraft ? "draft" : "ready"}`);
     return 0;
   }
   const created = run(

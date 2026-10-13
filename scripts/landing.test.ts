@@ -2640,13 +2640,13 @@ describe("open pull requests", () => {
   test("the open pull request for the branch is adopted, draft or ready", () => {
     const draft = openPr("adopt-draft", {
       ship: { draft_pull_requests: "on" },
-      list: `${JSON.stringify([{ url: pr, isDraft: true }])}\n`,
+      list: `${JSON.stringify([{ url: pr, isDraft: true, isCrossRepository: false }])}\n`,
     });
     expect(draft.output).toBe(`adopted ${pr} draft`);
     expect(draft.calls.filter((l) => l.startsWith("pr create "))).toHaveLength(0);
     const ready = openPr("adopt-ready", {
       ship: { draft_pull_requests: "on" },
-      list: `${JSON.stringify([{ url: pr, isDraft: false }])}\n`,
+      list: `${JSON.stringify([{ url: pr, isDraft: false, isCrossRepository: false }])}\n`,
     });
     expect(ready.output).toBe(`adopted ${pr} ready`);
     expect(ready.calls.filter((l) => l.startsWith("pr create "))).toHaveLength(0);
@@ -2656,11 +2656,34 @@ describe("open pull requests", () => {
     const other = "https://github.com/example/postmaster/pull/2";
     const r = openPr("adopt-first", {
       list: `${JSON.stringify([
-        { url: pr, isDraft: false },
-        { url: other, isDraft: true },
+        { url: pr, isDraft: false, isCrossRepository: false },
+        { url: other, isDraft: true, isCrossRepository: false },
       ])}\n`,
     });
     expect(r.output).toBe(`adopted ${pr} ready`);
+  });
+
+  test("the list names the base, and fork entries are passed over", () => {
+    const fork = "https://github.com/example/postmaster/pull/9";
+    const r = openPr("adopt-fork", {
+      list: `${JSON.stringify([
+        { url: fork, isDraft: false, isCrossRepository: true },
+        { url: pr, isDraft: false, isCrossRepository: false },
+      ])}\n`,
+    });
+    expect(r.output).toBe(`adopted ${pr} ready`);
+    const list = r.calls.find((l) => l.startsWith("pr list ")) ?? "";
+    expect(list).toContain("--base main");
+    expect(list).toContain("url,isDraft,isCrossRepository");
+  });
+
+  test("with only fork entries listed, the run opens its own", () => {
+    const fork = "https://github.com/example/postmaster/pull/9";
+    const r = openPr("adopt-forkonly", {
+      list: `${JSON.stringify([{ url: fork, isDraft: false, isCrossRepository: true }])}\n`,
+    });
+    expect(r.output).toBe(`opened ${pr} ready`);
+    expect(r.calls.filter((l) => l.startsWith("pr create "))).toHaveLength(1);
   });
 
   test("a refused draft create carries the provider's first line", () => {
