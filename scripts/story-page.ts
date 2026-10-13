@@ -731,10 +731,63 @@ export interface ChangeFile {
   dels: Map<number, RemovedLine[]>;
 }
 
-/** A quoted diff path unquoted, its a/ or b/ prefix off. */
+const C_QUOTE_SINGLE: Record<string, string> = {
+  // git's single-letter C escapes, by code point.
+  a: String.fromCharCode(7),
+  b: String.fromCharCode(8),
+  f: String.fromCharCode(12),
+  n: String.fromCharCode(10),
+  r: String.fromCharCode(13),
+  t: String.fromCharCode(9),
+  v: String.fromCharCode(11),
+  "\\": "\\",
+  '"': '"',
+};
+
+/**
+ * A C-quoted path decoded, as git writes one: single-letter escapes and
+ * octal bytes, the octal runs read as UTF-8. Only quoted text reaches here;
+ * a backslash git did not write keeps its backslash.
+ */
+function decodeCQuotes(text: string): string {
+  const out: string[] = [];
+  const bytes: number[] = [];
+  const flush = (): void => {
+    if (bytes.length > 0) out.push(Buffer.from(new Uint8Array(bytes)).toString("utf8"));
+    bytes.length = 0;
+  };
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i] ?? "";
+    if (c !== "\\") {
+      flush();
+      out.push(c);
+      continue;
+    }
+    const single: string | undefined = C_QUOTE_SINGLE[text[i + 1] ?? ""];
+    if (single !== undefined) {
+      flush();
+      out.push(single);
+      i++;
+      continue;
+    }
+    // ASCII: octal escapes are ASCII digits.
+    const oct = /^[0-7]{3}/u.exec(text.slice(i + 1, i + 4))?.[0];
+    if (oct !== undefined) {
+      bytes.push(Number.parseInt(oct, 8));
+      i += 3;
+      continue;
+    }
+    flush();
+    out.push("\\");
+  }
+  flush();
+  return out.join("");
+}
+
+/** A quoted diff path unquoted and decoded, its a/ or b/ prefix off. */
 function gitPath(text: string, prefix: string): string {
   let p = text;
-  if (p.startsWith('"') && p.endsWith('"') && p.length >= 2) p = p.slice(1, -1);
+  if (p.startsWith('"') && p.endsWith('"') && p.length >= 2) p = decodeCQuotes(p.slice(1, -1));
   if (prefix !== "" && p.startsWith(prefix)) p = p.slice(prefix.length);
   return p;
 }
@@ -1301,7 +1354,9 @@ export function headRows(
 
 /**
  * A base scene's rows: the file at the merge base, removed lines marked as
- * what was there before.
+ * what was there before. Removed lines key with the change's path, since a
+ * base scene on a renamed file names the path before the rename and the
+ * diff's keys use the path after it.
  */
 export function baseRows(
   file: string,
@@ -1317,7 +1372,7 @@ export function baseRows(
       type: was ? "was" : "ctx",
       n,
       text: lines[n - 1] ?? "",
-      key: was ? `${file}:-${n}` : null,
+      key: was ? `${change?.path ?? file}:-${n}` : null,
     });
   }
   return rows;

@@ -1005,6 +1005,52 @@ describe("a change from its diff", () => {
     expect(files.get("with space.ts")?.added).toEqual(new Set([1]));
   });
 
+  test("quoted C escapes decode, octal runs as UTF-8", () => {
+    const files = parseChangeDiff(
+      [
+        'diff --git "a/a\\ttab.ts" "b/a\\ttab.ts"',
+        "index 1111111..2222222 100644",
+        '--- "a/a\\ttab.ts"',
+        '+++ "b/a\\ttab.ts"',
+        "@@ -1 +1 @@",
+        "-old",
+        "+new",
+        'diff --git "a/\\303\\274n\\303\\257.ts" "b/\\303\\274n\\303\\257.ts"',
+        "index 1111111..2222222 100644",
+        '--- "a/\\303\\274n\\303\\257.ts"',
+        '+++ "b/\\303\\274n\\303\\257.ts"',
+        "@@ -1 +1 @@",
+        "-old",
+        "+new",
+      ].join("\n"),
+    );
+    expect(files.get("a	tab.ts")?.added).toEqual(new Set([1]));
+    expect(files.get("ünï.ts")?.added).toEqual(new Set([1]));
+  });
+
+  test("a base scene on a renamed file keys removed lines with the new path", () => {
+    const files = parseChangeDiff(
+      [
+        "diff --git a/old.ts b/new.ts",
+        "similarity index 50%",
+        "rename from old.ts",
+        "rename to new.ts",
+        "--- a/old.ts",
+        "+++ b/new.ts",
+        "@@ -1,1 +1,1 @@",
+        "-const a = 1;",
+        "+const a = 2;",
+      ].join("\n"),
+    );
+    const renamed = files.get("new.ts");
+    expect(renamed?.oldPath).toBe("old.ts");
+    expect(changedKeys(files)).toContain("new.ts:-1");
+    // A base scene names the path before the rename; its removed rows still
+    // key with the path after it, as the diff's keys do.
+    const rows = baseRows("old.ts", 1, 1, ["const a = 1;"], renamed);
+    expect(rows.map((r) => r.key)).toEqual(["new.ts:-1"]);
+  });
+
   test("changed keys, gaps and files needing names follow", () => {
     const files = parseChangeDiff(DIFF);
     const keys = changedKeys(files);
