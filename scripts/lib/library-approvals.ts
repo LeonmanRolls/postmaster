@@ -158,8 +158,8 @@ export interface ListedLibrary {
   vetting: string;
 }
 
-const LIBRARIES_RE = /^##[ \t]+libraries[ \t]*$/iu;
-const HEADING2_RE = /^##[ \t]+(.*?)[ \t]*$/u;
+export const LIBRARIES_RE = /^##[ \t]+libraries[ \t]*$/iu;
+export const HEADING2_RE = /^##[ \t]+(.*?)[ \t]*$/u;
 const EXACT = /^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/u;
 
 /** An approval covers one exact version, never a range. */
