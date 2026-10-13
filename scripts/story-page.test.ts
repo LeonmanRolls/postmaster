@@ -1465,6 +1465,27 @@ describe("a change's criteria", () => {
     expect(parseCriteria("## Acceptance criteria\n\nnothing numbered\n")).toEqual([]);
   });
 
+  test("the heading matches as the gate reads it, fences and all", () => {
+    const capped = `## Acceptance Criteria
+
+1. First thing.
+2. Second thing.
+`;
+    expect(parseCriteria(capped)).toEqual([
+      { n: 1, words: "First thing." },
+      { n: 2, words: "Second thing." },
+    ]);
+    const fenced = `## Acceptance criteria
+
+1. First thing.
+
+\`\`\`
+2. not a criterion
+\`\`\`
+`;
+    expect(parseCriteria(fenced)).toEqual([{ n: 1, words: "First thing." }]);
+  });
+
   test("every criterion needs its section quoting its words", () => {
     const story = {
       ticket: 7,
@@ -1494,6 +1515,8 @@ describe("a change's criteria", () => {
     } as unknown as Story;
     expect(() => checkCriterionSections(plain, BODY)).toThrow("criterion 2 has no section");
     expect(() => checkCriterionSections(story, "## Problem\n\nno criteria\n")).not.toThrow();
+    const capped = BODY.replace("## Acceptance criteria", "## Acceptance Criteria");
+    expect(() => checkCriterionSections(story, capped)).not.toThrow();
   });
 
   test("one section quoting two criteria is refused", () => {

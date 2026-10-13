@@ -32,6 +32,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { langOf, scrub } from "./lib/page-text.ts";
 import { run } from "./lib/proc.ts";
+import { norm } from "./ticket-check.ts";
 
 export const USAGE = [
   "usage: story-page.ts build <repo> <story-dir> <out-dir> [--ticket-body <file>] [--picture-adapter <exe>] [--keep-picture]",
@@ -661,15 +662,24 @@ export function parseCriteria(body: string): Criterion[] {
   const out: Criterion[] = [];
   let current: { n: number; words: string[] } | null = null;
   let inCriteria = false;
+  let inFence = false;
   const flush = (): void => {
     if (current) out.push({ n: current.n, words: current.words.join(" ").trim() });
     current = null;
   };
   for (const raw of body.replace(/\r/gu, "").split("\n")) {
     const line = raw.trimEnd();
+    // ASCII: fence indentation is ASCII whitespace, as startsInFence reads it.
+    if (/^\s*```/u.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
     if (line.startsWith("## ")) {
       flush();
-      inCriteria = line.trim() === "## Acceptance criteria";
+      // The gate's own normalization, so a miscased heading does not
+      // silently empty the criteria the section gate checks.
+      inCriteria = norm(line.trim()) === "## acceptance criteria";
       continue;
     }
     if (!inCriteria) continue;
