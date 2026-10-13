@@ -1,0 +1,32 @@
+135.2.1	no	no	state	Criterion 5 requires the ruling recorded; an unrecorded or partial copy breaks it.
+135.2.2	no	no	state	Criterion 8 says no unruled suspect reaches the card; failing open on errors breaks it.
+135.2.3	no	no	input	Criterion 7 requires the wiki check to run; a silent skip is a missing guard.
+135.2.4	no	no	input	Criterion 1 names .env-style assignments of anything key-like; this shape is missed.
+135.2.5	no	no	input	Criterion 1 names home-directory paths; a bare home directory is one.
+135.3.1	no	no	input	Criterion 1 requires scanning every commit; skipping added lines contradicts it.
+135.3.2	no	no	input	Ticket's motivating file is a JSONL transcript; criterion 1 rules must fire there.
+135.3.3	no	no	input	A crash that drops findings; criterion 1 needs every commit scanned.
+135.3.4	no	no	input	A copy publishing secret fragments breaks criterion 5; any reading requires the fix.
+135.3.5	no	no	input	Criterion 1 says anything that looks like private data; file names are not excluded.
+135.3.6	no	no	state	Criterion 4 wants the allowance record reviewable; suppression leaving no trace defeats it.
+135.3.7	no	no	state	Run status and watcher alerts are outside the ticket; the lines predate the change.
+135.3.8	no	no	state	Criterion 5 says anything copied is scanned; a failed enumeration passing as success breaks that.
+135.3.9	no	no	site	Criterion 3 says never print the value; this is one more place printing it.
+135.3.10	no	no	input	Altering bytes outside the matched span corrupts the copy; any reading requires preserving them.
+135.3.11	no	no	site	Criterion 12 states large files are streamed, not loaded; promotion, merge and lint buffer.
+135.3.12	no	no	state	Criterion 5 requires anything copied be scanned before the copy completes; no recheck breaks it.
+135.3.13	yes	no	contract	Criterion 4 lets allowed values publish; criterion 7 bars wiki paths; precedence unstated.
+135.3.14	no	no	site	Criterion 3 says never print the value; a page filename printed unredacted is another place.
+135.3.15	no	no	input	Criterion 4 records one allowed match; suppressing other values breaks criterion 8.
+135.4.1	no	no	input	Criterion 1 names private keys; a surviving key body makes the copy leak.
+135.4.2	no	no	other	Criterion 8 requires every change scanned; an inherited switch blinding the gate breaks it.
+135.4.3	no	no	input	Criterion 1 covers keys; CSI-split keys flag, so an OSC-split one has one sane answer.
+135.4.4	no	no	contract	Criterion 3 has the user rule each suspect scrubbed or allowed; unremediable findings contradict that.
+135.4.5	no	no	input	Criterion 1 covers keys; the raw form flags, so the escaped form needs the same.
+135.4.6	no	no	input	The ticket's origin is a transcript; depth-1 flags, so depth-2 silent has one sane answer.
+135.4.7	no	no	input	Criterion 4 records one allowed match; a marker silencing another record's email exceeds it.
+135.4.8	no	no	input	Criterion 1 names .env-style assignments of anything key-like; compound secret names are key-like.
+135.4.9	no	no	input	Criterion 1 names private keys in common shapes; PGP and age keys qualify.
+135.4.10	no	yes	state	Criterion 1 scans every commit base to head; a dirty merge left unscanned breaks it.
+135.4.11	no	no	input	A scrubbed copy keeping an @domain tail still leaks; any reading requires the fix.
+135.5.1	no	no	input	Run's line calls the eight fixes scanner recognition gaps; criterion 1 lists those shapes.

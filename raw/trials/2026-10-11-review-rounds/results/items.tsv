@@ -1,0 +1,383 @@
+id	run	round	severity	lenses	lanes	target	textSource	origin	originRound	placedBefore	relog	text
+18.2.1	18	2	P1	bug	luna+mimo	scripts/project-settings.sh:74	line	fix	1		yes	bare and camelCase credential names pass scanning
+18.2.2	18	2	P2	bug	luna	scripts/export-session.sh:100	line	fix	1		no	suffix match on claude/pi exports a decoy session
+18.2.3	18	2	P2	bug	mimo	scripts/export-session.sh:32	line	change			no	nested id in an earlier line wins over top-level identity
+18.2.4	18	2	P2	bug	mimo	scripts/export-session.sh:89	line	change			no	several store records for one thread resolves silently by mtime
+18.2.5	18	2	P2	bug	mimo	scripts/turnpikes.sh:205	line	base			no	self-test inherits POSTMASTER_PROJECT and fails spuriously
+18.3.1	18	3	P1	bug	luna	scripts/project-settings.sh:78	line	fix	2		no	right boundary misses camelCase continuations like secretKey
+18.3.2	18	3	P2	bug	luna	scripts/launch.sh:734	line	base			no	lane env file can overwrite the event-stream path before export
+18.3.3	18	3	P2	bug	mimo	scripts/project-settings.sh:78	line	fix	2		no	credential left boundary vacuous under IGNORECASE, doc claims mysecret out
+18.3.4	18	3	P2	bug	mimo	scripts/export-session.sh:138	line	change			no	codex dash-suffix matches other-thread-1 for thread-1
+18.4.1	18	4	P2	bug	luna	scripts/turnpikes.sh:196	line	change			no	explicit empty --project proceeds with discovery instead of dying
+38.2.1	38	2	P1	bug	luna+mimo	scripts/review-findings.py:140	none	change			no	
+38.2.2	38	2	P2	bug	luna	scripts/review-findings.py:221	none	change			no	
+38.2.3	38	2	P2	bug	mimo	scripts/review-findings.py:226	none	change			no	
+38.2.4	38	2	P2	bug	mimo	scripts/review-findings.py:252	none	change			no	
+38.2.5	38	2	P2	bug	mimo	scripts/review-findings.py:230	none	change			no	
+38.2.6	38	2	P2	bug	mimo	scripts/reviewers.sh:114	none	base			no	
+38.2.7	38	2	P2	bug	mimo	skills/postmaster/coachman.md:534	none	fix	1		no	
+38.3.1	38	3	P1	bug	luna	scripts/review-findings.py:43	none	change			no	
+38.3.2	38	3	P1	bug	mimo	scripts/review-findings.py:154	none	fix	2		no	
+38.3.3	38	3	P2	bug	luna	scripts/review-findings.py:398	none	fix	1		no	
+38.3.4	38	3	P2	bug	luna	scripts/review-findings.py:418	none	change			no	
+38.3.5	38	3	P2	bug	mimo	scripts/review-findings.py:262	none	fix	2		no	
+38.3.6	38	3	P2	bug	mimo	skills/postmaster/coachman.md:538	none	fix	2		no	
+38.4.1	38	4	P2	bug	luna	scripts/review-findings.py:158	line	fix	2		no	a non-empty declared findings list with no objects is ignored beside a valid issues list, losing its cited bug
+38.4.2	38	4	P2	bug	luna	scripts/review-findings.py:39	line	fix	3		no	a trailing Claude error result without string text is filtered out, so an earlier clean result is accepted
+38.6.1	38	6	P2	bug	luna	skills/postmaster/coachman.md:642	line	fix	5		no	harvest-fail verdict still counted
+38.6.2	38	6	P2	bug	mimo	skills/postmaster/coachman.md:628	line	change			no	non-zero-exit rule has no mechanism
+38.7.1	38	7	P1	bug	luna	scripts/review-findings.py:58	line	change			no	stale --last from failed codex turn counts clean
+38.7.2	38	7	P2	bug	luna	skills/postmaster/coachman.md:643	line	fix	6		no	degrade arm writes no run-log entry
+38.7.3	38	7	P2	bug	mimo	scripts/review-findings.py:174	line	fix	5		no	fence stripping corrupts ``` inside JSON strings
+38.8.1	38	8	P2	bug	luna	scripts/review-findings.py:141	line	change			no	failure_scenario dropped, body not provided
+38.8.2	38	8	P2	bug	mimo	scripts/review-findings.py:417	line	fix	2		no	word:number prose filed as junk finding
+57.2.1	57	2	P2	bug	luna	scripts/host.sh:1902	line	fix	1		no	refused launch scans foreign stream, backfills stale thread, retry resumes it
+57.2.2	57	2	P2	bug	mimo+luna	scripts/host.sh:1830	line	fix	1		no	lock names starter by inference, folded with scripts/host.sh:1985 as one defect
+57.2.3	57	2	P2	bug	mimo	scripts/host.sh:1985	line	fix	1		no	exit trap releases unconditionally, filed with scripts/host.sh:1830 as one defect
+57.2.4	57	2	P2	bug	mimo	scripts/host.sh:2006	line	fix	1		no	stderr gate misses bare wall wordings, HTTP status and bare API terms
+57.2.5	57	2	P2	bug	mimo	scripts/host.sh:1961	line	change			no	recovery append fuses onto newline-less torn tail, folded with scripts/host.sh:2260 as one defect
+57.2.6	57	2	P2	bug	mimo	scripts/host.sh:2260	line	change			no	direct refused write fuses onto torn tail, filed with scripts/host.sh:1961 as one defect
+57.3.1	57	3	P2	bug	luna+mimo	scripts/host.sh:1894	line	fix	2		no	claim check-then-replace races, 3/25 paired overlaps both live
+57.3.2	57	3	P2	bug	luna	scripts/host.sh:2295	line	fix	1		no	phase-before-intent 292ms gap, 7/30 kills lose resume prompt, retry wedges refused
+57.4.1	57	4	P2	bug	mimo	scripts/host.sh:2221	line	fix	3		no	unrecorded STARTED later launch ignored, earlier attempt steals its thread
+57.4.2	57	4	P2	bug	mimo+luna	scripts/runs-status.sh:119	line	fix	1		no	gap detector blind to intent-without-phase, stale NEXT buries refused resume
+57.4.3	57	4	P2	bug	mimo	skills/postmaster/postmaster.md:247	line	fix	1		no	leg retry runs from live tool, not the run pinned checkout
+57.4.4	57	4	P2	bug	luna	scripts/host.sh:2035	line	change			no	stale done marker finishes a gap-B attempt, skips hand-off completion
+57.5.1	57	5	P1	bug	mimo+luna	scripts/runs-status.sh:140	line	change			no	incomplete outcome beats spec-review-ready, planning pause reads RESUME never SPEC
+75.2.1	75	2	P2	bug+security	luna+opus	scripts/run-clash.ts:99	report	change			no	Clear inherited Git repository overrides: When the command runs in an environment exporting `GIT_DIR` (for example, from a Git hook or `rebase --exec`), that variable can override `-C <repo>`. The initial check and branch listing may then inspect a different repository and report the ticket ID as free despite a clash in the requested target. Clear inherited Git repository overrides before spawning these Git commands.
+75.2.2	75	2	P2	bug+security	luna+mimo+opus	scripts/run-clash.ts:112	report	fix	1		no	- Target: scripts/run-clash.ts:112 - Location: `isOccupied`, lines 112-118
+81.2.1	81	2	P2	bug	luna+mimo	skills/postmaster/postmaster.md:278	line	fix	1		no	decisions accumulate with no per-package scope, so a stale changes stanza re-triggers revision after the revised spec was approved
+81.3.1	81	3	P2	bug	mimo	skills/postmaster/postmaster.md:291	line	fix	1		no	branch selection counts approvals from nothing named, so after a revision package the postmaster can tell the user stopping while the coachman implements
+81.4.1	81	4	P2	bug	mimo	scripts/spec-decisions.sh:83	line	fix	3		no	record checks lane shape only, so a typo lane is approved and count silently clears the two-approved bar
+85.2.1	85	2	P2	bug	luna	oracle-85.sh:39	none	change			no	
+85.3.1	85	3	P2	bug	mimo	oracle-85.sh:39	none	change			yes	
+85.3.2	85	3	P2	bug	luna+mimo	oracle-85.sh:38	none	fix	2		no	
+85.4.1	85	4	P2	bug	luna	oracle-85.sh:47	none	fix	3		no	
+85.4.2	85	4	P2	bug	mimo	scripts/host.sh:2448	none	fix	1		no	
+92.2.1	92	2	P2	bug	mimo	oracle-85.sh:43	line	base			no	link-skills pin stale at :93 after our insert moved the line to :94, static FAILs; BASE control PASSes
+105.2.1	105	2	P2	bug	luna+mimo	scripts/host.sh:200	line	change			no	legacy coachman with missing/unparseable/zero manifest leg skips resolution and labels without a leg; absence-vs-relative hole
+105.2.2	105	2	P2	bug	mimo	scripts/host.sh:344	line	fix	1		no	failed root-tab close leaves an untagged pane so close refuses the run space forever; contradicts Ownership
+105.2.3	105	2	P2	bug	mimo	scripts/host.sh:339	line	change			no	root tab closed before the replacement tab and pane ids are validated; empty ids orphan an empty run space
+105.3.1	105	3	P2	bug	luna+mimo	scripts/host.sh:360	line	fix	2		no	failed first placement before the opened token orphans an uncloseable run space; tagging and id-validation returns both precede it
+105.3.2	105	3	P2	bug	luna+mimo	scripts/host.sh:252	line	change			no	typed coachman with empty leg number skips validation and labels with no leg
+105.3.3	105	3	P2	bug	mimo	scripts/host.sh:250	line	change		scripts/host.sh:236	no	model-less coachman labels without a model while workhorse and review refuse; round-1 scoping was wrong
+105.4.1	105	4	P2	bug	luna+mimo	scripts/host.sh:380	line	fix	3		no	failed root tag plus failed or id-less create leaves an untagged pane so close refuses the marked space
+105.4.2	105	4	P2	bug	mimo	scripts/host.sh:375	line	fix	3		no	failed mark write returns before marking, orphaning the just-opened unmarked space
+105.5.1	105	5	P2	bug	luna+mimo	scripts/host.sh:408	line	change			no	post-create rename/launch-tag failure returns bare, leaving untagged launch tab close refuses rc2; record-fail verified benign
+105.6.1	105	6	P2	bug	luna+mimo	scripts/host.sh:1251	line	fix	5		no	mates check passes vacuously over tab_id-less rows, closing split tab and destroying user pane; trigger is incomplete metadata (handled class per tabcreate.empty)
+105.7.1	105	7	P2	bug	luna+mimo	scripts/host.sh:1250	line	fix	6		no	empty-string tab_id threads between mixed and owned, vacuous close destroys user pane; fix is falsy check plus control
+108.2.1	108	2	P1	bug	luna	scripts/front-door.sh:54-59	line	fix	1	scripts/front-door.sh:51-56	no	newline in config value truncates to false self
+108.2.2	108	2	P2	bug	luna	scripts/front-door-acceptance.sh:74	line	change			no	extra argv accepted as success
+108.2.3	108	2	P2	bug	luna	scripts/front-door-acceptance.sh:25	line	change			no	CRLF evades folding
+108.2.4	108	2	P1	bug	mimo	scripts/front-door.sh:23-25	line	change			no	empty path fails open to self
+108.2.5	108	2	P2	bug	mimo	scripts/front-door-acceptance.sh:62-70	line	fix	1	scripts/front-door-acceptance.sh:47-62	no	claim paraphrases pass
+108.3.1	108	3	P1	bug	mimo	scripts/front-door.sh:23-27	line	fix	2	scripts/front-door.sh:23-25	no	GIT_DIR steers identity to false self
+108.3.2	108	3	P2	bug	mimo	scripts/front-door.sh:52	line	change			no	whitespace-only value bypasses refusal
+108.3.3	108	3	P2	bug	luna	skills/postmaster/SKILL.md:152	line	change		skills/postmaster/SKILL.md:146-161	no	example leaves values unquoted
+108.3.4	108	3	P2	bug	luna	skills/postmaster/SKILL.md:174	line	change			no	RUNS basename unquoted
+108.4.1	108	4	P2	bug	luna	skills/postmaster/SKILL.md:184-185	line	fix	3		no	headless line wrong under self route
+109.2.1	109	2	P2	bug	luna	scripts/log-action.ts:58	line	fix	1		no	whole-argv undecodable gate strips a legitimate U++FFFD in one field when another holds a bad byte; BASE iconv -c keeps it (mixed case untested)
+109.2.2	109	2	P2	bug	luna	scripts/lib/proc.ts:56	line	change			no	a signaled child reports 128 through run(), not 128+signo as BASE bash does (SIGTERM probe: 128 vs 143)
+109.2.3	109	2	P2	bug	luna	scripts/launch.ts:628	line	change			no	a harness dead by signal exits launch 1; BASE exec dies by the signal (self-TERMing fake: 1 vs SIGTERM)
+109.2.4	109	2	P2	bug	luna	scripts/launch.ts:362	line	fix	1		no	an env_file launch drops the inherited SHLVL (whole-env replace skips the dump's, BASE keeps 7); underscore checked, no divergence
+109.3.1	109	3	P1	bug	mimo	scripts/launch.ts:357	line	fix	1		no	env file ending the dump shell (exit/set -e/exec) or losing PATH yields empty dump and launch proceeds on unmodified env; BASE aborts (rc 3/1) or applies (FOO set)
+109.3.2	109	3	P1	security	opus	scripts/discover-project.ts:91	line	change			no	discover runs verify.sh inside the target so its bunfig.toml preload executes and its .env loads as the user pre-confirmation; BASE ran python3 -I and nothing; overturns round-1 below-bar on wrapper loading
+109.3.3	109	3	P2	bug	luna	scripts/turnpikes.ts:41	line	change			no	BREAK allows leading tabs, BASE spaces-only; tab-indented --- exits 0 with defaults vs BASE exit 2 unknown turnpike
+109.3.4	109	3	P2	bug	luna	oracle-109.sh:44	line	fix	1		no	AC1 pattern misses versioned interpreters in spawn positions (python3.11 via run/Bun.spawn/spawnSync/-c); no live versioned call in tree
+109.4.1	109	4	P1	bug	luna+mimo	scripts/launch.ts	line	unplaced			no	env-file stdout parsed as the env dump, NUL-injected vars, streams swallowed; verified by execution
+109.4.2	109	4	P1	bug	luna+mimo	scripts/launch.ts	line	unplaced			no	exit-0/exec-true before the dump launches on an emptied env (rc 1), BASE exits 0 without launching; verified by execution
+109.4.3	109	4	P2	bug	mimo	scripts/launch.ts	line	unplaced			no	dump spawn has no maxBuffer, a 1.2MB env self-SIGTERMs the launch (rc 143); verified by execution
+109.4.4	109	4	P2	bug	mimo	scripts/launch.ts	line	unplaced			no	dumponuke control asserts the ENOENT rc, never the handed-on env, and its unset-everything premise still dumps SHLVL; verified by execution+reading
+109.4.5	109	4	P2	bug	luna	scripts/local.ts	line	unplaced			no	ticket load replaces bad bytes (rc 0 + U+FFFD), BASE refuses the ticket (rc 1); verified by execution
+109.4.6	109	4	P2	bug	luna	scripts/launch.ts	line	unplaced			no	resume export check sources the env file before entering CWD; verified by execution
+109.5.1	109	5	P1	bug	mimo+luna	scripts/launch.ts	line	unplaced			yes	no-env-file launch hands stale caller PWD (or unset), BASE hands the worktree; verified by execution
+109.5.2	109	5	P1	bug	mimo	scripts/launch.ts	line	unplaced			yes	harness name interpolated into sh -c via JSON quoting, payload executes, BASE literal; verified by execution
+109.5.3	109	5	P2	bug	mimo	scripts/verify.ts	line	unplaced			no	journey-path dispatch dir interpolated into bash -c, payload executes, BASE literal; verified by execution
+109.5.4	109	5	P2	bug	mimo	scripts/launch.ts	line	unplaced			yes	prompt/stdin bytes decoded utf8 (U+FFFD), BASE passes raw; verified by execution
+109.6.1	109	6	P1	bug	mimo	scripts/launch.ts	line	unplaced			yes	harnessData key is *31 + lexical resolve, BASE is cksum + pwd -P; resume misses BASE-laid sessions; verified by execution
+109.6.2	109	6	P2	bug	mimo	scripts/launch.ts	line	unplaced			yes	file-as-CWD says cannot-enter + writes codex trust, BASE says no-such-directory untouched; verified by execution
+109.6.3	109	6	P2	bug	mimo	scripts/launch.ts	line	unplaced			yes	export check sees stale PWD/OLDPWD/SHLVL, BASE cds first; verified by execution
+109.6.4	109	6	P2	bug	luna	scripts/fixture.ts	line	unplaced			no	score sh() has no 1200s timeout, BASE aborts with message; verified by reading + mechanism
+109.6.5	109	6	P2	bug	luna	scripts/verify-examples.ts	line	unplaced			no	example shells have no 60s timeout, BASE reports timeout; verified by reading + mechanism
+109.6.6	109	6	P2	bug	luna	scripts/plane.ts	line	unplaced			no	fetch has no 30s deadline, BASE urlopen timeout=30; verified by reading
+109.6.7	109	6	P2	bug	luna	scripts/fixture.ts	line	unplaced			no	appFiles ignores git exit code, BASE check=True fails; verified by execution + reading
+109.6.8	109	6	P2	bug	luna	scripts/verify-examples.ts	line	unplaced			no	shebang split breaks quoted args, BASE shlex keeps them; verified by execution
+109.8.1	109	8	P2	bug	mimo	scripts/tool-faults.ts:485	line	change			no	safe.key toLowerCase + ASCII word class vs BASE casefold + Unicode; fault ids split on non-ASCII failed text (harvest e2e: tf-d298976d vs tf-ef295d74); verified by execution
+109.8.2	109	8	P2	bug	luna	scripts/local.ts:942	line	fix	4		no	gate executes python3 via extracted BASE (39 execs in local+launch self-tests) and fails closed without it; oracle AC1 blind; verified by execution; conflicts with r8 finding-1 BASE-control ruling
+109.9.1	109	9	P2	bug+security	luna+mimo+opus	scripts/tool-faults.ts:252	line	change			no	EMAIL_RE ASCII \w vs BASE Unicode \w; non-ASCII addresses leak through publish (BASE [address]); verified by execution, both harvest CLIs
+109.9.2	109	9	P2		coachman	scripts/tool-faults.ts:253	line	change			no	IPV4_RE ASCII \w lookbehind + \d vs BASE Unicode; over-withholds after non-ASCII, publishes Arabic-digit IP raw; verified by execution, both harvest CLIs
+109.9.3	109	9	P2	bug	mimo	scripts/tool-faults.ts:254	line	change			no	KEY_RE ASCII-\w lookbehind vs BASE Unicode; false ticket key after non-ASCII letters; verified by execution, both harvest CLIs
+109.9.4	109	9	P2	bug	luna+mimo	scripts/tool-faults.ts:256	line	change			no	FAULT_ID_RE ASCII \b vs BASE Unicode \b; id split + held verbatim in publish; HEX_RE same flaw, no end-to-end bite; verified by execution
+109.9.5	109	9	P2	bug	luna+mimo	scripts/tool-faults.ts:230	line	change			no	sameRepo toLowerCase vs BASE casefold; Strasse remotes rejected; verified by execution, real functions over real git
+109.9.6	109	9	P2	bug	luna	scripts/tool-faults.ts:365	line	change			no	names gi vs BASE re.I; ſ-name missed, grouping splits; verified by execution, both harvest CLIs
+109.9.7	109	9	P2	bug	luna	scripts/tool-faults.ts:458	line	fix	8		no	isdigit sites ASCII \d vs BASE str.isdigit + Unicode \d (WTOK/TICKS/looks/key-tail/names-filter); Arabic digits mishandled; verified by execution
+109.9.8	109	9	P2	security	opus	scripts/fixture.ts:287	line	change			no	sectionOf $ vs BASE \Z returns first line only, mis-matching checkHidden; verified by execution on the repo tickets
+109.10.1	109	10	P1		luna+mimo	scripts/lib/text.ts:987	line	fix	9		no	bun run check exits 1 at HEAD (noUnreachable + wiki-lint format); luna mimo
+109.10.2	109	10	P2		luna	scripts/lib/text.ts:363	line	fix	9		no	Nd match/convert skew U+10D40 (ICU17 matches, U15 table throws; BASE rejects); luna
+109.10.3	109	10	P2		mimo+luna	scripts/lib/text.ts:1041	line	fix	9		no	guard slips 5 forms (string-shield, space, multiline, alias, indirect); mimo luna
+109.10.4	109	10	P2		mimo	scripts/verify-journey.ts:125	line	change			no	split-newline vs splitlines (2 sites); in-class, overturns card vj-lines; mimo
+109.10.5	109	10	P2		luna	oracle-109.sh:34	line	fix	3		no	AC1 classifier FP on comment+test-python, FN on execFileSync; luna
+109.12.1	109	12	P1	bug	luna+mimo	scripts/runs-watch.ts:840	line	fix	11		no	watchHost omits --under, host refuses every automatic dispatch/remount; INTENDED divergence, BASE watch_host needs the same line; verified by execution, negative control refuses, fixed shape passes the guard
+109.12.2	109	12	P2	bug	luna+mimo	scripts/launch.ts:708	line	fix	11		no	MESSAGE_KEYS capital Detail never matches the lowercased lookup, detail-held transient prose misclassifies not-transient; verified by execution, 2 controls fail before pass after
+109.12.3	109	12	P2	security	opus	scripts/verify-examples.ts:42	line	fix	10		no	fence open/close exactly-3 vs BASE 3+, longer runs misread; verified by execution, 3 controls plus python cross-check agree
+109.12.4	109	12	P2	security	opus	scripts/runs-watch.ts:597	line	fix	11		no	repoFromBrief m-flag anchors match after U+2028/29 vs BASE re.M newline-only; verified by execution, control plus python cross-check agree, PY_M_START now, sibling sweep clean
+110.2.1	110	2	P2	bug	mimo	scripts/clean-checkout.ts:53	line	change			no	helper never clears GIT_* before spawning git (git -C does not override GIT_DIR), so a polluted env verifies the wrong repo (probe: GIT_DIR=decoy prints decoy content exit 0) or misreports a missing branch; verified by execution
+110.2.2	110	2	P2	bug	mimo	scripts/clean-checkout.ts:129	line	change			no	passing command plus failed worktree remove exits 1 even though the rm/prune fallback left no residue, so the ship leg investigates a good merge as a defect (probe: GATE_GREEN then exit 1); exit conflates fallback-use with residue; verified by execution
+110.2.3	110	2	P2	security	opus	skills/postmaster/coachman.md:968	line	fix	1		no	step 6 composes <install> && <build> && <gate> in one shell string, so a failed install is hidden when the gate holds more than one statement (bash -e does not stop after a failed &&-list before a semicolon); probe: helper reports exit 0 on 'false && echo; echo G2'; verified by execution
+110.3.1	110	3	P2	security	opus	scripts/clean-checkout.ts:39	line	change			no	scratch prefers shared tmpdir, whose world-writable ancestors let another local account hijack ancestor-config-reading gates (cargo rustc-wrapper per docs; /tmp 1777 and tmpdir-first verified by execution; npm .npmrc route disproved by execution); verified by execution+reading
+110.3.2	110	3	P2	bug	luna+mimo	scripts/discover-project.sh:75	line	fix	1		no	install= ignores yarn/bun lockfiles (npm install on a yarn/bun tree) while verify.sh pm() already picks pnpm/bun/yarn/npm; verified by reading (non-Node half dismissed: no pre-existing detection to mirror)
+110.4.1	110	4	P2	bug	luna	scripts/clean-checkout.ts:120	line	fix	2		no	gate commands run with no timeout and no process-group containment (probe: helper waits on sleep 60 past 10s unbounded; child alive throughout), while verify.sh enforces 1800s with killpg and fixture sh() 1200s; a hanging gate wedges the ship leg; verified by execution+reading
+110.4.2	110	4	P2	bug	mimo	scripts/discover-project.sh:90	line	base			no	gate runner still collapses to pnpm-or-npm while install= follows pm() order (probe: yarn.lock gets yarn install + npm run check), so Yarn Berry PnP (no node_modules) and npm-less bun projects cannot gate; the round-3 fix made berry always-red; verified by execution
+112.2.1	112	2	P2	bug	mimo+luna	scripts/view-stream.sh:283	none	change			no	
+112.2.2	112	2	P2	bug	mimo+luna	scripts/view-stream.sh:43	none	base			no	
+112.2.3	112	2	P2	bug	mimo	scripts/view-stream.sh:62	none	change			no	
+112.3.1	112	3	P1	bug	mimo	scripts/view-stream.sh:47	none	fix	2		no	
+112.3.2	112	3	P2	bug	mimo	scripts/view-stream.sh:196	none	base			no	
+112.4.1	112	4	P2	bug	luna	scripts/view-stream.sh:163	line	base			no	dismiss, pre-existing error-path design)
+112.4.2	112	4	P2	bug	luna	scripts/view-stream.sh:210	line	change			no	fix, suppress restated result text)
+112.4.3	112	4	P2	bug	mimo	scripts/view-stream.sh:121	line	base			no	dismiss as synthetic-only
+112.4.4	112	4	P2	bug	mimo	scripts/view-stream.sh:223	line	base			no	fix, same class as M2)
+112.5.1	112	5	P2	bug	mimo	scripts/view-stream.sh:448	line	fix	4		no	fix test-only with paired-feed control
+112.5.2	112	5	P2	bug	luna	scripts/view-stream.sh:96	line	change			no	dismiss synthetic-only
+113.2.1	113	2	P2	bug	luna	scripts/parallel-runs-acceptance.sh:76	line	fix	1		no	root path with pipe breaks sed strip, sweep scans nothing and exits 0
+113.2.2	113	2	P2	bug	mimo	scripts/parallel-runs-acceptance.sh:111	line	fix	1		no	verbatim max_runs grep false-faults on a rewrapped bullet
+113.2.3	113	2	P2	bug	mimo	scripts/parallel-runs-acceptance.sh:59	line	change			no	six specific stale sentences checked only in home files, plantable elsewhere
+113.3.1	113	3	P2	bug	luna	scripts/parallel-runs-acceptance.sh:38	line	change			no	sweep is case-sensitive, capitalized stale claim passes
+113.3.2	113	3	P2	bug	luna	scripts/parallel-runs-acceptance.sh:120	line	fix	2		no	hard-rule sentence unpinned to Hard rules section, quotation elsewhere passes
+113.3.3	113	3	P2	bug	mimo	scripts/parallel-runs-acceptance.sh:89	line	fix	2		no	find without -L skips symlinked files and dirs
+113.4.1	113	4	P2	bug	luna	scripts/parallel-runs-acceptance.sh:100	line	fix	1		no	newline filename splits line loop, decoys let stale claim pass
+113.4.2	113	4	P2	bug	luna	scripts/parallel-runs-acceptance.sh:99	line	change			no	newline filename splits line loop, decoys let stale claim pass
+114.2.1	114	2	P2	bug	luna	scripts/run-meta.sh:166	none	change			no	
+114.3.1	114	3	P2	bug	mimo+luna	scripts/run-meta.sh:87	none	change			no	
+114.4.1	114	4	P1	bug	luna+mimo	scripts/run-meta.sh:176	none	fix	3		no	
+114.5.1	114	5	P2	bug	luna	scripts/run-meta.sh:174	none	fix	3		no	
+114.6.1	114	6	P2	bug	mimo	scripts/run-meta.sh:179	none	fix	3		no	
+114.7.1	114	7	P1	bug	mimo	scripts/run-meta.sh:197	none	fix	6		no	
+114.7.2	114	7	P1	bug	mimo	scripts/run-meta.sh:249	none	fix	1		no	
+114.7.3	114	7	P2	bug	mimo	scripts/run-meta.sh:183	none	fix	6		no	
+114.7.4	114	7	P2	bug	luna	scripts/run-meta.sh:181	none	fix	6		no	
+114.8.1	114	8	P2	bug	mimo	scripts/run-meta.sh:192	none	fix	7		no	
+114.8.2	114	8	P2	bug	mimo+luna	scripts/run-meta.sh:232	none	fix	7		no	
+114.8.3	114	8	P2	bug	luna	scripts/run-meta.sh:232	none	fix	7		no	
+116.2.1	116	2	P1	bug	mimo	scripts/host.sh:646	none	fix	1		no	
+116.3.1	116	3	P2	bug	luna	scripts/host.sh:650	none	fix	2		no	
+121.2.1	121	2	P2	bug	luna	skills/postmaster/harnesses.md:383	none	change			no	
+121.2.2	121	2	P2	bug	luna+mimo	skills/postmaster/harnesses.md:391	none	fix	1		no	
+121.2.3	121	2	P2	bug	mimo	scripts/runs-watch.sh:52	none	change			no	
+121.3.1	121	3	P2	bug	luna	scripts/runs-watch.sh:275	none	fix	1		no	
+121.3.2	121	3	P2	bug	mimo	scripts/runs-watch.sh:42	none	change			no	
+121.3.3	121	3	P2	bug	mimo	scripts/runs-watch.sh:55	none	change			no	
+121.3.4	121	3	P2	bug	mimo	scripts/runs-watch.sh:62	none	change			no	
+121.3.5	121	3	P2	bug	mimo	scripts/runs-watch.sh:289	none	change			no	
+122.2.1	122	2	P2	bug	luna+mimo	scripts/launch.sh:653	line	fix	1		no	wall separators miss underscore hyphen
+122.2.2	122	2	P2	bug	mimo	scripts/launch.sh:650	line	change			no	host prefix hides launch refusal
+122.2.3	122	2	P2	bug	mimo	skills/postmaster/postmaster.md:252	line	fix	1		no	dispatch guard tests completed leg marker
+122.2.4	122	2	P2	bug	luna	skills/postmaster/postmaster.md:251	line	fix	1		no	guard misses silent live launch
+122.3.1	122	3	P2	bug	mimo	scripts/runs-watch.sh:495	line	fix	1		no	skip counts newlines not lines
+122.3.2	122	3	P2	bug	mimo	scripts/launch.sh:675	line	fix	2		no	wall inflections fall through
+122.4.1	122	4	P2	bug	luna+mimo	scripts/launch.sh:640	line	fix	3		no	wall matcher misses natural provider phrasings
+122.5.1	122	5	P2	bug	mimo	scripts/launch.sh:842	line	fix	4		no	wall span three words misses real quota text
+122.5.2	122	5	P2	bug	mimo	scripts/launch.sh:840	line	fix	2		no	wall trailing boundary misses snake case suffix
+122.5.3	122	5	P2	bug	mimo	scripts/launch.sh:770	line	fix	4		no	structured wall types miss common names consumed before prose
+122.6.1	122	6	P2	bug	luna+mimo	scripts/launch.sh:899	line	fix	1		no	stream veto windowed to 100 lines early wall missed
+122.6.2	122	6	P2	bug	mimo	scripts/launch.sh:734	line	fix	5		no	stemless slow down wall text resumes
+122.7.1	122	7	P1	bug	mimo	scripts/launch.sh:907	line	fix	5		no	raw line veto matches json keys usage kills auto resume
+122.7.2	122	7	P2	bug	mimo	scripts/launch.sh:763	line	fix	5		no	digit stems match inside ordinary numbers
+122.7.3	122	7	P2	bug	luna	scripts/launch.sh:925	line	fix	6		no	unknown structured outside window missed
+122.8.1	122	8	P2	bug	mimo+luna	scripts/launch.sh:928	line	fix	7		no	veto key allowlist misses wall fields
+122.9.1	122	9	P2	bug	luna	scripts/launch.sh:1086	line	fix	7		no	uncapped host notice vetoes every uncapped launch
+122.9.2	122	9	P2	bug	mimo	scripts/launch.sh:1021	line	fix	7		no	marked gate misses attested error shapes
+122.9.3	122	9	P2	bug	mimo	scripts/runs-watch.sh:394	line	change			no	unvalidated manifest leg misdispatches or kills watcher
+122.10.1	122	10	P2	bug	mimo	scripts/runs-watch.sh:517	line	change			no	refused resume logged as success no same look wake
+122.10.2	122	10	P2	bug	mimo	scripts/launch.sh:1039	line	fix	7	scripts/launch.sh:1021	no	marked gate one level deep misses nested error records
+122.11.1	122	11	P2	bug	mimo	scripts/runs-watch.sh:379	line	fix	10		no	refusal_since misses refusals after production err truncate
+122.11.2	122	11	P2	bug	mimo	scripts/launch.sh:1020	line	fix	4		no	numeric 2xx 3xx status blocks auto resume
+122.12.1	122	12	P2	bug	luna	scripts/launch.sh:1144	line	fix	7		no	tool subtree 503 authorizes remount
+124.2.1	124	2	P1	bug	luna	skills/postmaster/postmaster.md:326	line	fix	1		no	post-landing crash re-enters landing that cannot recognize a merged PR
+124.2.2	124	2	P2	bug	luna	skills/postmaster/postmaster.md:298	line	fix	1		no	Stage F lets a card omit passing check results
+124.2.3	124	2	P2	bug	mimo	skills/postmaster/postmaster.md:321	line	fix	1		no	shipped writes lack postmaster actor so exit 4 refuses them
+124.2.4	124	2	P2	bug	mimo	skills/postmaster/postmaster.md:221	line	fix	1		no	DISPATCH cannot tell post-landing crash from interrupted correction
+124.2.5	124	2	P2	bug	mimo	skills/postmaster/postmaster.md:313	line	change		skills/postmaster/postmaster.md:303	no	pre-removal crash re-runs landing from the start
+124.3.1	124	3	P1	bug	luna+mimo	skills/postmaster/postmaster.md:308	line	fix	2		no	already-merged skip fires on empty diff and bypasses landing authorization
+124.3.2	124	3	P1	bug	mimo	skills/postmaster/postmaster.md:287	line	change			no	required checks undefined so not-run journey blocks journey-less UI tickets
+124.3.3	124	3	P2	bug	mimo	skills/postmaster/postmaster.md:333	line	change			no	step-3 AND can stall squash-merged PRs at USER
+124.3.4	124	3	P2	bug	mimo	skills/postmaster/postmaster.md:301	line	fix	2		no	card checked against results but written from run, shapes differ
+124.3.5	124	3	P2	bug	mimo	skills/postmaster/postmaster.md:295	line	fix	2		no	reconciliation labels miss checkpoint vocabulary and extra round stales it
+124.4.1	124	4	P1	bug	luna	skills/postmaster/postmaster.md:311	line	fix	3		yes	skip fires on empty branch once main moves
+124.4.2	124	4	P2	bug	mimo	skills/postmaster/postmaster.md:303	line	fix	3		yes	card comparison cannot decide unlogged checks
+124.4.3	124	4	P2	bug	mimo	skills/postmaster/postmaster.md:297	line	fix	3		no	applied versus closed conflated without explicit final states
+124.19.1	124	19	P2	bug	luna	scripts/landing.sh:264	line	fix	18		no	unresolvable --pr-head exits 1, deadlocks the pruned-branch report path
+124.20.1	124	20	P2	bug	luna+mimo	skills/postmaster/postmaster.md:444	line	fix	17		no	step-3 re-verify covers only the ticket-moved cause, restore-branch loops on a reported another head
+135.2.1	135	2	P2	bug	luna+mimo	scripts/raw-promote.sh:307	line	unplaced			no	record steps after the copy leave it unrecorded, cp leaves partials
+135.2.2	135	2	P2	bug	luna	scripts/tree-check.sh:326	line	unplaced			no	hidden git enumeration failures pass clean
+135.2.3	135	2	P2	bug	luna+mimo	scripts/wiki-lint.sh:112	line	base			no	caller checkout discovery skips the scan outside git
+135.2.4	135	2	P2	bug	mimo	scripts/scrub-check.sh:311	line	unplaced			no	dotenv unquoted value with metachar comment missed
+135.2.5	135	2	P2	security	opus	scripts/scrub-check.sh:237	line	unplaced			no	bare home dir before quote or space missed
+135.3.1	135	3	P1	bug+style	mimo+luna	scripts/scrub-check.sh:723	line	unplaced			no	added lines starting '++ ' skipped in range and merge scans, gate exits 0 while --files flags them
+135.3.2	135	3	P1	security	opus	scripts/scrub-check.sh:293	line	unplaced			no	JSONL-escaped paths missed, dotenv and attribution rules never fire in JSONL, ANSI-colored paths missed
+135.3.3	135	3	P2	bug	mimo	scripts/scrub-check.sh:728	line	unplaced			no	hunk-gap unused marker raises KeyError, exit 2 swallows every finding in the range
+135.3.4	135	3	P2	bug	mimo	scripts/raw-promote.sh:445	line	unplaced			no	same-line multi-span scrub corrupts the copy, publishes secret fragments, recheck clean
+135.3.5	135	3	P2	bug	luna	scripts/scrub-check.sh:727	line	unplaced			no	private-shaped file names pass the scrub and the tree check
+135.3.6	135	3	P2	bug+security	luna+opus	scripts/scrub-check.sh:571	line	unplaced			no	valid markers remove matches before logging, suppressed detections never reach the log
+135.3.7	135	3	P2	bug	luna	scripts/runs-status.sh:91	line	base			no	abandoned run with untold detection shows '-', watcher never TELLs
+135.3.8	135	3	P2	bug	luna	scripts/raw-promote.sh:364	line	unplaced			no	failed source enumeration promotes nothing yet exits 0
+135.3.9	135	3	P2	bug	luna	scripts/raw-promote.sh:475	line	unplaced			no	copy failure prints the private-shaped source path on stderr
+135.3.10	135	3	P2	bug	luna	scripts/raw-promote.sh:433	line	unplaced			no	scrub re-encodes invalid UTF-8 outside the matched span
+135.3.11	135	3	P2	bug+style	luna	scripts/raw-promote.sh:434	line	unplaced			no	promotion reads the whole dirty file, 27MB fails with MemoryError; merge and lint paths buffer too
+135.3.12	135	3	P2	style	luna	scripts/raw-promote.sh:429	line	unplaced			no	no-span path copies without a recheck, a scan-to-copy change lands dirty content exit 0
+135.3.13	135	3	P2	style	luna	scripts/wiki-lint.sh:144	line	base			no	a valid marker suppresses the wiki path fault, marked paths pass lint
+135.3.14	135	3	P2	style	luna	scripts/wiki-lint.sh:210	line	base			no	raw-quote fault prints the private-shaped page filename unredacted
+135.3.15	135	3	P2	security	opus	scripts/scrub-check.sh:572	line	unplaced			no	a marker suppresses same-rule values anywhere left on its physical line, JSONL records promote verbatim with no log trace
+135.4.1	135	4	P1		opus	O1 P1 PEM body survives scrub	line	unplaced			no	promote replaces header only, body+END land in raw/, gates pass
+135.4.2	135	4	P2		luna	L1 P2 DISABLED reaches gate via env	line	unplaced			no	var blinds scanner exit 0, verify inherits os.environ, notice only in per-check log
+135.4.3	135	4	P2		luna	L2 P2 OSC escapes unstriped	line	unplaced			no	CSI-split key flags, OSC-split silent
+135.4.4	135	4	P2		mimo	M1 P2 rewrite cannot plan redacted paths	line	unplaced			no	[redacted]:0 -> scan unreadable exit 2, line-0 and shaped-path findings unremediable
+135.4.5	135	4	P2		opus	O2 P2 JSON-escaped ANSI never stripped	line	unplaced			no	literal backslash-u001b wrap silent, raw ESC wrap flags
+135.4.6	135	4	P2		opus	O3 P2 single-level JSON decode	line	unplaced			no	depth-2 silent, depth-1 flags, promote copies depth-2 identical
+135.4.7	135	4	P2		opus	O4 P2 in-string next-line marker silences next record	line	unplaced			no	record-1 marker suppresses record-2 email, copied verbatim, logged via marker
+135.4.8	135	4	P2		opus	O5 P2 compound secret names pass	line	unplaced			no	aws_secret_access_key/db_password/POSTGRES_PASSWORD silent, password: flags; M2 duplicate
+135.4.9	135	4	P2		opus	O6 P2 key formats undetected	line	unplaced			no	PGP/PuTTY/SSH2/age silent
+135.4.10	135	4	P2		opus	O7 P2 stage-3 merge on main unscanned	line	unplaced			no	main..HEAD empty after dirty merge; voided round-2 disposition challenged
+135.4.11	135	4	P2		opus	O8 P2 partial overlap leaks	line	unplaced			no	user@domain home keeps @domain tail, report claims both scrubbed, recheck clean
+135.5.1	135	5	P2		coachman	scripts/scrub-check.sh F1-F8	line	unplaced			no	round-5 P2 fixes ANSI strip, merge names, tree -m, dotenv+alphabet, PuTTY v3, host-pathed homes, pass names+suffixes, scratch-tail span; suite controls each
+158.2.1	158	2	P2	bug	luna+mimo	scripts/synthesis-shares.ts:331	line	change			no	excl [] and 1 run counted)
+158.2.2	158	2	P2	bug	luna+mimo	lint/test-beside-target.ts:16	report	fix	1		no	- target: lint/test-beside-target.ts:16 - location: `basename(cwd)` in `testFolder`
+163.2.1	163	2	P1	bug+security	luna+opus	skills/postmaster/postmaster.md:337	line	fix	1		no	unconditional fixture-card breaks external targets, whose tip has no index (error) and whose BASE has no checker (spurious fixture)
+163.2.2	163	2	P2	bug+security	mimo+opus	skills/postmaster/postmaster.md:336	line	fix	1		no	detector file ambiguous across three mappings and read from branch-controlled tip, which can redirect to any BASE file; definition names it without a directory (exit 128)
+163.2.3	163	2	P2	security	opus	skills/postmaster/postmaster.md:357	line	fix	1		no	re-check runs the scored branch-written copy, so a checker weakened before the first score blinds every re-check (exit 0 vs BASE copy exit 1)
+163.3.1	163	3	P2	bug	luna+mimo	docs/coachman-contract.toml:259	line	change			no	bash entrypoint, main() and __main__ sit outside fixture-detector; neutered main exits 0 on a contract pair and the honest copy reports no-change on the neutering
+163.4.1	163	4	P2	bug	luna	docs/coachman-contract.toml:31	line	change			no	marker lifecycle transitions the definition requires are unmapped; edits to the card-ready retouch and removal sentences classify exit 0
+163.4.2	163	4	P2	bug	luna	skills/postmaster/postmaster.md:360	line	fix	2		no	introduction branch moving post-score hits contradictory clauses, repeat demands running a BASE copy that does not exist
+163.5.1	163	5	P2	bug	luna	scripts/coachman-contract.sh:35	line	change			no	git show failure returns None for any reason, so a corrupt index blob at both revs reports no contract change instead of erroring
+165.2.1	165	2	P2	bug	mimo	scripts/host.sh:1732	report	base			no	not provided: Compare:
+165.2.2	165	2	P2	security	opus	scripts/host.sh:1865	none	change			no	
+165.3.1	165	3	P2	bug	mimo	scripts/host.sh:1838	report	change			no	not provided: Every other inspection failure in this function returns 2 and says the space was left open. This one returns 0 (success).
+165.3.2	165	3	P2	bug	luna	scripts/host.sh:444	report	change			no	Treat a concurrently closed placement as settled: When a run is resumed with its previous marker still present, the prior launch's finish watcher can close the last Herdr tab after this code reads its placement but before the fallback query. The workspace then no longer exists, so the query fails and the new launch is refused even though the prior placement is already gone; handle that race as successful cleanup (an…
+170.2.1	170	2	P2	bug	luna	scripts/spec-session.ts:90	line	change			no	a ticket H2 named Project profile Team or Dispatch truncates the brief ticket, silently dropping requirements
+179.2.1	179	2	P2	bug	luna	scripts/summary-evidence.ts:75	line	change			no	comment opener inside a code span hides later criteria; control reads 2, script reads [1]
+179.2.2	179	2	P2	bug	luna+mimo	scripts/summary-evidence.ts:208	line	change			no	every slash code span is an evidence path; CLI/iOS in a reason fails as mixes, an incidental span fails as outside
+179.2.3	179	2	P2	bug	mimo	scripts/summary-evidence.ts:85	line	change			no	comments stripped before fence state is read, so an unclosed marker in a fence swallows later entries
+179.2.4	179	2	P2	bug	mimo	scripts/summary-evidence.ts:249	line	change			no	not-shown regex matches continuation lines; trailing not-shown without paths passes, on a shown entry fails as mixes
+179.2.5	179	2	P2	bug	mimo	scripts/summary-evidence.ts:126	line	change			no	section ends only at level <= 2 where ticket-check also ends at part-naming subheadings; control reads 3, script reads [1,2,3,9]; evidence parser shares it
+179.3.1	179	3	P2	bug	luna+mimo	scripts/summary-evidence.ts:129	line	change			no	unclosed opener latches comment mode where ticket-check reads text; control reads 2, script reads [1]; stripping also does not loop
+179.3.2	179	3	P2	bug	luna	scripts/summary-evidence.ts:251	line	change			no	code-span branch continues past bare paths, so a missing or escaping second citation on the line is never checked
+179.3.3	179	3	P2	bug	mimo	scripts/summary-evidence.ts:197	line	fix	1		yes	entries start only at <= base where criteria use <= base+2, so an indented entry folds and its criterion reports missing
+179.3.4	179	3	P2	bug	mimo	scripts/summary-evidence.ts:108	line	fix	2		yes	no FENCED_ITEM rule, so a list item opening a fence leaves its body readable; control reads [1,2], script reads [1], and body paths count as citations
+179.4.1	179	4	P2	bug	mimo	scripts/summary-evidence.ts:55	line	change			no	bare hash heading ends the section in the oracle but not here; control reads 1 criterion, script reads [1,2]
+179.4.2	179	4	P2	bug	mimo	skills/postmaster/coachman.md:266	line	change			no	transcript citation has no legal home when all criteria are not-shown; mixes on an entry, not-in-ticket as a new one
+200.2.1	200	2	P2	bug	astra	scripts/lib/confine.ts:65	report	fix	1		no	Preserve the host device tree in the Linux wrapper: For Linux lanes using existing shared-memory objects or device nodes, `--dev /dev` replaces the host device tree with Bubblewrap's private minimal tree. A host-created `/dev/shm` object is visible unconfined but missing through this wrapper. This breaks access to existing resources despite the promised process-only confinement. Preserve the existing device tree rat…
+200.2.2	200	2	P2	bug	astra	scripts/launch.test.ts:4010	none	fix	1		no	
+200.2.3	200	2	P2	bug	astra+mimo	scripts/launch.ts:1133	report	change			no	Check whether the confinement fallback was actually logged: If the fallback occurs during a `--run` launch and the action log cannot be appended, this discards both the logger's failure status and its captured diagnostic. The harness still runs unconfined while the recorded mode remains `on` without a fallback action. I reproduced this with an unwritable action-log destination. Handle the logging failure before cont…
+201.2.1	201	2	P2	bug	sol	scripts/probe-confine.ts:149	report	fix	1		no	Refuse AppArmor rules for user-writable Bubblewrap paths: On Ubuntu 24.04+ when `bwrap` is found in a user-writable directory such as `<path>, this condition offers a root-run AppArmor rule for that path. The user can then replace the executable, so the rule's `userns` permission is no longer limited to Bubblewrap. Resolve the executable and verify that it and its parent directories are not user-writable before offe…
+202.2.1	202	2	P2	bug	luna	scripts/reach.ts:1819	report	fix	1		no	Clear inherited Git overrides before restoring: If the coachman inherits `GIT_DIR` or `GIT_WORK_TREE`, Git honors those variables despite `-C`, so this `reset --hard` can target the caller’s worktree instead of this run’s synthesis worktree; earlier snapshots can also inspect the wrong repository. Unset these overrides for every Git subprocess in this control.
+202.2.2	202	2	P2	bug	luna	scripts/reach.ts:458	report	change			no	Parse command substitutions inside double quotes: With a command such as `echo "$(touch <path>)"`, this condition skips the substitution because `quote` is `"`; the inner `touch` is treated as part of `echo`’s argument, and `expandPath` cannot resolve that token, so the write is missed. Recognize `$()` substitutions inside double quotes too.
+202.2.3	202	2	P2	bug	mimo	scripts/reach.ts:1484	report	fix	1		no	- target: scripts/reach.ts:1484 - location: `roundChanges` owners: a file change is owned when the lane wrote
+202.2.4	202	2	P2	bug	mimo	scripts/landing.ts:431	none	change			no	
+202.3.1	202	3	P2	bug	mimo	scripts/reach.ts:595	none	fix	2		no	
+202.3.2	202	3	P2	bug	luna	scripts/reach.ts:1845	report	fix	1		no	Restore the synthesis branch from the round snapshot: If a reviewer detaches or switches the synthesis worktree, this precondition fails before restoration can run. The snapshot stores the commit and file status but not the symbolic branch, so `restoreRound` exits 1 instead of putting the worktree back as it was, stopping the review leg. Record and restore the original branch.
+202.3.3	202	3	P2	bug	luna	scripts/reach.ts:804	report	change			no	Treat unreadable Claude task logs as not checked: If a copied Claude task transcript is unreadable or contains malformed JSON, `parseTaskFile` converts it to an empty event list. The parent stream can still contain a recognized task call, causing the lane to be marked checked while the subagent's file accesses disappear from the reach results. Propagate task-log parse failures so the lane is reported as not checked.
+202.4.1	202	4	P1	bug	mimo	scripts/reach.ts:430	none	fix	1		no	
+202.4.2	202	4	P1	bug	mimo	scripts/reach.ts:378	none	change			no	
+202.5.1	202	5	P2	bug	mimo	scripts/reach.ts:1173	none	change			no	
+202.5.2	202	5	P2	bug	luna	scripts/reach.ts:415	report	fix	4		no	Treat bare write operands as paths: When a lane runs `cd <path> && touch newfile` or `mkdir newdir`, the new basename is neither an existing path nor slash- or extension-shaped, so this predicate drops it and records no write. Because the path is outside the target repository, the main-checkout scan cannot catch it, and the point can be logged clean. Treat non-option operands of known write commands as paths, or fai…
+202.5.3	202	5	P2	bug	luna	scripts/landing.ts:418	report	change			no	Redact paths from not-checked card reasons: If a supported lane's shell input contains an unresolvable absolute glob, the reader includes that raw token in the `not checked` reason. This branch prints the reason verbatim instead of applying `reachPath`, so the ship card can expose a home or other-project path in a public pull request. Redact paths in the diagnostic while keeping the full value in the run log, as req…
+202.5.4	202	5	P2	bug	mimo	skills/postmaster/coachman.md:943	none	change			no	
+202.6.1	202	6	P2	bug	mimo	scripts/reach.ts:392	none	change			no	
+202.7.1	202	7	P1	bug	mimo	scripts/reach.ts:515	report	fix	2		no	- location: scripts/reach.ts:515-523 and :1077-1094 (quoted) - severity: not provided (called "high")
+202.7.2	202	7	P2	bug	mimo	scripts/reach.ts:1083	none	change			no	
+202.7.3	202	7	P2	bug	mimo	scripts/reach.ts:1075	none	change			no	
+202.7.4	202	7	P2	bug	luna	scripts/reach.ts:225	report	change			no	Parse profile paths without splitting on spaces: If the target repository path contains a space, this regex captures only its first word and overrides the valid repository path derived from the dispatch directory. The reach check then runs against the wrong path and faults, stopping the run; parse the repository path without treating its spaces as field separators.
+202.7.5	202	7	P2	bug	luna	scripts/reach.ts:2018	report	fix	1		no	Restore deleted refs before diffing their worktrees: If a reviewer deletes an existing run branch with `git update-ref -d` while its worktree remains registered, `branchName` still returns the symbolic branch name, but `git diff HEAD` fails because that ref no longer resolves. `restore` then exits with a control fault instead of returning the branch to its snapshot; restore the ref before inspecting that worktree or…
+217.2.1	217	2	P2	bug	mimo	scripts/lib/processes.ts:150	report	change			no	- Target: scripts/lib/processes.ts:150 - Severity as proposed: medium (= P2)
+218.2.1	218	2	P2	bug	sol	scripts/verify.ts:259	line	change			no	pre-change runs record absolute verify-*.sh paths into main, which this merge deletes, degrading those checks to not-run; downgraded from P1 (loud, zero runs affected now, re-dispatch recovers); NOT FIXABLE HERE: old runs execute via pinned old code and shims are forbidden; carried with merge-time mitigation and a ticket recommendation
+218.2.2	218	2	P2	bug	sol	scripts/skill-refs.ts:119	line	change			no	run-name regex captures the prefix only, so <tool>/scripts/run stage.sh passes while the entry exits 2
+218.2.3	218	2	P2	bug	mimo	scripts/skill-refs.ts:158	line	fix	1		no	libScript matches top-level scripts and allows .bak after .ts, false-accepting dangling lib refs
+218.2.4	218	2	P2	bug	mimo	scripts/skill-refs.ts:74	line	fix	1		no	OLD treats : as a boundary, so scripts/launch.sh:42 corrupts to scripts/run launch:42 and passes
+237.2.1	237	2	P2	bug	luna	scripts/launch.ts:1144	line	change			yes	unrecorded wall leaves no gating state, the exit alone does not block progress, verified by execution and reading
+237.2.2	237	2	P2	bug+security	luna+opus	scripts/walls.ts:188	line	change			no	runRepo truncates spaced paths and takes ticket-section lines, verified by execution
+237.2.3	237	2	P2	bug	luna	scripts/lib/wall.ts:167	line	change			no	invalid reset dates normalize into fabricated times, verified by execution
+237.2.4	237	2	P2	security	opus	scripts/walls.ts:56	line	change			no	unreadable log reads as no walls and fails open, verified by execution
+251.2.1	251	2	P2	bug	luna+mimo	scripts/runs-watch.ts:1430	line	change			no	watcher emits every queued READY when one slot is free and Stage B no longer gates on the ceiling, steering past max_runs
+251.2.2	251	2	P2	bug	luna	skills/postmaster/postmaster.md:69	line	change			no	Stage B has no path for kind=other after the adapter refusal, so custom-tracker tickets cannot reach the clerk or dispatch
+251.2.3	251	2	P2	bug	luna	scripts/log-action.ts:331	line	change			no	Stage B must log the readiness result as ticket-check with no run to log to, and the project logger has no such shape
+251.2.4	251	2	P2	bug	luna	scripts/ticket-ready.ts:276	line	change			no	mark writes body, title and label but logs only the turnpikes note, against trackers.md every-write-logged; round-1 B4 challenge upheld
+251.2.5	251	2	P2	bug	luna	scripts/premises.ts:141	line	change			no	L5-L99 on a 30-line file clamps and reports same instead of unknown
+251.2.6	251	2	P2	bug	mimo	scripts/clerk.ts:359	line	change			no	clerk handle is the bare display id while hosts check names globally, so two projects' ticket 1 collide
+251.2.7	251	2	P2	bug	mimo	scripts/fixture.ts:656	line	change			no	premises-order check fails a correct premise-stop run with no workhorse dispatch, which C18 does not fail
+251.3.1	251	3	P1	bug	luna	scripts/ticket-ready.ts:82	line	change			no	a single label named 'blocked, ready' splits into two and passes the ready check, exit 0 on a never-signed-off ticket
+251.3.2	251	3	P2	bug	luna	scripts/postmaster/postmaster.md:65	line	unplaced			no	zero-run path never explicitly reaches Stage D, so sign-offs stall with no watcher until the user polls
+251.3.3	251	3	P2	bug	luna	scripts/clerk.ts:188	line	change			no	brief proceeds with empty labels when an adapter read fails, skipping the unmark so a queued stale version can dispatch mid-revision
+251.3.4	251	3	P1	security	opus	scripts/ticket-ready.ts:289	line	change			no	sign-off is not bound to the signed-off text, so a post-sign-off turnpikes edit drops the review leg uncaught end-to-end; filtered candidate elevated by coachman
+251.4.1	251	4	P2	bug	luna	scripts/ticket-ready.ts:189	line	fix	3		no	a marker with a missing or malformed digest reads as no marker, so the check skips the sign-off comparison and a changed ticket dispatches or rebinds; corrupted marker plus turnpikes edit reads ready exit 0
+251.4.2	251	4	P2	bug	luna	skills/postmaster/postmaster.md:390	line	change			no	premise send-back on kind other runs unmark which refuses without an adapter, so the marker stays and clerk start refuses on the queued marker; the abandoned run stalls with no path
+251.4.3	251	4	P2	bug	mimo	scripts/ticket-ready.ts:180	line	fix	3		no	the marker digest hashes the display read including the ## Log trailer, so any comment after sign-off falsely refuses as changed and strands the ticket; comment after mark exits 2
+251.5.1	251	5	P1	bug	luna+mimo	scripts/ticket-ready.ts:89	line	fix	3		no	mark writes the display body with its Log trailer as the edit base, but adapters compare the base against the stored body, so signing off a commented ticket always fails exit 1; clerk marks always carry a draft
+251.5.2	251	5	P2	bug+security	luna+opus	scripts/ticket-ready.ts:180	line	fix	3		yes	the digest cuts a trailing Log-shaped section by heuristic, so a genuine Log-tailed body (which passes both checks) binds weakly and tail edits reach the waybill unsigned; digest the stored body instead
+251.5.3	251	5	P2	bug	mimo	scripts/ticket-ready.ts:360	line	change			no	a lone --labels flag with a comma splits into names, so one label named 'blocked, ready' reads ready on kind other; single comma flag exits 0
+251.6.1	251	6	P2	bug	mimo	scripts/ticket-ready.ts:511	line	change			no	queue rebinds the marker from the display body while the check digests the stored body, so check-queue-check on a commented ticket falsely refuses and the ticket stalls while slots stay full
+251.6.2	251	6	P2	security	opus	scripts/ticket-ready.ts:369	line	fix	5		no	mark binds a post-write re-read with no compare, so an issue author's race edit in the seconds window binds as signed; fix verifies the stored text still matches the draft after binding and rolls the mark back on mismatch
+252.2.1	252	2	P2	bug	luna	scripts/aftercare.ts:459	line	fix	1		no	dirty submodule contents invisible to the save and deleted with the worktree
+252.2.2	252	2	P2	bug	luna	scripts/aftercare.ts:503	line	fix	1		no	format-patch omits unbranched merges, losing their resolutions on removal
+252.2.3	252	2	P2	bug	luna	scripts/aftercare.ts:1336	line	change			no	dry run promises removal of a locked worktree the real run must leave
+252.2.4	252	2	P2	bug	luna	scripts/aftercare.ts:1035	line	fix	1		no	reconcile substring matches a longer comment and skips the post
+252.2.5	252	2	P2	bug	mimo	scripts/aftercare.ts:780	line	change			no	dry run exits 3 on a live preview the real run stops and closes
+252.3.1	252	3	P1	bug	luna	scripts/aftercare.ts:419	line	change			no	inherited GIT_DIR/GIT_WORK_TREE override git -C, scanning the wrong checkout before removal
+252.3.2	252	3	P2	bug	luna	scripts/aftercare.ts:1739	line	change			no	dry run promises a pin release that a lock refuses in the real run
+252.3.3	252	3	P2	bug	luna	scripts/aftercare.ts:673	line	change			no	core.quotePath quoted paths fail hash-object, silently missing flags
+252.3.4	252	3	P2	bug	mimo	scripts/aftercare.ts:1076	line	change			no	plane.sh takes no repo arg, so every Plane run stops at ticket-state
+258.3.1	258	3	P2	security		.github/workflows/check.yml:69	line	fix	2		no	dispatch input interpolated into the run script
+266.2.1	266	2	P2	bug	luna	scripts/project-settings.ts:817	line	fix	1		no	GIT_DIR/GIT_WORK_TREE redirect the git lookups to another repo; verified by execution
+266.2.2	266	2	P2	bug	luna	scripts/runbook-lint.ts:318	line	change			no	basename check exempts a nested AGENTS.md from the bare-call rule; verified by execution
+266.2.3	266	2	P2	bug	luna	skills/postmaster/SKILL.md:28	line	change			no	unquoted skill path breaks realpath on spaces, a regression from the quoted original; verified by reading
+266.3.1	266	3	P2	bug	luna+mimo	scripts/host.ts:2873	line	change		scripts/host.ts:2861	no	stop-pidfile exits 0 leaving orphaned group members; verified by execution
+266.3.2	266	3	P2	bug	mimo	skills/postmaster/hosts.md:123	line	base			no	pidfile teardown still documented as raw kill, breaks on 3-line pidfiles; verified by reading
+266.4.1	266	4	P2	bug	luna	scripts/host.ts:2874	line	fix	3		no	zombie-leader pid reuse skips the identity check, orphan scan kills foreign members; verified by execution (zombie and reaped-orphan probes)
+268.2.1	268	2	P2	bug+security	luna+opus	scripts/lib/switch-offs.ts:308	report	change			no	Recognize triple-slash TypeScript suppressions: TypeScript accepts `/// @ts-ignore`, but slicing only two slashes leaves `/ @ts-ignore` in the body, which does not match `TS_RE`. A run can therefore add this suppression and still have the check report clear; strip the optional third slash before parsing the directive.
+268.2.2	268	2	P2	security	opus	scripts/lib/switch-offs.ts:309	report	change			no	Recognize triple-slash TypeScript suppressions: TypeScript accepts `/// @ts-ignore`, but slicing only two slashes leaves `/ @ts-ignore` in the body, which does not match `TS_RE`. A run can therefore add this suppression and still have the check report clear; strip the optional third slash before parsing the directive.
+268.2.3	268	2	P2	security	opus	scripts/lib/switch-offs.ts:555	none	fix	1		no	
+268.2.4	268	2	P2		coachman	scripts/lib/switch-offs.ts:334	none	change			no	
+268.2.5	268	2	P2	security	opus	scripts/lib/switch-offs.ts:366	none	change			no	
+268.2.6	268	2	P2	bug	luna	scripts/lib/switch-offs.ts:398	none	change			no	
+268.2.7	268	2	P2	security	opus	scripts/lib/switch-offs.ts:194	none	change			no	
+268.2.8	268	2	P2	security	opus	scripts/lib/switch-offs.ts:248	none	change			no	
+268.2.9	268	2	P2	security	opus	scripts/lib/switch-offs.ts:249	none	change			no	
+268.2.10	268	2	P2	security	opus	scripts/lib/switch-offs.ts:199	none	change			no	
+268.2.11	268	2	P2	bug	mimo	scripts/lib/switch-offs.ts:408	none	change			no	
+268.3.1	268	3	P1	bug	mimo	scripts/lib/switch-offs.ts:135	report	fix	2		no	- target: scripts/lib/switch-offs.ts:135 - location: scripts/lib/switch-offs.ts:135-140 (`quoteOpens`), :237-267 (string scan)
+268.3.2	268	3	P2	bug	luna	scripts/lib/switch-offs.ts:687	report	fix	1		no	Hash the full Biome-suppressed node: For a Biome ignore before an implicitly continued expression, such as `const x = foo +` followed by `bar;`, `depth` stays zero on the first code line and this loop stops before hashing `bar`. If that continuation changes after approval, the identity remains unchanged and the checker reuses the approval for a different suppressed node. Include implicit continuations in the identit…
+268.3.3	268	3	P2	security	opus	scripts/lib/switch-offs.ts:771	none	fix	2		no	
+268.3.4	268	3	P2	bug	luna	scripts/log-action.ts:281	report	change			no	Require user words after the entry: When the entry is a one-token settings path, `approved bunfig.toml` passes this check and `approvals()` accepts the resulting record, even though no user words were recorded. Require a separate nonempty user-words portion so the ledger preserves the evidence the runbook says to capture.
+268.4.1	268	4	P2	bug	luna	scripts/lib/switch-offs.ts:677	report	change			no	Give identical suppressions distinct approval identities: When two identical directives in the same file cover identical code windows, these hash inputs are identical, so both entries receive the same ID. Approving one then marks both approved, allowing the branch to land without the user's decision on the second suppression. Include a stable per-occurrence discriminator that survives line moves.
+268.4.2	268	4	P2	security+bug	opus+luna	scripts/lib/switch-offs.ts:897	none	change			no	
+268.4.3	268	4	P1	security	opus	scripts/lib/switch-offs.ts:73	none	change			no	
+268.4.4	268	4	P1	security	opus	scripts/lib/switch-offs.ts:126	none	fix	2		no	
+268.8.1	268	8	P1	bug	luna	scripts/lib/switch-offs.ts:866	report	fix	3		no	Detect suppressions moved to a different code context: If an existing line suppression moves between blocks that contain identical code after the comment, the entries have the same file, comment text, occurrence, and span, so this comparison drops the change and reports the branch as clear. The suppression can then cover a different binding or type-check context without user approval; include enclosing context in th…
+268.8.2	268	8	P2	security	opus	scripts/lib/switch-offs.ts:319	none	fix	2		no	
+270.2.1	270	2	P2	bug+security	luna+opus	scripts/run-meta.ts:952	report	change			no	Parse the generated Team section: The waybill copies the ticket verbatim before its generated Team section (ticket, Team section). If ticket text contains a literal `## Team` heading, `findIndex` selects that section instead; `run-meta check` can then refuse a valid run or compare against a mode quoted in the ticket. Locate the generated Team section rather than the first matching heading.
+323.2.1	323	2	P2	bug	luna+haiku	scripts/verifier.ts:126	line	fix	1		no	sequential replaceAll rescans inserted values, so a placeholder-shaped repo path rewrites and an unknown token in a value throws
+323.2.2	323	2	P2	bug	luna	scripts/verifier.ts:578	line	fix	1		no	the README is checked in the worktree only, so an uncommitted README beside any other commit reports success
+323.2.3	323	2	P2	bug	luna+haiku	scripts/verifier.ts:521	line	change			no	any failure past the worktree cut leaves the branch and worktree behind with no cleanup
+323.3.1	323	3	P2	bug	luna+haiku	scripts/verifier.ts:543	line	fix	2		no	cleanup runs even when the stop failed, deleting a possibly live session checkout and branch
+323.3.2	323	3	P2	bug	haiku	scripts/verifier.ts:541	line	fix	2		no	content failures remove the worktree and branch, discarding the session committed and uncommitted work with no inspection path
+323.3.3	323	3	P2	bug	haiku	scripts/verifier.ts:412	line	change			no	the scrub covers only the verifier own git calls, so inherited GIT_DIR reaches the session and redirects its commits
+323.4.1	323	4	P2	bug	luna	scripts/verifier.ts:656	line	fix	2		no	only the README is required committed, so a verifier without its feature pages reports success
+323.4.2	323	4	P2	bug	luna	scripts/verifier-prompt.md:71	line	change			no	step 2 demands side-by-side drives while step 1 allows surfaces that cannot run two copies
+323.4.3	323	4	P2	bug	haiku	scripts/verifier.ts:163	line	change			no	a hand-deleted worktree leaves its registration, so the same path is picked and every later add fails until prune
+323.5.1	323	5	P2	bug	luna	scripts/verifier.ts:663	line	change			no	a HANDOVER.md already in the base passes without the session writing one
+323.5.2	323	5	P2	bug	haiku	scripts/verifier.ts:248	line	fix	4		no	ls-tree quotes non-ASCII names, so quoted pages are undercounted and fail
+323.5.3	323	5	P2	security	opus	scripts/verifier-prompt.md:71	line	fix	4		yes	the r4 reword dropped state-of-own for single-copy surfaces, leaving real-data drives uncovered
+324.2.1	324	2	P2	bug	luna	scripts/verifier.ts:829	line	change			no	unknown verifier folders (verifier/api) pass the stray and outside checks
+335.2.1	335	2	P2	bug	luna	scripts/lib/effective-config.ts:664	report	change			no	Reject invalid local confinement values: When a project setting contains a typo such as `confine = "onn"`, this check accepts it because it only verifies the type; launch enables confinement only for the exact value `"on"`, so the typo silently runs lanes unconfined. Require the value to be exactly `"on"` or `"off"`.
+335.2.2	335	2	P2	bug	luna	scripts/lib/effective-config.ts:1078	report	change		scripts/lib/effective-config.ts:1017	no	Preserve stdin machine configs in effective: When `project-settings effective <repo> -` receives the machine config as JSON on stdin, this check treats `-` as a missing file instead of using the existing `loadMachine("-")` behavior. With no local settings it errors; with local settings it silently omits the piped config. Preserve stdin handling for this argument.
+335.2.3	335	2	P2	security	opus	scripts/lib/effective-config.ts:684	none	change		scripts/lib/effective-config.ts:683	no	
+335.3.1	335	3	P2	bug	luna	scripts/front-door.ts:141	report	change			no	Resolve project settings from the Git root: When `target` is a subdirectory of a repository, `repoOf(target)` later treats it as the same project, but this call uses the subdirectory as the config root. It misses the repository-root `.postmaster/settings.toml` (or errors when there is no global config), so front-door can select the global postmaster instead of the project override. Resolve the Git top-level before l…
+335.3.2	335	3	P2	security	opus	scripts/lib/effective-config.ts:898	none	change			no	
+335.4.1	335	4	P2	security	opus	scripts/lib/effective-config.ts:714	none	fix	2		no	
+335.5.1	335	5	P2	bug	luna	skills/postmaster/SKILL.md:261	report	fix	1		no	Pass project scope to `host run`: This `--project` comes after `--`, so it reaches `launch` but not `host run`; the host therefore uses global limits for the postmaster's process scope, ignoring any project-specific limits. Also pass `--project "$TARGET_ROOT"` before the separator, as required for direct host launches to use the project's effective config ([hosts.md#L126-L131]).
+335.6.1	335	6	P2	bug	haiku	scripts/launch.ts:1464	report	base			no	A relative env_file defined in settings.toml resolves against the global config's directory, not the project's .postmaster, and falls back to <path> when no global config exists.: A project-only setup (no global config, which the change allows) with [lanes.luna] env_file = "luna.env" and .postmaster/luna.env present: `launch form luna --project <repo>` fails with 'env_file for luna not found ... <path>' (reproduced)…
+335.6.2	335	6	P2	bug	luna	scripts/lib/effective-config.ts:1117	report	change			no	Require machine settings for a standalone config: If the global config is absent and `settings.toml` contains only legacy metadata such as `[tracker] binding = "board"` or `[project]` facts, this treats it as usable even though `stripLegacy` removes those values from the effective config. The loader then succeeds with no machine settings, and `tracker-kind` can default to GitHub instead of reporting the missing conf…
+335.7.1	335	7	P2	bug	haiku	scripts/lib/effective-config.ts:1105	report	fix	2		no	A global config path that exists but is not a regular file (a directory or dangling symlink) is treated as absent, with no error.: <path> is a dangling symlink and the project has a complete settings.toml. effectiveConfigForProject sets global to null, returns the project-only config with exit 0 and no notice, and the launch or front-door decision runs without the machine's team, limits and tracker defaults. Without…
+335.7.2	335	7	P2	security	opus	scripts/launch.ts:140	report	fix	6		no	In `--run` mode, and `scripts/launch.ts:240-241` get no project base.: So the same setting names `<project>/x.env` for a `--project` launch, such as the postmaster or the clerk, and a file beside the global config for a `--run` launch.
+335.8.1	335	8	P2	bug	haiku	scripts/lib/effective-config.ts:696	report	fix	1		no	isTracked fails open when git refuses the repository for every command, because the fallback check only asks whether git runs at all.: A project whose .git is refused by git (for example 'detected dubious ownership', which makes ls-files and rev-parse --show-toplevel both exit 128) → ls-files exits 128, rev-parse --show-toplevel also exits 128, git --version succeeds → isTracked returns false. A committed .postmaste…
+342.2.1	342	2	P2	bug	luna	scripts/reviewer-copy-acceptance.test.ts:150	report	change			no	Use the default timeout for these fast tests: This suite adds multiple 15s and 30s per-test overrides for checks that complete in milliseconds to a few seconds. The project sets a 60s default and requires custom limits only when a test needs longer; remove these lower overrides to follow AGENTS.md and avoid needless failures under load.
+373.2.1	373	2	P2	bug	haiku	scripts/host.ts:914	line	base			no	fixture root pane settled state=done is reused for launches and the server merges tokens, a live launch reads settled and the space verdict passes it
