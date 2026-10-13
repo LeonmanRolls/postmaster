@@ -236,7 +236,7 @@ describe("adopted pull requests keep their state", () => {
     const s = standin("adopt-draft");
     writeRunJson(s, { draft_pull_requests: "on" });
     pushTicket(s);
-    writeList(s, [{ url: s.url, isDraft: true }]);
+    writeList(s, [{ url: s.url, isDraft: true, isCrossRepository: false }]);
     seedDraft(s, true);
     const r = expectOk(openPr(s), "open-pr");
     expect(r.out.trim()).toBe(`adopted ${s.url} draft`);
@@ -249,7 +249,7 @@ describe("adopted pull requests keep their state", () => {
     const s = standin("adopt-ready");
     writeRunJson(s, {});
     pushTicket(s);
-    writeList(s, [{ url: s.url, isDraft: false }]);
+    writeList(s, [{ url: s.url, isDraft: false, isCrossRepository: false }]);
     seedDraft(s, false);
     const r = expectOk(openPr(s), "open-pr");
     expect(r.out.trim()).toBe(`adopted ${s.url} ready`);
