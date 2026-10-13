@@ -678,6 +678,7 @@ export function expectedChange(repo: string, mb: string, head: string): Expected
   let oldNo = 0;
   let newNo = 0;
   let inHunk = false;
+  let submod = false;
   const tab = String.fromCharCode(9);
   const pathOf = (line: string): string => line.slice(4).split(tab)[0] ?? "";
   for (const line of text.split("\n")) {
@@ -685,6 +686,13 @@ export function expectedChange(repo: string, mb: string, head: string): Expected
       cur = null;
       minus = "";
       inHunk = false;
+      submod = false;
+    } else if (
+      (line.startsWith("index ") && line.endsWith(" 160000")) ||
+      line === "new file mode 160000" ||
+      line === "deleted file mode 160000"
+    ) {
+      submod = true;
     } else if (line.startsWith("--- ") && !inHunk) {
       minus = pathOf(line);
     } else if (line.startsWith("+++ ") && !inHunk) {
@@ -698,10 +706,10 @@ export function expectedChange(repo: string, mb: string, head: string): Expected
       oldNo = Number(m[1]);
       newNo = Number(m[3]);
       inHunk = true;
-    } else if (line.startsWith("+") && cur !== null && inHunk) {
+    } else if (line.startsWith("+") && cur !== null && inHunk && !submod) {
       added.add(`${cur}:+${newNo}`);
       newNo += 1;
-    } else if (line.startsWith("-") && cur !== null && inHunk) {
+    } else if (line.startsWith("-") && cur !== null && inHunk && !submod) {
       removed.add(`${cur}:-${oldNo}`);
       oldNo += 1;
     }
