@@ -170,6 +170,14 @@ function planningStories(name: string): string {
   return String(p.stories ?? "");
 }
 
+function shipDrafts(name: string): string {
+  const cfg = tryTomlFile(join(tmp, `${name}.toml`));
+  if (!cfg) return "";
+  const s = cfg.ship as Record<string, unknown> | undefined;
+  if (!s || !Object.hasOwn(s, "draft_pull_requests")) return "(absent)";
+  return String(s.draft_pull_requests ?? "");
+}
+
 describe("positive controls", () => {
   test("setup lists confine, asks once after the probe, and defaults it to off", () => {
     const keys = run(SELF, ["setup", "--keys"]);
@@ -214,6 +222,18 @@ describe("positive controls", () => {
     }
     const cfg = tryTomlFile(join(tmp, "plain.toml"));
     expect((cfg?.team as Record<string, unknown> | undefined)?.ticket_notes).toBe("given");
+  }, 120000);
+
+  test("setup lists the draft key with its two values and default, and writes each", () => {
+    const keys = run(SELF, ["setup", "--keys"]);
+    expect(keys.code).toBe(0);
+    expect(keys.out).toContain("draft pull requests: on or off");
+    expect(keys.out).toMatch(/draft_pull_requests +off +draft pull requests:/u);
+    for (const value of ["on", "off"]) {
+      answers(`drafts-${value}`, `draft_pull_requests=${value}`);
+      expect(runSetup(`drafts-${value}`)).toBe(0);
+      expect(shipDrafts(`drafts-${value}`)).toBe(value);
+    }
   }, 120000);
 
   test("the adding verb inserts clerk in [team] and preserves the other config lines", () => {
@@ -389,6 +409,10 @@ describe("positive controls", () => {
     const rc = runSetup("planstories");
     expect(rc).toBe(0);
     expect(planningStories("planstories")).toBe("off");
+  });
+
+  test("draft pull requests stay unset unless answered, and land under [ship]", () => {
+    expect(shipDrafts("plain")).toBe("(absent)");
   });
 
   test("launch memory and process caps default to 8G and 512", () => {
@@ -687,6 +711,15 @@ describe("negative controls", () => {
     expect(existsSync(join(tmp, "badstories.toml"))).toBe(false);
     expect(out).toContain("planning.stories must be on or off");
   });
+
+  test("a draft pull requests value other than on or off is refused", () => {
+    answers("baddrafts", "draft_pull_requests=yes");
+    const rc = runSetup("baddrafts");
+    const out = readFileSync(join(tmp, "baddrafts.out"), "utf8");
+    expect(rc).toBe(1);
+    expect(existsSync(join(tmp, "baddrafts.toml"))).toBe(false);
+    expect(out).toContain("draft_pull_requests must be on or off");
+  });
 });
 
 describe("project mode", () => {
@@ -788,6 +821,15 @@ review_link = ""
     expect(tableOf(data.planning).review_link).toBe("https://code.example/open?file={path}");
     expect(tableOf(data.planning).stories).toBe("off");
     expect(settingsOf(s.repo).split("[planning]").length - 1).toBe(1);
+  });
+
+  test("an answered draft key lands under one [ship] section", () => {
+    const s = stageProject();
+    const r = runProject(s.repo, s.config, "draft_pull_requests=on");
+    expect(r.code).toBe(0);
+    const data = settingsData(s.repo);
+    expect(tableOf(data.ship).draft_pull_requests).toBe("on");
+    expect(settingsOf(s.repo).split("[ship]").length - 1).toBe(1);
   });
 
   test("a second run merges: earlier settings stay, new answers land", () => {

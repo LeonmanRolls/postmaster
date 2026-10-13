@@ -21,7 +21,8 @@
 //   exit 1  a harness was named that is not on PATH, the coachman shares a lane's model, fewer
 //           than two lanes were given, a reviewer or the surveyor is not a lane, an answer was missing, a round
 //           time limit was not a whole number of seconds from 1 to 86400, a planning review link
-//           omitted {path}, a planning stories value other than on or off, a mode other than
+//           omitted {path}, a planning stories value other than on or off, a draft pull
+//           requests value other than on or off, a mode other than
 //           synthesis, single-thread or alternate, a
 //           ticket_notes other than given or held-back, or an existing config was not overwritten
 //
@@ -432,6 +433,7 @@ round_timeout_seconds      2400               seconds a review round may run, 1 
 merge_authority            user               user or postmaster
 checkpoint_mode            autonomous         autonomous or consult
 review_link?               (none)             template with {path}
+draft_pull_requests        off                draft pull requests: on or off (answers file only)
 planning.review_link?      (none)             code-server template with {path} for ticket drafts
 planning.stories           on                 clerk stories with ticket drafts: on or off (answers file only)
 overwrite                  no                 yes replaces an existing config
@@ -1035,6 +1037,12 @@ const STORIES = answersOnly("Stories with ticket drafts (on, off)", "planning.st
 if (STORIES !== "" && STORIES !== "on" && STORIES !== "off") {
   die("setup: planning.stories must be on or off", 1);
 }
+// Draft pull requests start off and stay out of the setup conversation: the
+// key is answered by file or hand-edited, never asked.
+const DPR = answersOnly("Draft pull requests (on, off)", "draft_pull_requests", opts);
+if (DPR !== "" && DPR !== "on" && DPR !== "off") {
+  die("setup: draft_pull_requests must be on or off", 1);
+}
 
 let TRACKER_EXTRA = "";
 if (PWS) TRACKER_EXTRA = `url = "${PURL}"\nworkspace = "${PWS}"\nenv_file = "${PENV}"`;
@@ -1106,6 +1114,7 @@ if (PROJECT !== "") {
   if (MA !== "") shipParts.push(`merge_authority = "${MA}"`);
   if (CPM !== "") shipParts.push(`checkpoint_mode = "${CPM}"`);
   if (GIVEN.has("review_link")) shipParts.push(`review_link = "${RL}"`);
+  if (GIVEN.has("draft_pull_requests")) shipParts.push(`draft_pull_requests = "${DPR}"`);
   if (shipParts.length > 0) sections.push(`[ship]\n${shipParts.join("\n")}\n`);
 
   if (sections.length === 0) {
@@ -1367,7 +1376,7 @@ ${STORIES !== "" ? `stories = "${STORIES}"\n` : ""}
 merge_authority = "${MA}"
 checkpoint_mode = "${CPM}"
 review_link = "${RL}"
-`;
+${DPR !== "" ? `draft_pull_requests = "${DPR}"\n` : ""}`;
 
 if (DRY === 1) {
   console.log(OUT.replace(/\n+$/u, ""));

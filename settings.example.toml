@@ -39,3 +39,8 @@
 #
 # [tracker]
 # binding = "the board, workspace or team name for this checkout"
+#
+# This person's landing choices for this project.
+#
+# [ship]
+# draft_pull_requests = "on"

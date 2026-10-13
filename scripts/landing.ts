@@ -34,6 +34,16 @@
 //       passes. Prints `pass`, `pending: ...`, `fail: ... <link>`, or `none` when no checks
 //       exist. A head mismatch is a failure, never a pass. A skipped check counts as
 //       passed, as it does for GitHub's own merge readiness.
+//   run landing open-pr --repo <repo> --dispatch <dispatch> --base <branch> --head <branch>
+//       --title <title> --body-file <file> [--ready]
+//       adopt the open pull request naming the head branch, or open one against the base
+//       branch: a draft where the run's ship.draft_pull_requests says on, ready otherwise,
+//       and ready whatever the run says with --ready. Prints `opened <url> draft|ready`,
+//       `adopted <url> draft|ready`, or `refused <message>` when the draft create fails,
+//       carrying the provider's first line; a failed ready create is never refused.
+//   run landing mark-ready --repo <repo> --pr <pull-request>
+//       mark the pull request ready for review and read its draft state back. Prints
+//       `ready`.
 //   run landing results <dispatch> <synthesis-wt>
 //       every recorded check's result at the worktree's HEAD, one `name: result` line each,
 //       as the cards carry them. This is the one place the vocabulary mapping lives:
@@ -112,8 +122,8 @@
 //       words, written through `run log-action` so it sits in the run's
 //       actions and the project's ledger alike.
 //
-//   exit 0  already-landed, anything-to-land, pull-request-checks, results, card-block, card-open: the answer,
-//           printed; card-results, card-findings: `match`; journey: `clear` or `judge`;
+//   exit 0  already-landed, anything-to-land, pull-request-checks, open-pr, results, card-block, card-open: the answer,
+//           printed; card-results, card-findings: `match`; mark-ready: `ready`; journey: `clear` or `judge`;
 //           fresh: `fresh`; switch-offs, libraries: `clear`; card-write: the card is written, silently
 //   exit 1  usage; a resolving input that does not resolve (--default, --base,
 //           --card-head, --local-ticket, --pr-merge, and --ticket without a
@@ -131,6 +141,7 @@
 //   exit 4  switch-offs, libraries, card-write: `refused`
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, relative, sep } from "node:path";
+import { tryJsonFile } from "./lib/data.ts";
 import { physical, scriptsDir } from "./lib/paths.ts";
 import { inspectLibraries } from "./lib/library-landing.ts";
 import { inspectSwitchOffs } from "./lib/switch-offs.ts";
@@ -719,7 +730,9 @@ const TOP_USAGE =
   "--card-head <sha> [--local-ticket <branch>] [--pr-merge <sha> --pr-head <sha>] | anything-to-land " +
   "--repo <repo> --default <branch> --ticket <ref> --base <sha> | fresh --repo <repo> --default <branch> " +
   "--ticket <ref> --dispatch <dispatch> --wt <synthesis-wt> | pull-request-checks --repo <repo> " +
-  "--pr <pull-request> --card-head <sha> | private-data-block <dispatch> | " +
+  "--pr <pull-request> --card-head <sha> | open-pr --repo <repo> --dispatch <dispatch> --base " +
+  "<branch> --head <branch> --title <title> --body-file <file> [--ready] | mark-ready --repo " +
+  "<repo> --pr <pull-request> | private-data-block <dispatch> | " +
   "private-data-card <dispatch> <card> | results <dispatch> <synthesis-wt> | " +
   "card-block <dispatch> <synthesis-wt> <checkpoint> | card-results <dispatch> <synthesis-wt> " +
   "<checkpoint> <card> | card-findings <dispatch> <synthesis-wt> <checkpoint> <card> | " +
@@ -750,6 +763,10 @@ const OPEN_USAGE = "usage: run landing card-open <checkpoint>";
 const JOURNEY_USAGE = "usage: run landing journey <dispatch> <synthesis-wt> <waybill>";
 const PR_CHECKS_USAGE =
   "usage: run landing pull-request-checks --repo <repo> --pr <pull-request> --card-head <sha>";
+const OPEN_PR_USAGE =
+  "usage: run landing open-pr --repo <repo> --dispatch <dispatch> --base <branch> --head <branch> " +
+  "--title <title> --body-file <file> [--ready]";
+const MARK_READY_USAGE = "usage: run landing mark-ready --repo <repo> --pr <pull-request>";
 
 type PullRequestCheck = {
   name?: unknown;
@@ -858,6 +875,143 @@ function pullRequestChecks(o: string[]): number {
     return 0;
   }
   console.log("pass");
+  return 0;
+}
+
+type PullRequestRef = {
+  url?: unknown;
+  isDraft?: unknown;
+};
+
+/** Whether the run opens its pull request as a draft: on only when run.json
+ * says so. A run.json without the key, which is every run in flight today,
+ * reads as off, as does any other shape. */
+function draftPullRequests(dispatch: string): boolean {
+  const meta = tryJsonFile<Record<string, unknown>>(join(dispatch, "run.json"));
+  if (meta === null) die(`--dispatch has no readable run.json: ${dispatch}`);
+  const config = meta.config;
+  if (typeof config !== "object" || config === null || Array.isArray(config)) return false;
+  const ship = (config as Record<string, unknown>).ship;
+  if (typeof ship !== "object" || ship === null || Array.isArray(ship)) return false;
+  return (ship as Record<string, unknown>).draft_pull_requests === "on";
+}
+
+function openPr(o: string[]): number {
+  if (
+    (o.length !== 12 && o.length !== 13) ||
+    o[0] !== "--repo" ||
+    o[2] !== "--dispatch" ||
+    o[4] !== "--base" ||
+    o[6] !== "--head" ||
+    o[8] !== "--title" ||
+    o[10] !== "--body-file" ||
+    o[1] === "" ||
+    o[3] === "" ||
+    o[5] === "" ||
+    o[7] === "" ||
+    o[9] === "" ||
+    o[11] === "" ||
+    (o.length === 13 && o[12] !== "--ready")
+  ) {
+    usage(OPEN_PR_USAGE);
+  }
+  const repo = o[1]!;
+  const dispatch = o[3]!;
+  const base = o[5]!;
+  const head = o[7]!;
+  const title = o[9]!;
+  const bodyFile = o[11]!;
+  const forceReady = o.length === 13;
+  try {
+    readFileSync(bodyFile, "utf8");
+  } catch {
+    die(`--body-file cannot be read: ${bodyFile}`);
+  }
+  const draft = !forceReady && draftPullRequests(dispatch);
+  const listed = run(
+    "gh",
+    ["pr", "list", "--head", head, "--state", "open", "--json", "url,isDraft"],
+    {
+      cwd: repo,
+    },
+  );
+  if (listed.code !== 0) die(`cannot list pull requests: ${pyTrim(listed.err || listed.out)}`);
+  let open: unknown;
+  try {
+    open = JSON.parse(listed.out) as unknown;
+  } catch {
+    die(`cannot list pull requests: GitHub returned malformed JSON`);
+  }
+  if (!Array.isArray(open)) die(`cannot list pull requests: GitHub returned malformed JSON`);
+  const first = (open as PullRequestRef[])[0];
+  if (first !== undefined) {
+    if (typeof first.url !== "string" || first.url === "") {
+      die(`cannot list pull requests: GitHub returned malformed JSON`);
+    }
+    if (typeof first.isDraft !== "boolean") {
+      die(`cannot list pull requests: GitHub returned malformed JSON`);
+    }
+    console.log(`adopted ${first.url} ${first.isDraft ? "draft" : "ready"}`);
+    return 0;
+  }
+  const created = run(
+    "gh",
+    [
+      "pr",
+      "create",
+      "--base",
+      base,
+      "--head",
+      head,
+      "--title",
+      title,
+      "--body-file",
+      bodyFile,
+      ...(draft ? ["--draft"] : []),
+    ],
+    { cwd: repo },
+  );
+  if (created.code !== 0) {
+    if (!draft) die(`cannot open pull request: ${pyTrim(created.err || created.out)}`);
+    // Any failed draft create is the question, whatever the refusal's words:
+    // nothing is opened ready without the user's word.
+    const firstLine = pySplitLines(pyTrim(created.err || created.out))[0] ?? "";
+    console.log(
+      `refused ${firstLine === "" ? "gh pr create --draft failed with no message" : firstLine}`,
+    );
+    return 0;
+  }
+  const url = pyTrim(created.out);
+  if (url === "") die(`cannot open pull request: GitHub reported no pull request`);
+  console.log(`opened ${url} ${draft ? "draft" : "ready"}`);
+  return 0;
+}
+
+function markReady(o: string[]): number {
+  if (o.length !== 4 || o[0] !== "--repo" || o[2] !== "--pr" || o[1] === "" || o[3] === "") {
+    usage(MARK_READY_USAGE);
+  }
+  const repo = o[1]!;
+  const pr = o[3]!;
+  const marked = run("gh", ["pr", "ready", pr], { cwd: repo });
+  if (marked.code !== 0) die(`cannot mark pull request ready: ${pyTrim(marked.err || marked.out)}`);
+  const view = run("gh", ["pr", "view", pr, "--json", "isDraft"], { cwd: repo });
+  if (view.code !== 0) die(`cannot read pull request state: ${pyTrim(view.err || view.out)}`);
+  let state: unknown;
+  try {
+    state = JSON.parse(view.out) as unknown;
+  } catch {
+    die(`cannot read pull request state: GitHub returned malformed JSON`);
+  }
+  const isDraft =
+    typeof state === "object" && state !== null && !Array.isArray(state)
+      ? (state as Record<string, unknown>).isDraft
+      : undefined;
+  if (typeof isDraft !== "boolean") {
+    die(`cannot read pull request state: GitHub returned malformed JSON`);
+  }
+  if (isDraft) die(`pull request is still a draft after gh pr ready: ${pr}`);
+  console.log("ready");
   return 0;
 }
 
@@ -1226,6 +1380,8 @@ async function main(argv: string[]): Promise<number> {
     if (mode === "anything-to-land") return anythingToLand(argv.slice(1));
     if (mode === "fresh") return fresh(argv.slice(1));
     if (mode === "pull-request-checks") return pullRequestChecks(argv.slice(1));
+    if (mode === "open-pr") return openPr(argv.slice(1));
+    if (mode === "mark-ready") return markReady(argv.slice(1));
     if (mode === "results") {
       if (argv.length !== 3) usage(RESULTS_USAGE);
       for (const [name, result] of recordedResults(argv[1]!, argv[2]!)) {

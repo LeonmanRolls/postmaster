@@ -2508,3 +2508,338 @@ describe("pull-request checks", () => {
     );
   });
 });
+
+describe("open pull requests", () => {
+  const pr = "https://github.com/example/postmaster/pull/1";
+
+  interface OpenOpts {
+    ship?: Record<string, string> | null;
+    runJson?: string | null;
+    list?: string;
+    listExit?: number;
+    createOut?: string;
+    createExit?: number;
+    createErr?: string;
+    body?: string | null;
+    extra?: string[];
+    wantCode?: number;
+  }
+
+  function openPr(
+    label: string,
+    opts: OpenOpts = {},
+  ): { output: string; code: number; err: string; calls: string[] } {
+    const repo = join(tmp, `open-pr-${label}`);
+    mkrepo(repo);
+    commitFile(repo, "tracked.txt", "card", "card");
+    const dispatch = join(tmp, `open-pr-dispatch-${label}`);
+    mkdirSync(dispatch, { recursive: true });
+    if (opts.runJson !== null) {
+      const raw =
+        opts.runJson !== undefined
+          ? opts.runJson
+          : JSON.stringify(
+              opts.ship === null ? { config: {} } : { config: { ship: opts.ship ?? {} } },
+            );
+      writeFileSync(join(dispatch, "run.json"), raw);
+    }
+    const body = join(tmp, `open-pr-${label}.md`);
+    if (opts.body !== null) writeFileSync(body, opts.body ?? "card and checks\n");
+    const bin = join(tmp, `open-pr-bin-${label}`);
+    mkdirSync(bin, { recursive: true });
+    const gh = join(bin, "gh");
+    writeFileSync(
+      gh,
+      [
+        "#!/bin/sh",
+        'echo "$*" >> "$GH_CALLS"',
+        'case "$2" in',
+        '  list) cat "$GH_LIST_FILE"; exit "$GH_LIST_EXIT" ;;',
+        '  create) cat "$GH_CREATE_OUT"; printf \'%s\' "$GH_CREATE_ERR" >&2; exit "$GH_CREATE_EXIT" ;;',
+        '  *) echo "unexpected gh call: $*" >&2; exit 2 ;;',
+        "esac",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(gh, 0o755);
+    const listPath = join(tmp, `open-pr-${label}.list`);
+    writeFileSync(listPath, opts.list ?? "[]\n");
+    const createPath = join(tmp, `open-pr-${label}.create`);
+    writeFileSync(createPath, opts.createOut ?? `${pr}\n`);
+    const r = run(
+      join(HERE, "run"),
+      [
+        "landing",
+        "open-pr",
+        "--repo",
+        repo,
+        "--dispatch",
+        dispatch,
+        "--base",
+        "main",
+        "--head",
+        "ticket",
+        "--title",
+        "504, drafts",
+        "--body-file",
+        body,
+        ...(opts.extra ?? []),
+      ],
+      {
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH ?? ""}`,
+          GH_CALLS: join(tmp, `open-pr-${label}.calls`),
+          GH_LIST_FILE: listPath,
+          GH_LIST_EXIT: String(opts.listExit ?? 0),
+          GH_CREATE_OUT: createPath,
+          GH_CREATE_EXIT: String(opts.createExit ?? 0),
+          GH_CREATE_ERR: opts.createErr ?? "",
+        },
+      },
+    );
+    expect(r.code).toBe(opts.wantCode ?? 0);
+    let calls: string[];
+    try {
+      calls = readFileSync(join(tmp, `open-pr-${label}.calls`), "utf8")
+        .split("\n")
+        .filter((l) => l !== "");
+    } catch {
+      calls = [];
+    }
+    return { output: r.out.trim(), code: r.code, err: r.err, calls };
+  }
+
+  test("no setting opens ready, with no --draft on the create", () => {
+    const r = openPr("absent", { ship: { merge_authority: "user" } });
+    expect(r.output).toBe(`opened ${pr} ready`);
+    expect(r.calls.filter((l) => l.startsWith("pr create "))).toHaveLength(1);
+    expect(r.calls.find((l) => l.startsWith("pr create ")) ?? "").not.toContain("--draft");
+  });
+
+  test("the setting off opens ready", () => {
+    const r = openPr("off", { ship: { draft_pull_requests: "off" } });
+    expect(r.output).toBe(`opened ${pr} ready`);
+    expect(r.calls.find((l) => l.startsWith("pr create ")) ?? "").not.toContain("--draft");
+  });
+
+  test("a run.json without a ship table opens ready", () => {
+    expect(openPr("noship", { ship: null }).output).toBe(`opened ${pr} ready`);
+  });
+
+  test("the setting on opens a draft", () => {
+    const r = openPr("on", { ship: { draft_pull_requests: "on" } });
+    expect(r.output).toBe(`opened ${pr} draft`);
+    expect(r.calls.find((l) => l.startsWith("pr create ")) ?? "").toContain("--draft");
+  });
+
+  test("the open pull request for the branch is adopted, draft or ready", () => {
+    const draft = openPr("adopt-draft", {
+      ship: { draft_pull_requests: "on" },
+      list: `${JSON.stringify([{ url: pr, isDraft: true }])}\n`,
+    });
+    expect(draft.output).toBe(`adopted ${pr} draft`);
+    expect(draft.calls.filter((l) => l.startsWith("pr create "))).toHaveLength(0);
+    const ready = openPr("adopt-ready", {
+      ship: { draft_pull_requests: "on" },
+      list: `${JSON.stringify([{ url: pr, isDraft: false }])}\n`,
+    });
+    expect(ready.output).toBe(`adopted ${pr} ready`);
+    expect(ready.calls.filter((l) => l.startsWith("pr create "))).toHaveLength(0);
+  });
+
+  test("the first of several open pull requests is adopted", () => {
+    const other = "https://github.com/example/postmaster/pull/2";
+    const r = openPr("adopt-first", {
+      list: `${JSON.stringify([
+        { url: pr, isDraft: false },
+        { url: other, isDraft: true },
+      ])}\n`,
+    });
+    expect(r.output).toBe(`adopted ${pr} ready`);
+  });
+
+  test("a refused draft create carries the provider's first line", () => {
+    const r = openPr("refused", {
+      ship: { draft_pull_requests: "on" },
+      createExit: 1,
+      createErr: "Draft pull requests are not supported in this repository\nsecond line\n",
+      createOut: "",
+    });
+    expect(r.output).toBe("refused Draft pull requests are not supported in this repository");
+    expect(r.calls.filter((l) => l.startsWith("pr create "))).toHaveLength(1);
+  });
+
+  test("a refused draft create with no message still refuses", () => {
+    const r = openPr("refused-bare", {
+      ship: { draft_pull_requests: "on" },
+      createExit: 1,
+      createErr: "",
+      createOut: "",
+    });
+    expect(r.output).toBe("refused gh pr create --draft failed with no message");
+  });
+
+  test("--ready opens ready with the setting on", () => {
+    const r = openPr("force-ready", { ship: { draft_pull_requests: "on" }, extra: ["--ready"] });
+    expect(r.output).toBe(`opened ${pr} ready`);
+    expect(r.calls.find((l) => l.startsWith("pr create ")) ?? "").not.toContain("--draft");
+  });
+
+  test("a failed ready create is a fault, never refused", () => {
+    const r = openPr("ready-fail", {
+      ship: { draft_pull_requests: "off" },
+      createExit: 1,
+      createErr: "GraphQL: something broke\n",
+      createOut: "",
+      wantCode: 1,
+    });
+    expect(r.output).toBe("");
+    expect(r.err).toContain("cannot open pull request");
+  });
+
+  test("a failed list is a fault", () => {
+    const r = openPr("list-fail", { listExit: 1, list: "", wantCode: 1 });
+    expect(r.err).toContain("cannot list pull requests");
+  });
+
+  test("a malformed list is a fault", () => {
+    const r = openPr("list-malformed", { list: "oops\n", wantCode: 1 });
+    expect(r.err).toContain("cannot list pull requests");
+  });
+
+  test("a list entry without a draft state is a fault", () => {
+    const r = openPr("list-nostate", {
+      list: `${JSON.stringify([{ url: pr }])}\n`,
+      wantCode: 1,
+    });
+    expect(r.err).toContain("cannot list pull requests");
+  });
+
+  test("an empty create answer is a fault", () => {
+    const r = openPr("create-empty", { createOut: "", wantCode: 1 });
+    expect(r.err).toContain("reported no pull request");
+  });
+
+  test("a missing body file is a fault", () => {
+    const r = openPr("nobody", { body: null, wantCode: 1 });
+    expect(r.err).toContain("--body-file cannot be read");
+    expect(r.calls).toHaveLength(0);
+  });
+
+  test("a missing run.json is a fault", () => {
+    const r = openPr("norun", { runJson: null, wantCode: 1 });
+    expect(r.err).toContain("no readable run.json");
+  });
+
+  test("usage refuses a missing flag and an unknown one", () => {
+    const short = sh(["open-pr", "--repo", "x"]);
+    expect(short.code).toBe(1);
+    expect(short.out.startsWith("usage: run landing open-pr")).toBe(true);
+    const repo = join(tmp, "open-pr-usage");
+    mkrepo(repo);
+    const dispatch = join(tmp, "open-pr-usage-dispatch");
+    mkdirSync(dispatch, { recursive: true });
+    const body = join(tmp, "open-pr-usage.md");
+    writeFileSync(body, "card\n");
+    const bogus = sh([
+      "open-pr",
+      "--repo",
+      repo,
+      "--dispatch",
+      dispatch,
+      "--base",
+      "main",
+      "--head",
+      "ticket",
+      "--title",
+      "t",
+      "--body-file",
+      body,
+      "--bogus",
+    ]);
+    expect(bogus.code).toBe(1);
+    expect(bogus.out.startsWith("usage: run landing open-pr")).toBe(true);
+  });
+});
+
+describe("mark ready", () => {
+  const pr = "https://github.com/example/postmaster/pull/1";
+
+  function markReady(
+    label: string,
+    opts: { readyExit?: number; readyErr?: string; view?: string; viewExit?: number } = {},
+    wantCode = 0,
+  ): { output: string; code: number; err: string; calls: string[] } {
+    const repo = join(tmp, `mark-ready-${label}`);
+    mkrepo(repo);
+    commitFile(repo, "tracked.txt", "card", "card");
+    const bin = join(tmp, `mark-ready-bin-${label}`);
+    mkdirSync(bin, { recursive: true });
+    const gh = join(bin, "gh");
+    writeFileSync(
+      gh,
+      [
+        "#!/bin/sh",
+        'echo "$*" >> "$GH_CALLS"',
+        'case "$2" in',
+        '  ready) printf \'%s\' "$GH_READY_ERR" >&2; exit "$GH_READY_EXIT" ;;',
+        '  view) printf \'%s\' "$GH_VIEW_OUT"; exit "$GH_VIEW_EXIT" ;;',
+        '  *) echo "unexpected gh call: $*" >&2; exit 2 ;;',
+        "esac",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(gh, 0o755);
+    const r = run(join(HERE, "run"), ["landing", "mark-ready", "--repo", repo, "--pr", pr], {
+      env: {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH ?? ""}`,
+        GH_CALLS: join(tmp, `mark-ready-${label}.calls`),
+        GH_READY_EXIT: String(opts.readyExit ?? 0),
+        GH_READY_ERR: opts.readyErr ?? "",
+        GH_VIEW_OUT: opts.view ?? '{"isDraft":false}\n',
+        GH_VIEW_EXIT: String(opts.viewExit ?? 0),
+      },
+    });
+    expect(r.code).toBe(wantCode);
+    let calls: string[];
+    try {
+      calls = readFileSync(join(tmp, `mark-ready-${label}.calls`), "utf8")
+        .split("\n")
+        .filter((l) => l !== "");
+    } catch {
+      calls = [];
+    }
+    return { output: r.out.trim(), code: r.code, err: r.err, calls };
+  }
+
+  test("marks ready and reads the state back", () => {
+    const r = markReady("ok");
+    expect(r.output).toBe("ready");
+    expect(r.calls).toEqual([`pr ready ${pr}`, `pr view ${pr} --json isDraft`]);
+  });
+
+  test("a failed mark is a fault, with no state read", () => {
+    const r = markReady("fail", { readyExit: 1, readyErr: "GraphQL: something broke\n" }, 1);
+    expect(r.output).toBe("");
+    expect(r.err).toContain("cannot mark pull request ready");
+    expect(r.calls).toEqual([`pr ready ${pr}`]);
+  });
+
+  test("a pull request still a draft after the mark is a fault", () => {
+    const r = markReady("draft", { view: '{"isDraft":true}\n' }, 1);
+    expect(r.err).toContain("still a draft");
+  });
+
+  test("a malformed state read is a fault", () => {
+    const r = markReady("malformed", { view: "oops\n" }, 1);
+    expect(r.err).toContain("malformed JSON");
+  });
+
+  test("usage refuses a missing pull request", () => {
+    const r = sh(["mark-ready", "--repo", "x"]);
+    expect(r.code).toBe(1);
+    expect(r.out).toBe("usage: run landing mark-ready --repo <repo> --pr <pull-request>");
+  });
+});
