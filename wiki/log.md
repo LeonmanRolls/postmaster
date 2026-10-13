@@ -8,6 +8,14 @@ updated: 2026-10-13
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
 
+## [2026-10-13] update | lanes may read the wiki; contamination is recorded, not prohibited
+
+Tickets #24 and #25 closed. The schema and the project context said a lane does not read the
+wiki. Scanned the reviewer streams of the runs from 300 on (558): 70 read a wiki or raw page
+directly and 99 more listed or searched there, so the instruction never held. Changed the
+[schema](schema.md): a lane may read the wiki, and a run used as evidence for a claim records
+whether its lanes read the page behind it. The project context says the same in one sentence.
+
 ## [2026-10-13] update | the review-rounds page against the loop as it stands on main
 
 Issue #400. Main had moved 302 commits since the page was written. Read the loop's decision script
