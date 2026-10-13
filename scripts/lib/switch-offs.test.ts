@@ -6,6 +6,7 @@ import {
   generatedMatcher,
   packageSettingsDiffer,
   parseSwitchOff,
+  relaxesChecks,
   scanComments,
 } from "./switch-offs.ts";
 
@@ -1916,5 +1917,151 @@ describe("generated files named by the project", () => {
     const result = check();
     expect(result.code).toBe(1);
     expect(result.out).toContain("generated_files");
+  });
+});
+
+describe("relaxesChecks", () => {
+  test("a tsconfig that turns strictness off relaxes the checks", () => {
+    expect(relaxesChecks("tsconfig", '{"compilerOptions":{"strict":false}}')).toBe(true);
+    expect(
+      relaxesChecks(
+        "tsconfig",
+        '{\n  // loose\n  "compilerOptions": { "noImplicitAny" : false }\n}',
+      ),
+    ).toBe(true);
+  });
+
+  test("a strict tsconfig does not (control)", () => {
+    expect(relaxesChecks("tsconfig", '{"compilerOptions":{"strict":true,"noEmit":true}}')).toBe(
+      false,
+    );
+  });
+
+  test("a package whose check script runs nothing relaxes the checks", () => {
+    for (const run of ["true", ":", "exit 0", 'echo "no tests"']) {
+      expect(relaxesChecks("package", JSON.stringify({ scripts: { test: run } }))).toBe(true);
+    }
+    expect(relaxesChecks("package", JSON.stringify({ scripts: { lint: "true" } }))).toBe(true);
+    expect(relaxesChecks("package", JSON.stringify({ scripts: { "test:unit": "true" } }))).toBe(
+      true,
+    );
+  });
+
+  test("a package with real check scripts, or an empty script that is not a check, does not (control)", () => {
+    const real = { typecheck: "tsc --noEmit", test: "vitest run", lint: "biome check" };
+    expect(relaxesChecks("package", JSON.stringify({ scripts: real }))).toBe(false);
+    expect(
+      relaxesChecks("package", JSON.stringify({ scripts: { dev: "echo hi", clean: "true" } })),
+    ).toBe(false);
+    expect(relaxesChecks("package", JSON.stringify({ name: "x" }))).toBe(false);
+  });
+
+  test("a package that carries its own lint or format block relaxes the checks", () => {
+    expect(relaxesChecks("package", JSON.stringify({ eslintConfig: { rules: {} } }))).toBe(true);
+    expect(relaxesChecks("package", JSON.stringify({ prettier: {} }))).toBe(true);
+  });
+
+  test("text that cannot be read is never waved through", () => {
+    expect(relaxesChecks("package", "{not json")).toBe(true);
+    expect(relaxesChecks("package", null)).toBe(true);
+    expect(relaxesChecks("tsconfig", null)).toBe(true);
+  });
+});
+
+describe("the own settings of a brand-new folder", () => {
+  const PACKAGE = `${JSON.stringify(
+    {
+      name: "new-pkg",
+      scripts: { typecheck: "tsc --noEmit", test: "vitest run", lint: "biome check" },
+    },
+    null,
+    2,
+  )}\n`;
+  const TSCONFIG = `${JSON.stringify({ compilerOptions: { strict: true, noEmit: true }, include: ["src"] }, null, 2)}\n`;
+
+  // main already holds one package, so a second folder is new and the first is not.
+  function withBasePackage(name: string): void {
+    freshRepo(name);
+    git(repo, "checkout", "-q", "main");
+    write("packages/old/src/a.ts", "export const a = 1;\n");
+    commit("an existing package");
+    git(repo, "checkout", "-q", "-B", "ticket", "main");
+  }
+
+  test("a new folder's package.json and tsconfig.json are not listed, and each is named on stderr", () => {
+    withBasePackage("newfolder-clear");
+    write("packages/new/package.json", PACKAGE);
+    write("packages/new/tsconfig.json", TSCONFIG);
+    write("packages/new/src/index.ts", "export const x = 1;\n");
+    commit("add a new package");
+    const result = check();
+    expect(result.code).toBe(0);
+    expect(result.out.startsWith("clear\n## Switch-offs\n\nnone")).toBe(true);
+    expect(result.out).toContain("not listed: packages/new/package.json");
+    expect(result.out).toContain("not listed: packages/new/tsconfig.json");
+  });
+
+  test("the same files added to a folder that already existed are listed (control)", () => {
+    withBasePackage("newfolder-existing");
+    write("packages/old/package.json", PACKAGE);
+    write("packages/old/tsconfig.json", TSCONFIG);
+    commit("add settings to an existing package");
+    const result = check();
+    expect(result.code).toBe(2);
+    expect(result.out).toContain("settings packages/old/package.json");
+    expect(result.out).toContain("settings packages/old/tsconfig.json");
+    expect(result.out).not.toContain("not listed:");
+  });
+
+  test("a new folder's tsconfig that turns strictness off is listed, its real package.json is not", () => {
+    withBasePackage("newfolder-loose");
+    write("packages/new/package.json", PACKAGE);
+    write("packages/new/tsconfig.json", '{"compilerOptions":{"strict":false}}\n');
+    commit("add a loose package");
+    const result = check();
+    expect(result.code).toBe(2);
+    expect(result.out).toContain("settings packages/new/tsconfig.json");
+    expect(result.out).not.toContain("settings packages/new/package.json");
+  });
+
+  test("a new folder's package.json whose check script runs nothing is listed", () => {
+    withBasePackage("newfolder-empty-script");
+    write("packages/new/package.json", '{"name":"new","scripts":{"lint":"true"}}\n');
+    commit("add a package with an empty lint");
+    const result = check();
+    expect(result.code).toBe(2);
+    expect(result.out).toContain("settings packages/new/package.json");
+  });
+
+  test("a new folder's package.json with its own lint block is listed", () => {
+    withBasePackage("newfolder-eslint-block");
+    write("packages/new/package.json", '{"name":"new","eslintConfig":{"rules":{}}}\n');
+    commit("add a package with an eslint block");
+    const result = check();
+    expect(result.code).toBe(2);
+    expect(result.out).toContain("settings packages/new/package.json");
+  });
+
+  test("other settings files in a new folder are listed (control)", () => {
+    withBasePackage("newfolder-others");
+    write("packages/new/biome.json", '{"linter":{"enabled":false}}\n');
+    write("packages/new/.gitignore", "dist\n");
+    commit("add lint settings to a new package");
+    const result = check();
+    expect(result.code).toBe(2);
+    expect(result.out).toContain("settings packages/new/biome.json");
+    expect(result.out).toContain("settings packages/new/.gitignore");
+  });
+
+  test("a change to the root package.json is still listed beside a new folder's own", () => {
+    withBasePackage("newfolder-root");
+    write("package.json", '{"scripts":{"check":"true"},"devDependencies":{}}\n');
+    write("packages/new/package.json", PACKAGE);
+    commit("weaken the root check and add a package");
+    const result = check();
+    expect(result.code).toBe(2);
+    expect(result.out).toContain("settings package.json");
+    expect(result.out).not.toContain("settings packages/new/package.json");
+    expect(result.out).toContain("not listed: packages/new/package.json");
   });
 });

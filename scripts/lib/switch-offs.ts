@@ -16,6 +16,11 @@
 // owns what those files say, so neither their comments nor their settings changes are
 // listed; each file skipped is named on stderr. A project that names none is checked
 // exactly as before, and a setting that does not parse fails the check loud.
+//
+// A new folder's own package.json and tsconfig are not listed either: they define the
+// checks of code that did not exist, so they cannot switch off a check the project already
+// ran. They are listed when they visibly do (see relaxesChecks), and every other settings
+// file, and the same files added to a folder that already existed, are listed as before.
 
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
@@ -724,6 +729,58 @@ function projectGenerated(repo: string): string[] {
   }
 }
 
+const RELAXING_OPTION =
+  /"(?:strict|noImplicitAny|strictNullChecks|strictFunctionTypes|strictBindCallApply|strictPropertyInitialization|noImplicitThis|alwaysStrict)"\s*:\s*false/u;
+const CHECK_SCRIPT_NAME = /^(?:check|lint|typecheck|type-check|test|format)(?::|$)/u;
+const EMPTY_SCRIPT = /^\s*(?:true|:|exit\s+0|echo\b.*)\s*$/u;
+
+/** Whether the text of a new folder's package.json or tsconfig visibly switches a check off:
+ * strictness turned off, a lint or format block of its own, or a check script that runs
+ * nothing. Text that cannot be read counts as relaxing, so an unreadable file is never
+ * waved through. */
+export function relaxesChecks(kind: "package" | "tsconfig", text: string | null): boolean {
+  if (text === null) return true;
+  if (kind === "tsconfig") return RELAXING_OPTION.test(text);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text) as unknown;
+  } catch {
+    return true;
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return true;
+  const o = parsed as Record<string, unknown>;
+  if (o.eslintConfig !== undefined || o.prettier !== undefined) return true;
+  const scripts = o.scripts;
+  if (scripts === undefined) return false;
+  if (scripts === null || typeof scripts !== "object" || Array.isArray(scripts)) return true;
+  return Object.entries(scripts).some(
+    ([name, value]) =>
+      CHECK_SCRIPT_NAME.test(name) && (typeof value !== "string" || EMPTY_SCRIPT.test(value)),
+  );
+}
+
+/** An added package.json or tsconfig that is the first file of its folder: nothing under the
+ * folder existed at the base, so it defines the checks of new code and relaxes none that
+ * ran. The root is never new. */
+function isNewFolderSettings(
+  path: string,
+  before: Map<string, string>,
+  text: string | null,
+): boolean {
+  const name = basename(path);
+  const kind =
+    name === "package.json"
+      ? "package"
+      : /^(?:tsconfig|jsconfig).*\.json$/u.test(name)
+        ? "tsconfig"
+        : null;
+  if (kind === null) return false;
+  const dir = posix.dirname(path);
+  if (dir === ".") return false;
+  for (const known of before.keys()) if (known.startsWith(`${dir}/`)) return false;
+  return !relaxesChecks(kind, text);
+}
+
 /** Every path in the tree at a revision with its mode. Quoting is off and
  * entries split on NUL, so a name holding whitespace or quotes still parses:
  * the entry's meta holds no tab, and the path is everything past the first. */
@@ -988,6 +1045,7 @@ function settingsChanges(
   base: string,
   head: string,
   skip: (path: string) => boolean = () => false,
+  quiet: (path: string) => void = () => undefined,
 ): SettingsEntry[] {
   const before = treeModes(repo, base);
   const after = treeModes(repo, head);
@@ -1017,6 +1075,10 @@ function settingsChanges(
       kind === "package" ? packageSettingsDiffer(oldText, newText) : oldText !== newText;
     if (!differs) continue;
     const change = !before.has(path) ? "added" : !after.has(path) ? "deleted" : "changed";
+    if (change === "added" && !isAlias && isNewFolderSettings(path, before, newText)) {
+      quiet(path);
+      continue;
+    }
     const diff = settingsDiffText(repo, base, head, path, oldAt, newAt, isAlias);
     const sha = blobShaAt(repo, head, path, after) ?? "absent";
     result.push({
@@ -1183,10 +1245,16 @@ export function inspectSwitchOffs(options: {
     throw new Error(`no merge base of ${options.defaultRef} and ${options.ticketRef}`);
   const skip = generatedMatcher(options.generated ?? projectGenerated(repo));
   const comments = addedSwitches(repo, base, ticketHead, skip);
-  const settings = settingsChanges(repo, base, ticketHead, skip);
-  const warnings: string[] = changedPaths(repo, base, ticketHead)
-    .filter((path) => (isSource(path) || settingsKind(path) !== null) && skip(path))
-    .map((path) => `skipped generated file ${path} (project.generated_files)`);
+  const newFolder: string[] = [];
+  const settings = settingsChanges(repo, base, ticketHead, skip, (path) => newFolder.push(path));
+  const warnings: string[] = [
+    ...changedPaths(repo, base, ticketHead)
+      .filter((path) => (isSource(path) || settingsKind(path) !== null) && skip(path))
+      .map((path) => `skipped generated file ${path} (project.generated_files)`),
+    ...newFolder.map(
+      (path) => `not listed: ${path}, the own settings of a folder that is new in this change`,
+    ),
+  ];
   const logged =
     options.dispatch === undefined
       ? new Map<string, "approved" | "refused">()
