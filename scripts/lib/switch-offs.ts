@@ -730,8 +730,10 @@ function projectGenerated(repo: string): string[] {
 }
 
 const RELAXING_OPTION =
+  // ASCII: tsconfig text is ASCII JSON, so \s is ASCII whitespace.
   /"(?:strict|noImplicitAny|strictNullChecks|strictFunctionTypes|strictBindCallApply|strictPropertyInitialization|noImplicitThis|alwaysStrict)"\s*:\s*false/u;
 const CHECK_SCRIPT_NAME = /^(?:check|lint|typecheck|type-check|test|format)(?::|$)/u;
+// ASCII: package.json scripts are ASCII shell text here, so \s is ASCII whitespace.
 const EMPTY_SCRIPT = /^\s*(?:true|:|exit\s+0|echo\b.*)\s*$/u;
 
 /** Whether the text of a new folder's package.json or tsconfig visibly switches a check off:
