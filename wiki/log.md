@@ -1,12 +1,55 @@
 ---
 title: Log
 type: schema
-updated: 2026-10-11
+updated: 2026-10-13
 ---
 
 # Log
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
+
+## [2026-10-13] update | lanes may read the wiki; contamination is recorded, not prohibited
+
+Tickets #24 and #25 closed. The schema and the project context said a lane does not read the
+wiki. Scanned the reviewer streams of the runs from 300 on (558): 70 read a wiki or raw page
+directly and 99 more listed or searched there, so the instruction never held. Changed the
+[schema](schema.md): a lane may read the wiki, and a run used as evidence for a claim records
+whether its lanes read the page behind it. The project context says the same in one sentence.
+
+## [2026-10-13] update | the review-rounds page against the loop as it stands on main
+
+Issue #400. Main had moved 302 commits since the page was written. Read the loop's decision script
+and runbook at the commits that changed its rule, found that the runs ran under three rules, not one
+(a cap of three rounds with a loop until clean before 29 September, a scripted decision with the cap
+from then, a rise rule with no cap from 9 October), and mapped each run to its rule from the commit
+it was pinned to. Replayed the rise rule over the runs, split group A at 29 September, and added
+round 1 as a warning, all in `raw/trials/2026-10-11-review-rounds/results/loop-rule.md` with their
+controls. Changed [the review-rounds page](concepts/review-rounds.md): a third of the rounds are in
+the 13 earliest runs; the clerk's two-part ticket's apparent saving is much smaller against the
+one-part tickets made under the script of 29 September; a sentence about the cap of three rounds
+that was wrong is corrected; a run with no traceable change commit is no longer counted as a change
+of no lines; and the loop's rule, the rise replay and what main now records are added. Two
+proposals are added at the user's word: a cap of three criteria, which by the records removes no
+rounds in total, and a narrow check of each fix, which is untested. No rule, runbook, template or
+gate changed. No standing changed.
+
+## [2026-10-11] query | why runs take so many review rounds, and what planning could cut
+
+Issue #400. The user asked why runs take so many review rounds and what the planning stage could do
+about it, and on 10 October added one question: which signals of a loop predict that the next
+round finds nothing worth fixing. Read 61 runs' own records (28 September to 9 October) and 18
+that ended their review after, counted rounds and serious findings with controls, traced the 382
+serious findings after round 1 to the commit that wrote their lines by a rule committed
+beforehand (335 placed, 47 not), had two helper readers mark 309 of them for what the ticket left open, and tried 12
+signals and four stopping rules on the 61 runs and then on the 18. Added
+[Why runs take the review rounds they do, and what the planning stage could cut](concepts/review-rounds.md),
+standing mixed, and the trial `2026-10-11-review-rounds`. The new counts agree with the lane audit's
+table for 17 of its 18 runs and with the 21-run count's for 17 of 21; the differences are #135, which
+reads 44 where the audit read 32 (severity in the target field), #202 (the finding lines miss two
+rounds, which the run's escalation lines give), and #216 and #252, which that count read while they
+were running. No rule, runbook, template or gate changed, and six changes to the planning stage are
+proposed. No stop signal tried predicted a clean next round above about half. No other standing
+changed.
 
 ## [2026-10-11] ingest | one person's reading of a function with and without mutation
 
@@ -42,6 +85,7 @@ bug-2 by none. No failure was a false alarm, and law 4 found a defect no review 
 [the functional-core page](concepts/functional-core-and-verification.md): trial 1's result, the hindsight sentence in its
 answer and its index line. The user then set aside proposal 3, a law over generated inputs for each reader of text in the
 template's checks, and the page says so. No standing changed.
+
 ## [2026-10-11] query | what a whole flow costs in the cloud
 
 Issue #341. The user asked what a whole flow costs to run in the cloud, not only individual lanes and legs. Added "What the
