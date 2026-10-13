@@ -195,7 +195,10 @@ to watch the fleet in: [Herdr](https://herdr.dev) by default wherever it is runn
 launch appears in its worktree's space under the project's, or tmux. With neither, launches run
 in the background and the flow still works (`skills/postmaster/hosts.md`). Bun 1.4.2 or newer, which
 runs the TypeScript scripts and reads the config, and Node and npm, which the fixture flow
-needs to run its gate.
+needs to run its gate. To run this repository's own check, that Node must be 22.18 or newer:
+Oxlint loads `lint/plugin.ts` through Node's built-in TypeScript support, and an older Node stops
+it with `Unknown file extension ".ts"`. Node 22.6 to 22.17 work with
+`NODE_OPTIONS=--experimental-strip-types`.
 
 ## On a Mac
 
