@@ -6,7 +6,15 @@
 // answer while this loop runs. C6, a fixture run from this branch scoring
 // clean, needs a dispatched run and stays out.
 import { describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { ROOT, RUN } from "./acceptance-323.ts";
 import {
@@ -764,6 +772,30 @@ describe("C5: setup asks and the test message confirms", () => {
       writeFileSync(
         sb.config,
         `[postmaster]\npoll_seconds = 1\n\n[notify]\nchannel = "telegram"\nenv_file = "${inside}"\n`,
+      );
+      const r = await notifyTest(sb);
+      expect(r.code).not.toBe(0);
+      expect(sendBodies(sb).length).toBe(0);
+      expect(r.err).toContain("git");
+    } finally {
+      removeSandbox(sb);
+    }
+  });
+
+  test("the test-message command refuses a link into a git checkout", async () => {
+    const sb = makeNotifySandbox();
+    try {
+      const inside = join(sb.repo, "telegram.env");
+      writeFileSync(
+        inside,
+        `TELEGRAM_BOT_TOKEN=${sb.token}\nTELEGRAM_CHAT_ID=${sb.chat}\nTELEGRAM_API_ORIGIN=${sb.standin.origin}\n`,
+      );
+      chmodSync(inside, 0o600);
+      const link = join(sb.dir, "link.env");
+      symlinkSync(inside, link);
+      writeFileSync(
+        sb.config,
+        `[postmaster]\npoll_seconds = 1\n\n[notify]\nchannel = "telegram"\nenv_file = "${link}"\n`,
       );
       const r = await notifyTest(sb);
       expect(r.code).not.toBe(0);
