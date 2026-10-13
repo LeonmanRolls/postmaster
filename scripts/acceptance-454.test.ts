@@ -178,6 +178,20 @@ describe("C1: one message per thing that came up", () => {
     }
   });
 
+  test("the clerk command sends once per ticket", async () => {
+    const sb = makeNotifySandbox();
+    try {
+      const r1 = await notifyClerk(sb, "1");
+      expectCode(r1, 0);
+      expect(sendBodies(sb).length).toBe(1);
+      const r2 = await notifyClerk(sb, "1");
+      expectCode(r2, 0);
+      expect(sendBodies(sb).length).toBe(1);
+    } finally {
+      removeSandbox(sb);
+    }
+  });
+
   test("the clerk command is silent when messages are off", async () => {
     const sb = makeNotifySandbox({ messages: false });
     try {
@@ -255,6 +269,30 @@ describe("C1: one message per thing that came up", () => {
       const r2 = await look(sb);
       expectCode(r2, 3);
       expect(sendBodies(sb).length).toBe(1);
+    } finally {
+      removeSandbox(sb);
+    }
+  });
+
+  test("one unwritable run directory silences no other run", async () => {
+    const sb = makeNotifySandbox();
+    try {
+      makeRun(sb, "1", { waiting: "QUESTION-SEALED-1" });
+      const bad = makeRun(sb, "0-bad", { waiting: "QUESTION-SEALED-0" });
+      chmodSync(bad, 0o555);
+      try {
+        const r = await look(sb);
+        expectCode(r, 3);
+        expect(r.out).toContain("USER");
+        const bodies = sendBodies(sb);
+        expect(bodies.length).toBe(1);
+        expect(bodies[0]!.text).toContain("#1");
+        expect(bodies[0]!.text).not.toContain("#0");
+        expect(pyLower(r.err)).toContain("notify");
+        expect(failedLedgerLines(sb).length).toBe(1);
+      } finally {
+        chmodSync(bad, 0o755);
+      }
     } finally {
       removeSandbox(sb);
     }
