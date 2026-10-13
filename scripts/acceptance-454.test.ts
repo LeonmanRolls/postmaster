@@ -24,6 +24,7 @@ import {
   notifyTest,
   PLAIN_TITLE,
   procEnviron,
+  processIsLive,
   removeSandbox,
   sendBodies,
   shipRun,
@@ -34,6 +35,7 @@ import {
   type NotifySandbox,
 } from "./acceptance-454.ts";
 import { run } from "./lib/proc.ts";
+import { pyLower } from "./lib/text.ts";
 
 function failedLedgerLines(sb: NotifySandbox): string[] {
   const ledger = join(sb.runs, "ledger.jsonl");
@@ -178,13 +180,13 @@ describe("C1: one message per thing that came up", () => {
       expectCode(r, 0);
       expect(r.out).toContain("needs 2 WALL");
       expect(sendBodies(sb).length).toBe(0);
-      expect(r.err.toLowerCase()).not.toContain("notify");
+      expect(pyLower(r.err)).not.toContain("notify");
       rmSync(join(sb.runs, "2"), { recursive: true, force: true });
       const r2 = await look(sb);
       expectCode(r2, 3);
       expect(r2.out).toContain("USER");
       expect(sendBodies(sb).length).toBe(0);
-      expect(r2.err.toLowerCase()).not.toContain("notify");
+      expect(pyLower(r2.err)).not.toContain("notify");
       const actions = join(sb.runs, "1", "actions.jsonl");
       if (existsSync(actions)) {
         expect(readFileSync(actions, "utf8")).not.toContain('"action":"notify"');
@@ -323,6 +325,7 @@ describe("C3: the token and the chat never appear", () => {
       makeRun(sb, "1", { waiting: "QUESTION-SEALED-1" });
       const r = await look(sb);
       expectCode(r, 3);
+      expect(r.err).toContain("notify");
       expectNoSecrets(
         sweepSandbox(sb, [
           { where: "watcher stdout", text: r.out },
@@ -431,17 +434,19 @@ describe("C3: the token and the chat never appear", () => {
   });
 
   test("the secrets are in neither the watcher environment nor a child argv", async () => {
-    if (!hasProc()) return;
     const sb = makeNotifySandbox();
     try {
       makeRun(sb, "1", { waiting: "QUESTION-SEALED-1" });
       await withRunningWatcher(sb, (pid) => {
-        const env = procEnviron(pid);
-        expect(env).not.toContain(sb.token);
-        expect(env).not.toContain(sb.chat);
+        expect(processIsLive(pid)).toBe(true);
         for (const cmd of childCmdlines(pid)) {
           expect(cmd).not.toContain(sb.token);
           expect(cmd).not.toContain(sb.chat);
+        }
+        if (hasProc()) {
+          const env = procEnviron(pid);
+          expect(env).not.toContain(sb.token);
+          expect(env).not.toContain(sb.chat);
         }
       });
     } finally {
@@ -692,6 +697,7 @@ describe("C5: setup asks and the test message confirms", () => {
       );
       const r = run(RUN, ["check-setup", sb.repo], { env: sb.env });
       expectCode(r, 0);
+      expect(r.out).toContain("set up:");
     } finally {
       removeSandbox(sb);
     }

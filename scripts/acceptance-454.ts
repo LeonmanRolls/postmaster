@@ -20,9 +20,11 @@ import { join } from "node:path";
 import { commitAll, gitOrThrow, initRepo, ROOT, RUN, writeRepoFile } from "./acceptance-323.ts";
 import { expectCode } from "./acceptance-478.ts";
 import { run, type RunResult } from "./lib/proc.ts";
+import { processCommandLine, processIsLive, processTable } from "./lib/processes.ts";
 
 export { RUN, ROOT };
 export { expectCode };
+export { processIsLive };
 export type { RunResult };
 
 // --- the stand-in ----------------------------------------------------------------
@@ -358,30 +360,12 @@ export function expectNoSecrets(hays: Haystack[], token: string, chat: string): 
   }
 }
 
-/** The direct children's raw command lines, through /proc where it exists. */
+/** The direct children's command lines, through the shared module. */
 export function childCmdlines(pid: number): string[] {
   const out: string[] = [];
-  let entries: string[];
-  try {
-    entries = readdirSync("/proc");
-  } catch {
-    return out;
-  }
-  for (const e of entries) {
-    if (!/^[0-9]+$/u.test(e)) continue;
-    try {
-      const stat = readFileSync(`/proc/${e}/stat`, "utf8");
-      const close = stat.lastIndexOf(")");
-      if (close === -1) continue;
-      const after = stat
-        .slice(close + 1)
-        .trim()
-        .split(/ +/u);
-      if (after[1] !== String(pid)) continue;
-      out.push(readFileSync(`/proc/${e}/cmdline`, "utf8"));
-    } catch {
-      /* the child raced away */
-    }
+  for (const [child, info] of processTable()) {
+    if (info.parent !== pid) continue;
+    out.push(processCommandLine(child));
   }
   return out;
 }
