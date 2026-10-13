@@ -15,8 +15,8 @@
 // hold exits 2. Berry's decisions run against a stub yarn here and for real
 // in the hand-run transcript on the run's card: no deterministic Berry binary
 // exists for CI, so the oracle never downloads one. One case pins that the
-// shim never recurses: bun through the shim, under timeout, with the process
-// group watched and a trip-wire that kills the tree within seconds.
+// shim never recurses: bun through the shim under a waiting sh, with the
+// process group watched and a trip-wire that kills the tree within seconds.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -1082,11 +1082,14 @@ describe("the shim never recurses", () => {
       // A recursing shim forks without end, so this run carries two bounds:
       // a 60s wall clock enforced below (there is no `timeout` binary on
       // macOS), and a group-size trip that kills the tree and fails the
-      // test within seconds instead of filling the machine.
+      // test within seconds instead of filling the machine. The shim runs
+      // under a waiting sh, never exec'd, so the watched tree is two deep
+      // for the whole run and the depth assertion below cannot miss a
+      // transient child under load the way a bare spawn can.
       const TRIP = 60;
       const WALL_MS = 60000;
       const started = Date.now();
-      const child = Bun.spawn([join(bin, "bun"), "--version"], {
+      const child = Bun.spawn(["sh", "-c", '"$0" "$@"', join(bin, "bun"), "--version"], {
         cwd: project,
         env,
         stdin: "ignore",
