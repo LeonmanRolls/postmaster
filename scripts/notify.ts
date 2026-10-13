@@ -54,6 +54,7 @@ import {
 import { beside, physical, scriptsDir } from "./lib/paths.ts";
 import { envOf } from "./plane.ts";
 import { run } from "./lib/proc.ts";
+import { pyWords } from "./lib/text.ts";
 import { runRepo } from "./runs-watch.ts";
 import { isSurveyWall, readWalls, type Wall } from "./walls.ts";
 
@@ -150,12 +151,17 @@ export function parseNotifyDetail(detail: string): {
   ref: string;
   text: string;
 } | null {
-  const m = /^(\S+)\s+(\S+)\s+([\s\S]*)$/u.exec(detail.trim());
-  if (!m) return null;
-  const kind = m[1]!;
+  const words = pyWords(detail);
+  if (words.length < 3) return null;
+  const kind = words[0]!;
   if (kind !== "question" && kind !== "shipcard" && kind !== "wall" && kind !== "landed")
     return null;
-  return { kind, ref: m[2]!, text: m[3]! };
+  const ref = words[1]!;
+  const kindAt = detail.indexOf(kind);
+  const refAt = detail.indexOf(ref, kindAt + kind.length);
+  const text = detail.slice(refAt + ref.length).trim();
+  if (text === "") return null;
+  return { kind, ref, text };
 }
 
 /** A run directory's ticket: the leading number, or the name itself. */
