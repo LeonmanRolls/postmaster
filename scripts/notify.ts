@@ -242,15 +242,15 @@ export function readEnvFile(rawPath: string): EnvResult {
       refusal: `${path} is readable by others (mode ${(mode & 0o777).toString(8)}); run chmod 0600 ${path}`,
     };
   }
-  const top = repoTopLevel(dirname(path));
-  if (top !== "") {
-    const real = physical(path);
-    if (real === top || real.startsWith(`${top}/`)) {
-      return {
-        ok: false,
-        refusal: `${path} is inside the git checkout at ${top}; move it outside any checkout`,
-      };
-    }
+  // Resolved first: a link outside a checkout can still point at a file
+  // inside one, and that target is what must not sit in a repository.
+  const real = physical(path);
+  const top = repoTopLevel(dirname(real));
+  if (top !== "" && (real === top || real.startsWith(`${top}/`))) {
+    return {
+      ok: false,
+      refusal: `${path} is inside the git checkout at ${top}; move it outside any checkout`,
+    };
   }
   let text: string;
   try {
