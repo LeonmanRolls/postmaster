@@ -66,12 +66,13 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { tryJsonFile } from "./lib/data.ts";
 import { GUARD_SHIM_NAMES, ensureGuardBin } from "./lib/guardbin.ts";
 import {
@@ -3773,14 +3774,41 @@ export function runBaseHead(dispatch: string): string | null {
   return typeof run.target?.head === "string" && run.target.head !== "" ? run.target.head : null;
 }
 
+/** An absolute path with symlinks resolved as far as the disk allows: the
+ * deepest existing ancestor resolved, the rest appended lexically. git
+ * prints --show-toplevel resolved (/private/var on macOS), so a path
+ * compared against it needs the same treatment even when the worktree
+ * lacks the file itself. */
+function physicalPath(absPath: string): string {
+  const leaves: string[] = [];
+  let cur = absPath;
+  for (;;) {
+    try {
+      const base = realpathSync(cur);
+      return leaves.length === 0 ? base : join(base, ...leaves.reverse());
+    } catch {
+      const parent = dirname(cur);
+      if (parent === cur) return absPath;
+      leaves.push(basename(cur));
+      cur = parent;
+    }
+  }
+}
+
 /** One file as the base commit holds it, or null when git, the base or the
  * file is missing. The path is absolute; anything outside the repo refuses
- * to resolve. */
+ * to resolve. Both sides resolve symlinks first: a project reached through
+ * a link (macOS /tmp and /var) reads its base like any other. */
 export function baseFile(project: string, absPath: string, head: string): string | null {
   const top = runCmd("git", ["-C", project, "rev-parse", "--show-toplevel"]);
   if (top.code !== 0) return null;
-  const root = top.out.trim();
-  const rel = relative(root, absPath);
+  let root: string;
+  try {
+    root = realpathSync(top.out.trim());
+  } catch {
+    return null;
+  }
+  const rel = relative(root, physicalPath(absPath));
   if (rel === "" || rel.startsWith("..")) return null;
   const shown = runCmd("git", ["-C", project, "show", `${head}:${rel}`]);
   return shown.code === 0 ? shown.out : null;

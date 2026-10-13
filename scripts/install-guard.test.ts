@@ -2,7 +2,7 @@
 // the guard's pure decisions. End-to-end behavior stays in the oracle.
 import { expect, test } from "bun:test";
 import { createRequire } from "node:module";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseApprovals } from "./lib/libraries.ts";
 import { toolRoot } from "./lib/paths.ts";
@@ -1060,6 +1060,34 @@ test("the checked record round-trips and the base reads from git", () => {
     // Outside the repo, and without a base, nothing resolves.
     expect(baseFile(proj, join(tmp, "elsewhere.json"), head)).toBeNull();
     expect(readBaseState(proj, join(tmp, "nodispatch"), lock)).toBeNull();
+  });
+});
+
+test("the base reads through a symlinked parent folder", () => {
+  withTempDir((tmp) => {
+    const repo = join(tmp, "real");
+    const proj = join(repo, "proj");
+    mkdirSync(proj, { recursive: true });
+    writeFileSync(join(proj, "package.json"), JSON.stringify({ dependencies: { a: "^1.0.0" } }));
+    writeFileSync(join(proj, "extra.json"), '{"held":"yes"}');
+    for (const args of [
+      ["init"],
+      ["config", "user.email", "t@t"],
+      ["config", "user.name", "t"],
+      ["add", "-A"],
+      ["commit", "-m", "base"],
+    ]) {
+      const r = run("git", ["-C", repo, ...args]);
+      expect(r.code).toBe(0);
+    }
+    const head = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+    rmSync(join(proj, "extra.json"));
+    const via = join(tmp, "via");
+    symlinkSync(repo, via);
+    const linked = join(via, "proj");
+    expect(baseFile(linked, join(linked, "package.json"), head)).toContain('"a":"^1.0.0"');
+    expect(baseFile(linked, join(linked, "extra.json"), head)).toContain('"held":"yes"');
+    expect(baseFile(linked, join(linked, "missing.json"), head)).toBeNull();
   });
 });
 
