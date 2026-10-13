@@ -38,6 +38,7 @@ import {
   renderMd,
   repoOf,
   sceneBlocks,
+  scrubChangeDels,
   scrubStory,
   staleReason,
   startsInFence,
@@ -1051,6 +1052,96 @@ describe("a change from its diff", () => {
     expect(rows.map((r) => r.key)).toEqual(["new.ts:-1"]);
   });
 
+  test("hunk content starting with -- or ++ is content, never a header", () => {
+    const files = parseChangeDiff(
+      [
+        "diff --git a/notes.md b/notes.md",
+        "index 1111111..2222222 100644",
+        "--- a/notes.md",
+        "+++ b/notes.md",
+        "@@ -2,3 +2,2 @@ keep",
+        "----",
+        "--- sql comment",
+        "-Body",
+        "+++ counter",
+        "+end",
+      ].join("\n"),
+    );
+    expect([...files.keys()]).toEqual(["notes.md"]);
+    const notes = files.get("notes.md");
+    expect([...(notes?.removedOld ?? [])].sort((a, b) => a - b)).toEqual([2, 3, 4]);
+    expect([...(notes?.added ?? [])].sort((a, b) => a - b)).toEqual([2, 3]);
+    expect(notes?.dels.get(2)?.map((d) => d.text)).toEqual(["---", "-- sql comment", "Body"]);
+    expect(notes?.dels.get(2)?.map((d) => d.old)).toEqual([2, 3, 4]);
+    expect(changedKeys(files)).toEqual([
+      "notes.md:+2",
+      "notes.md:+3",
+      "notes.md:-2",
+      "notes.md:-3",
+      "notes.md:-4",
+    ]);
+  });
+
+  test("unquoted spaced paths read, trailing tabs cut", () => {
+    const tab = String.fromCharCode(9);
+    const files = parseChangeDiff(
+      [
+        "diff --git a/with space.ts b/with space.ts",
+        "index 1111111..2222222 100644",
+        `--- a/with space.ts${tab}`,
+        `+++ b/with space.ts${tab}`,
+        "@@ -1 +1 @@",
+        "-old",
+        "+new",
+        "diff --git a/old space.ts b/new space.ts",
+        "similarity index 100%",
+        "rename from old space.ts",
+        "rename to new space.ts",
+        "diff --git a/sp ace.sh b/sp ace.sh",
+        "old mode 100644",
+        "new mode 100755",
+      ].join("\n"),
+    );
+    expect([...files.keys()].sort()).toEqual(["new space.ts", "sp ace.sh", "with space.ts"]);
+    expect(files.get("with space.ts")?.added).toEqual(new Set([1]));
+    expect([...(files.get("with space.ts")?.removedOld ?? [])]).toEqual([1]);
+    const renamed = files.get("new space.ts");
+    expect(renamed?.status).toBe("renamed");
+    expect(renamed?.oldPath).toBe("old space.ts");
+    expect(files.get("sp ace.sh")?.modeChange).toEqual(["100644", "100755"]);
+  });
+
+  test("removed lines scrub like file text, keys untouched", () => {
+    const files = parseChangeDiff(
+      [
+        "diff --git a/cfg.ts b/cfg.ts",
+        "index 1111111..2222222 100644",
+        "--- a/cfg.ts",
+        "+++ b/cfg.ts",
+        "@@ -1,2 +1,2 @@",
+        "-owner: " + "jane@acme-corp" + ".example.dev",
+        " keep",
+        "+owner: sam",
+      ].join("\n"),
+    );
+    const { files: clean, removed } = scrubChangeDels(files);
+    expect(removed).toBe(1);
+    expect(
+      clean
+        .get("cfg.ts")
+        ?.dels.get(1)
+        ?.map((d) => d.text),
+    ).toEqual(["owner: <address removed>"]);
+    expect(
+      clean
+        .get("cfg.ts")
+        ?.dels.get(1)
+        ?.map((d) => d.old),
+    ).toEqual([1]);
+    expect(changedKeys(clean)).toEqual(changedKeys(files));
+    expect(files.get("cfg.ts")?.dels.get(1)?.[0]?.text).toContain("jane@");
+  });
+
   test("changed keys, gaps and files needing names follow", () => {
     const files = parseChangeDiff(DIFF);
     const keys = changedKeys(files);
@@ -1133,6 +1224,34 @@ describe("a change from its diff", () => {
       gpath: "run.sh",
       gwhat: "mode 100644 became 100755",
       fnote: "Mode 100644 became 100755.",
+    });
+  });
+
+  test("file entries word empty adds and removes", () => {
+    const added: ChangeFile = {
+      path: "e.txt",
+      oldPath: null,
+      status: "added",
+      binary: false,
+      modeChange: null,
+      added: new Set(),
+      removedOld: new Set(),
+      dels: new Map(),
+    };
+    const removedFile: ChangeFile = { ...added, status: "removed" };
+    expect(fileNameEntry(added, null, null)).toEqual({
+      file: "e.txt",
+      what: "empty-added",
+      gpath: "e.txt",
+      gwhat: "empty file added",
+      fnote: "Empty file added.",
+    });
+    expect(fileNameEntry(removedFile, null, null)).toEqual({
+      file: "e.txt",
+      what: "empty-removed",
+      gpath: "e.txt",
+      gwhat: "empty file removed",
+      fnote: "Empty file removed.",
     });
   });
 
@@ -1309,6 +1428,33 @@ describe("a change's criteria", () => {
     } as unknown as Story;
     expect(() => checkCriterionSections(plain, BODY)).toThrow("criterion 2 has no section");
     expect(() => checkCriterionSections(story, "## Problem\n\nno criteria\n")).not.toThrow();
+  });
+
+  test("one section quoting two criteria is refused", () => {
+    const scene = { id: "t", kind: "doc", from: "issue", number: 7, label: "T", chip: "c" };
+    const shared = {
+      ticket: 7,
+      scenes: [scene],
+      steps: [
+        { id: "c1", section: "c1", scene: "t", kind: "criterion", find: ["words here"] },
+        { id: "c2", section: "c2", scene: "t", kind: "criterion", find: ["Second words"] },
+        { id: "c3", section: "c3", scene: "t", kind: "criterion", find: ["the rest"] },
+      ],
+    } as unknown as Story;
+    expect(() => checkCriterionSections(shared, BODY)).toThrow(
+      'section "c1" quotes criteria 1 and 2; one section tells one criterion',
+    );
+    const lone = {
+      ticket: 7,
+      scenes: [scene],
+      steps: [
+        { id: "c1", section: "c1", scene: "t", kind: "criterion", find: ["words here"] },
+        { id: "c3", section: "c3", scene: "t", kind: "criterion", find: ["the rest"] },
+      ],
+    } as unknown as Story;
+    expect(() => checkCriterionSections(lone, BODY)).toThrow(
+      'section "c1" quotes criteria 1 and 2; one section tells one criterion',
+    );
   });
 });
 

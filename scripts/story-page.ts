@@ -687,9 +687,11 @@ export function parseCriteria(body: string): Criterion[] {
 }
 
 /**
- * Every criterion needs its section: a step of kind `criterion` on the
+ * Every criterion needs its own section: a step of kind `criterion` on the
  * ticket's own doc scene quoting the criterion's words, as in a ticket's
- * story. The first one without is refused, naming it.
+ * story. The first one without is refused, naming it, and so is a section
+ * whose steps quote more than one criterion: one step's words can otherwise
+ * cover criteria its section never tells.
  */
 export function checkCriterionSections(story: Story, body: string): void {
   const criteria = parseCriteria(body);
@@ -697,14 +699,32 @@ export function checkCriterionSections(story: Story, body: string): void {
   const ticketScene = story.scenes.find(
     (s) => s.kind === "doc" && s.from === "issue" && s.number === story.ticket,
   )?.id;
+  const quotes = (step: Step, words: string): boolean =>
+    step.kind === "criterion" &&
+    step.scene === ticketScene &&
+    (step.find ?? []).some((f) => f !== "" && words.includes(f));
   for (const c of criteria) {
-    const covered = story.steps.some(
-      (s) =>
-        s.kind === "criterion" &&
-        s.scene === ticketScene &&
-        (s.find ?? []).some((f) => f !== "" && c.words.includes(f)),
-    );
+    const covered = story.steps.some((s) => quotes(s, c.words));
     if (!covered) throw new Error(`criterion ${c.n} has no section: "${c.words}"`);
+  }
+  const quotedBy = new Map<string, number[]>();
+  for (const s of story.steps) {
+    if (s.kind !== "criterion" || s.scene !== ticketScene) continue;
+    for (const c of criteria) {
+      if ((s.find ?? []).some((f) => f !== "" && c.words.includes(f))) {
+        const list = quotedBy.get(s.section) ?? [];
+        if (!list.includes(c.n)) list.push(c.n);
+        quotedBy.set(s.section, list);
+      }
+    }
+  }
+  const sections = [...quotedBy].sort(([a], [b]) => (a < b ? -1 : 1));
+  for (const [section, ns] of sections) {
+    if (ns.length > 1) {
+      throw new Error(
+        `section "${section}" quotes criteria ${ns.join(" and ")}; one section tells one criterion`,
+      );
+    }
   }
 }
 
@@ -792,6 +812,36 @@ function gitPath(text: string, prefix: string): string {
   return p;
 }
 
+const TAB = String.fromCharCode(9);
+
+/**
+ * A `---`/`+++` line's path, cut where git's trailing tab starts: git tabs
+ * such lines when the path holds a space, quoted or not, and a raw tab is
+ * never part of a path since real tabs arrive C-escaped.
+ */
+function headerPath(line: string): string {
+  return line.slice(4).split(TAB)[0] ?? "";
+}
+
+/**
+ * The b-side of an unquoted `diff --git` pair. Git never quotes for spaces
+ * alone, so both sides name the same path around the middle ` b/`, except
+ * for a rename, whose rename lines below carry the exact paths; until they
+ * do, the whole rest stands in as a provisional path.
+ */
+function unquotedBPath(rest: string): string {
+  if (rest.startsWith("a/")) {
+    const n = (rest.length - 5) / 2;
+    if (Number.isInteger(n) && n >= 0) {
+      const first = rest.slice(2, 2 + n);
+      if (rest.slice(2 + n, 2 + n + 3) === " b/" && rest.slice(2 + n + 3) === first) {
+        return first;
+      }
+    }
+  }
+  return rest.startsWith("a/") ? rest.slice(2) : rest;
+}
+
 /**
  * The change between the merge base and the head, from one
  * `git diff -U0 -M` with explicit prefixes: hunks for the changed lines,
@@ -809,6 +859,7 @@ export function parseChangeDiff(text: string): Map<string, ChangeFile> {
   let oldNo = 0;
   let newNo = 0;
   let anchor = 0;
+  let inHunk = false;
   const finish = (): void => {
     if (cur && oldMode !== "" && newMode !== "" && oldMode !== newMode) {
       cur.modeChange = [oldMode, newMode];
@@ -821,8 +872,8 @@ export function parseChangeDiff(text: string): Map<string, ChangeFile> {
   for (const line of text.split("\n")) {
     if (line.startsWith("diff --git ")) {
       finish();
+      inHunk = false;
       const rest = line.slice("diff --git ".length);
-      // ASCII: the two paths split on an ASCII space, quoted when holding one.
       let b = "";
       if (rest.startsWith('"')) {
         // ASCII: quoted paths and their C escapes are ASCII.
@@ -830,9 +881,7 @@ export function parseChangeDiff(text: string): Map<string, ChangeFile> {
         if (!m) throw new Error(`bad diff --git line: ${line}`);
         b = gitPath(m[2] ?? "", "b/");
       } else {
-        const parts = rest.split(" ");
-        if (parts.length !== 2) throw new Error(`bad diff --git line: ${line}`);
-        b = gitPath(parts[1] ?? "", "b/");
+        b = unquotedBPath(rest);
       }
       cur = {
         path: b,
@@ -866,10 +915,10 @@ export function parseChangeDiff(text: string): Map<string, ChangeFile> {
         cur.status = "renamed";
         files.set(to, cur);
       }
-    } else if (line.startsWith("--- ")) {
-      minus = line.slice(4);
-    } else if (line.startsWith("+++ ")) {
-      const p = line.slice(4);
+    } else if (line.startsWith("--- ") && !inHunk) {
+      minus = headerPath(line);
+    } else if (line.startsWith("+++ ") && !inHunk) {
+      const p = headerPath(line);
       if (!cur) continue;
       if (p === "/dev/null") {
         if (minus !== "" && minus !== "/dev/null") {
@@ -897,19 +946,52 @@ export function parseChangeDiff(text: string): Map<string, ChangeFile> {
       // With no context, a hunk's removed lines sit before its first added line, or, when it
       // adds none, after new line c.
       anchor = newCount === 0 ? newNo + 1 : newNo;
-    } else if (cur && line.startsWith("-") && !line.startsWith("---")) {
+      // From here a - line is a removal and a + line an addition, whatever
+      // they start with: content starting with -- or ++ is content, never
+      // a header, and the counters move for every line.
+      inHunk = true;
+    } else if (cur && inHunk && line.startsWith("-")) {
       const list = cur.dels.get(anchor) ?? [];
       list.push({ old: oldNo, text: line.slice(1) });
       cur.dels.set(anchor, list);
       cur.removedOld.add(oldNo);
       oldNo += 1;
-    } else if (cur && line.startsWith("+") && !line.startsWith("+++")) {
+    } else if (cur && inHunk && line.startsWith("+")) {
       cur.added.add(newNo);
       newNo += 1;
     }
   }
   finish();
   return files;
+}
+
+/**
+ * Removed lines scrubbed as file text is: each deletion's text through the
+ * scrubber, with the count, since the diff is the one shown text the file
+ * reads never pass through. Header paths stay exact; keys and numbers are
+ * untouched.
+ */
+export function scrubChangeDels(files: Map<string, ChangeFile>): {
+  files: Map<string, ChangeFile>;
+  removed: number;
+} {
+  let removed = 0;
+  const out = new Map<string, ChangeFile>();
+  for (const [path, f] of files) {
+    const dels = new Map<number, RemovedLine[]>();
+    for (const [at, list] of f.dels) {
+      dels.set(
+        at,
+        list.map((d) => {
+          const clean = scrub(d.text);
+          removed += clean.removed;
+          return { old: d.old, text: clean.text };
+        }),
+      );
+    }
+    out.set(path, { ...f, dels });
+  }
+  return { files: out, removed };
 }
 
 /** Every changed line's key: `path:+N` added, `path:-M` removed. */
@@ -2661,6 +2743,9 @@ export function build(o: BuildOptions): string {
       headSha,
     ]);
     changes = parseChangeDiff(diffText);
+    const scrubbed = scrubChangeDels(changes);
+    changes = scrubbed.files;
+    removed += scrubbed.removed;
     for (const sc of usedScenes) {
       if (sc.kind !== "head" && sc.kind !== "base") continue;
       const cf = changeForFile(changes, sc.file);
