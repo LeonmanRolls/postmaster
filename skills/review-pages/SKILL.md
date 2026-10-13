@@ -101,7 +101,8 @@ merged. The review page stays the place for comments on lines.
      `ah`. `on-<state>` shows an element only in that state, `hl-<state>` lights it,
      `dim-<state>` fades it; every state a class names is declared in the scene.
    - `story.json`: `title`, `ticketLabel`, `ticketTitle`, optionally `ticketUrl`, `eyebrow` and
-     `footer`; `base` and `head`, the commits the change is read between; `sections` (`id`,
+     `footer` (the closing line; the default is written for the user who asked for the page and
+     points comments to the chat, so set it, and the eyebrow, for a page that others will read); `base` and `head`, the commits the change is read between; `sections` (`id`,
      `label`, `title`: the opening, one per criterion, the tests, the end); `scenes`; `steps`.
    - Scenes, each with an `id`: `{kind: "doc", from: "file", file, title, label, chip}` for
      the ticket; `{kind: "diagram", svg, states, label, chip, caption}`; `{kind: "head", file,
