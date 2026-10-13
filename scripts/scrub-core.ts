@@ -480,7 +480,7 @@ const TOKEN_SIGNAL =
   /(?:gh[pours]_|github_pat_|sk[_-](?:live|test)|sk-|xox|ya29\.|\bbearer\b|AKIA|ASIA|PRIVATE KEY|SSH2 ENCRYPTED|PuTTY-User-Key|AGE-SECRET-KEY|[:=])|^[A-Za-z0-9+/=]{20,}$/iu;
 // A dotenv value that opens one of these is composed in code, not assigned.
 const DOTENV_SPLIT = new RegExp(`["'(){}\\[\\x60]|\\$[{A-Za-z_(]`, "u");
-// A value that only names names holds no secret (oracle-102's PASS_NAMES).
+// A value that only names names holds no secret (the PASS_NAMES list of an early run's acceptance script).
 const DOTENV_LIST = new RegExp(
   `^[A-Za-z_][A-Za-z0-9_-]*(?:[,${PY_S_CLASS}]+[A-Za-z_][A-Za-z0-9_-]*)+$`,
   "u",
