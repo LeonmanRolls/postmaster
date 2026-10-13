@@ -68,7 +68,7 @@ it runs on Linux and macOS alike, its upkeep, its install scripts, what it bring
 and Socket's verdict, taking the name, the version, the publish date, the source and the
 verdict from `<tool>/scripts/run libraries facts <name> <version>` and checking the rest against
 the registry entry and the published source. List only those that pass, each as one line of the
-ticket's `## Libraries` section with its name, its exact version and what each check found; a
+ticket's `## Libraries` section with its exact npm package name, its exact version and what each check found; a
 library that fails any check is left off the list, with the reason given to the user. A check
 that cannot be read, such as a verdict the scan did not answer, fails the library. A library
 that ships a native build for one system only fails. Where a project's own instructions bar

@@ -20,6 +20,9 @@
 //                 issues and pull requests are fine.
 //     call        a name followed by ()
 //     identifier  a snake_case identifier
+//     npm-name    a ## Libraries list line whose name is not an exact npm package name. A
+//                 valid name is exempt from the file and identifier rules; the version and
+//                 the vetting words after it stay under every plain rule.
 //     mark        a decision whose mark is not (proposed) or (given by the user)
 //   in the agents' part (it must follow from the plain part)
 //     part        no ### Checks, ### Technical notes or ### Verified at <hex sha>; or no numbered
@@ -47,6 +50,7 @@
 //   exit 1  findings
 //   exit 2  not usable: usage, an unreadable file, or no `## For the agents` heading
 import { readFileSync } from "node:fs";
+import { HEADING2_RE, LIBRARIES_RE } from "./lib/library-approvals.ts";
 import {
   TECH_NOTES_RE,
   agentsIndex,
@@ -160,7 +164,35 @@ function overlaps(spans: Array<[number, number]>, a: number, b: number): boolean
   return spans.some(([x, y]) => a < y && x < b);
 }
 
-function plainLineFindings(line: string, n: number, out: Finding[]): void {
+// An exact npm package name: lowercase and URL-safe, at most 214 characters, an
+// optional @scope/ prefix, and letters, digits, hyphen, dot, underscore or tilde,
+// never starting with a dot or an underscore.
+const NPM_NAME_RE = /^(?:@[a-z0-9~-][a-z0-9._~-]*\/)?[a-z0-9~-][a-z0-9._~-]*$/u;
+
+export function isNpmPackageName(name: string): boolean {
+  return name.length > 0 && name.length <= 214 && NPM_NAME_RE.test(name);
+}
+
+// The name span of a ## Libraries list line: the first token after the bullet
+// marker, the same token readTicketLibraries reads as the name. Null when the
+// line is not a list line; "missing" for a bullet with no token.
+const LIB_BULLET_RE = /^[ \t]*[-*][ \t]+/u;
+const LIB_TOKEN_RE = /^[^ \t]+/u;
+
+function libraryNameSpan(line: string): { a: number; b: number } | "missing" | null {
+  const marker = LIB_BULLET_RE.exec(line);
+  if (marker === null) return null;
+  const token = LIB_TOKEN_RE.exec(line.slice(marker[0].length));
+  if (token === null) return "missing";
+  return { a: marker[0].length, b: marker[0].length + token[0].length };
+}
+
+function plainLineFindings(
+  line: string,
+  n: number,
+  out: Finding[],
+  fileIdentExempt: { a: number; b: number } | null = null,
+): void {
   const tick = line.indexOf(TICK);
   if (tick >= 0) {
     const close = line.indexOf(TICK, tick + 1);
@@ -185,6 +217,13 @@ function plainLineFindings(line: string, n: number, out: Finding[]): void {
       const a = m.index ?? 0;
       const b = a + m[0].length;
       if (overlaps(claimed, a, b)) continue;
+      if (
+        fileIdentExempt !== null &&
+        (kind === "file" || kind === "identifier") &&
+        overlaps([[fileIdentExempt.a, fileIdentExempt.b]], a, b)
+      ) {
+        continue;
+      }
       claimed.push([a, b]);
       out.push({ line: n, kind, text: clip(m[0], 60) });
     }
@@ -262,6 +301,24 @@ export function analyze(text: string, final: boolean): Report | null {
   const draft = first >= 0 && lines[first].startsWith("DRAFT:");
   if (draft && final) add(first + 1, "draft", clip(lines[first], 60));
 
+  // The ## Libraries section of the plain part, read the same way
+  // readTicketLibraries reads it: the first heading outside a fence, to the
+  // next level-2 heading.
+  const plainFenced = fenceMap(lines, 0, ai);
+  let libStart = -1;
+  for (let i = 0; i < ai && libStart < 0; i++) {
+    if (!plainFenced[i] && LIBRARIES_RE.test(lines[i])) libStart = i + 1;
+  }
+  let libEnd = ai;
+  if (libStart >= 0) {
+    for (let i = libStart; i < ai; i++) {
+      if (!plainFenced[i] && HEADING2_RE.test(lines[i])) {
+        libEnd = i;
+        break;
+      }
+    }
+  }
+
   // The plain part.
   let inFence = false;
   let plainWords = 0;
@@ -274,7 +331,18 @@ export function analyze(text: string, final: boolean): Report | null {
       continue;
     }
     if (inFence) continue;
-    plainLineFindings(line, i + 1, findings);
+    let exempt: { a: number; b: number } | null = null;
+    if (libStart >= 0 && i >= libStart && i < libEnd) {
+      const span = libraryNameSpan(line);
+      if (span === "missing") {
+        add(i + 1, "npm-name", "a Libraries line with no package name");
+      } else if (span !== null) {
+        const name = line.slice(span.a, span.b);
+        if (isNpmPackageName(name)) exempt = span;
+        else add(i + 1, "npm-name", `not an exact npm package name: ${clip(name, 50)}`);
+      }
+    }
+    plainLineFindings(line, i + 1, findings, exempt);
     if (!HEADING_RE.test(line)) plainWords += wordCount(line);
   }
   const critAt = lines.findIndex((l, i) => i < ai && CRITERIA_RE.test(l));
