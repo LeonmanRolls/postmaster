@@ -25,6 +25,14 @@ import { type LeverFinding, type LeverRun, leverEffect } from "./levers.ts";
 import { agreement, type Combined, combine, KINDS, type Mark, parseMarks } from "./marks.ts";
 import { type Item, itemsOf } from "./packets.ts";
 import {
+  byRule,
+  groupRows,
+  LOOP_RULES,
+  type LoopRule,
+  riseReplay,
+  roundOneWarning,
+} from "./rise.ts";
+import {
   type CommitFact,
   type FindingFact,
   type FixYieldRow,
@@ -1214,6 +1222,192 @@ export function signalsMarkdown(
   return out.join("\n");
 }
 
+export function loopRuleMarkdown(
+  sets: ReadonlyArray<[string, readonly RunInput[]]>,
+  ruleOfRun: ReadonlyMap<string, LoopRule>,
+): string {
+  const out: string[] = [
+    "# The rule the review loop ran under",
+    "",
+    "A run is pinned at dispatch to a postmaster commit and runs the loop that commit carries. The rule is read from whether the pinned commit holds the change that made the decision a script with a cap of three rounds, and the change that made the loop go on until a round finds more than the one before.",
+    "",
+  ];
+  for (const [label, inputs] of sets) {
+    out.push(
+      `## ${label}`,
+      "",
+      table(
+        [
+          "Rule",
+          "Runs",
+          "Rounds",
+          "Rounds, median",
+          "Most",
+          "Runs past three rounds",
+          "Round 1 serious, median",
+        ],
+        byRule(inputs, ruleOfRun).map((row) => [
+          LOOP_RULES.find((x) => x.rule === row.rule)?.label ?? row.rule,
+          String(row.runs),
+          String(row.rounds),
+          num(row.median, 1),
+          num(row.most, 0),
+          String(row.pastThree),
+          num(row.roundOneMedian, 1),
+        ]),
+      ),
+      "",
+    );
+  }
+  const first = sets[0]?.[1] ?? [];
+  const groups = [...new Set(first.map((r) => eraOf(r)))].sort();
+  out.push(
+    `## Group against rule, ${sets[0]?.[0] ?? ""}`,
+    "",
+    table(
+      ["Group", ...LOOP_RULES.map((x) => x.rule)],
+      groups.map((g) => [
+        g,
+        ...LOOP_RULES.map((x) =>
+          String(first.filter((r) => eraOf(r) === g && ruleOfRun.get(r.run) === x.rule).length),
+        ),
+      ]),
+    ),
+    "",
+    "## Group A split at 29 September, against B and C",
+    "",
+    table(
+      [
+        "Group",
+        "Runs",
+        "Rounds",
+        "Rounds, median (mean)",
+        "Round 1 serious, median",
+        "Serious in all, median",
+        "Criteria, median",
+        "Lines changed, median",
+        "Serious per criterion, median",
+        "Serious per 1,000 lines, median",
+      ],
+      groupRows(first, ruleOfRun).map((g) => [
+        g.label,
+        String(g.runs),
+        String(g.rounds),
+        `${num(g.roundsMedian, 1)} (${num(g.roundsMean, 1)})`,
+        num(g.roundOneMedian, 1),
+        num(g.seriousMedian, 1),
+        num(g.criteriaMedian, 1),
+        num(g.linesMedian, 0),
+        num(g.perCriterionMedian, 1),
+        num(g.perThousandLinesMedian, 1),
+      ]),
+    ),
+    "",
+    preparationMarkdown(
+      first.filter((r) => eraOf(r).startsWith("A") && ruleOfRun.get(r.run) !== "until-clean"),
+      first.filter((r) => eraOf(r).startsWith("B")),
+      "one-part ticket from 29 September",
+      "two-part ticket",
+    ),
+    preparationMarkdown(
+      first.filter((r) => eraOf(r).startsWith("A") && ruleOfRun.get(r.run) === "until-clean"),
+      first.filter((r) => eraOf(r).startsWith("A") && ruleOfRun.get(r.run) !== "until-clean"),
+      "one-part ticket before 29 September",
+      "one-part ticket from 29 September",
+    ),
+    preparationMarkdown(
+      first.filter((r) => eraOf(r).startsWith("A") && ruleOfRun.get(r.run) !== "until-clean"),
+      first.filter((r) => eraOf(r).startsWith("C")),
+      "one-part ticket from 29 September",
+      "two-part ticket, single thread",
+    ),
+    "## Round 1 as a warning: five or more serious findings in round 1",
+    "",
+    table(
+      [
+        "Set",
+        "Runs",
+        "Rounds",
+        "Runs flagged",
+        "Rounds in them",
+        "Runs of 6 or more",
+        "Of them, flagged",
+        "Rounds, median, flagged",
+        "Rounds, median, not flagged",
+      ],
+      [
+        ...sets.map(([label, inputs]): [string, readonly RunInput[]] => [label, inputs]),
+        [
+          "The 61 runs, before 29 September",
+          first.filter((r) => ruleOfRun.get(r.run) === "until-clean"),
+        ],
+        [
+          "The 61 runs, from 29 September",
+          first.filter((r) => ruleOfRun.get(r.run) !== "until-clean"),
+        ],
+      ].map(([label, inputs]) => {
+        const w = roundOneWarning(inputs as readonly RunInput[], 5);
+        return [
+          label as string,
+          String(w.runs),
+          String(w.rounds),
+          String(w.flagged),
+          String(w.flaggedRounds),
+          String(w.long),
+          String(w.longFlagged),
+          num(w.roundsMedianFlagged, 1),
+          num(w.roundsMedianNot, 1),
+        ];
+      }),
+    ),
+    "",
+    "## The rule in force, replayed over each run's serious findings per round",
+    "",
+    "A round that logged more serious findings than the round before is a rise. Under the rule in force a rise stops the loop for a ruling, an equal or lower count goes on and a round with none ends it. What followed a rise in these runs is what the rule then in force led to.",
+    "",
+  );
+  const head = [
+    "Set",
+    "Runs",
+    "Rose",
+    "First rise at round 2",
+    "at round 3",
+    "at round 4",
+    "at round 5 or later",
+    "Rounds, median, rose",
+    "Rounds, median, never rose",
+    "Runs of 6 or more",
+    "Of them, rose",
+    "Rounds after a first rise",
+    "All rounds",
+  ];
+  out.push(
+    table(
+      head,
+      sets.map(([label, inputs]) => {
+        const r = riseReplay(inputs);
+        const at = (n: number): number => r.firstRounds.filter((x) => x === n).length;
+        return [
+          label,
+          String(r.runs),
+          String(r.rose),
+          String(at(2)),
+          String(at(3)),
+          String(at(4)),
+          String(r.firstRounds.filter((x) => x >= 5).length),
+          num(r.roundsMedianRose, 1),
+          num(r.roundsMedianNever, 1),
+          String(r.long),
+          String(r.longRose),
+          String(r.roundsAfterFirstRise),
+          String(r.rounds),
+        ];
+      }),
+    ),
+  );
+  return `${out.join("\n")}\n`;
+}
+
 const arg = (args: string[], name: string): string | undefined => {
   const at = args.indexOf(name);
   return at >= 0 ? args[at + 1] : undefined;
@@ -1247,6 +1441,20 @@ const main = (args: string[]): void => {
     join(dir, "features.md"),
     `${featuresMarkdown(inputs)}\n${fiveCriteriaMarkdown(criteriaSets)}`,
   );
+  const ruleFile = join(dir, "loop-rule.json");
+  if (existsSync(ruleFile)) {
+    const rules = new Map<string, LoopRule>();
+    for (const r of (
+      JSON.parse(readFileSync(ruleFile, "utf8")) as {
+        runs: Array<{ run: string; rule: LoopRule | null }>;
+      }
+    ).runs) {
+      if (r.rule) rules.set(r.run, r.rule);
+    }
+    const ruleSets: Array<[string, readonly RunInput[]]> = [["The 61 runs", inputs]];
+    if (laterRowsForFeatures) ruleSets.push(["The later set", laterRowsForFeatures]);
+    writeFileSync(join(dir, "loop-rule.md"), loopRuleMarkdown(ruleSets, rules));
+  }
   const eraOfRun = new Map(inputs.map((r) => [r.run, eraOf(r).slice(0, 1)]));
   const filledSerious = sum(first.map((r) => sum(r.seriousBest) - sum(r.seriousByRound)));
   writeFileSync(

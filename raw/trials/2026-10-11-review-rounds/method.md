@@ -175,6 +175,34 @@ arbitrary program, so the question is which observable signs do in these runs.
   next, which holds the reviewers, the coachman's judging and fixing, the gate and any wait for the
   user, and a reviewer lane's own time from its launch line to its `.done` marker.
 
+## The loop's rule, the replay and the date split
+
+Added on 2026-10-13, after main had moved. The runs were first read as if one rule of the loop
+stood. Three did.
+
+**The rule of a run.** A run is pinned at dispatch to a postmaster commit, which its `run.json`
+records, and runs the loop that commit carries. Two changes are the boundaries. The first made the
+decision a script with a cap of three rounds (`46f02902`, in main by the merge of 29 September
+06:16 UTC, ticket #80). The second made the loop go on until a round finds more serious defects
+than the one before, with no cap (`c07793e6`, in main by the merge of 9 October 09:19 UTC, ticket
+#316). `loop-rule.ts` asks git whether each pinned commit has each change among its ancestors.
+Controls: each boundary holds itself and its parent does not; the three rules add to the 61 runs
+and 260 rounds, and to the 18 runs and 74 rounds of the later set.
+
+**The replay.** `rise.ts` reads a run's serious findings per round and finds the first round, from
+2, that logged more than the round before. That is where the rule in force would have stopped the
+loop for a ruling. Controls: `[3, 5]` rises at round 2 and `[5, 3, 0]` and `[4, 4, 0]` do not; the
+runs counted are the 61 and the rounds the 260.
+
+**The date split and round 1 as a warning.** `rise.ts` splits group A at the first boundary and
+counts the runs with five or more serious findings in round 1. `render.ts` prints both, with the
+comparisons of the preparation table, into `results/loop-rule.md`. Controls: the two parts of A add
+to the whole (34 runs, 169 rounds), and the whole equals the A row of `features.md`, as B does.
+
+**What this does not do.** The replay is after the fact, and no ruling was made at those rises.
+The date split moves together with the ticket, the flow and the reviewers. The facts about the
+loop come from `scripts/review-decide.ts` and the coachman runbook at the commits named.
+
 ## The readers
 
 Three marks of each later finding that has text, 309 of the 382, are judgements about prose and are
@@ -257,6 +285,8 @@ bun --no-env-file --config=/dev/null apparatus/packets.ts --project <repo> --leg
     --items results/items.tsv
 bun --no-env-file --config=/dev/null apparatus/adjudicate.ts --readers readers \
     --items results/items.tsv --n 24 --seed 400 --out <file>
+bun --no-env-file --config=/dev/null apparatus/loop-rule.ts --results results --repo <checkout> \
+    --scripted 46f02902 --rise c07793e6
 bun --no-env-file --config=/dev/null apparatus/render.ts --results results \
     --cut 2026-10-09T22:30:00Z --later findings-later.json
 bun --no-env-file --config=/dev/null apparatus/controls.ts --results results --repo <checkout> \
@@ -267,6 +297,7 @@ bun test apparatus/
 The run folders are needed for `inventory.ts`, `trace.ts`, `lanes.ts` and `packets.ts` and for
 nothing else. A reader without them runs `render.ts` and `controls.ts` on the committed data:
 `results/runs.json`, `findings.json`, `findings-later.json`, `lane-rounds.json`,
-`lane-rounds-later.json`, and `readers/` with the readers' marks and `adjudication.tsv`. They write
-every table of `results/`. `inventory.ts`, `trace.ts`, `lanes.ts` and `packets.ts` refuse to write
+`lane-rounds-later.json`, `loop-rule.json`, and `readers/` with the readers' marks and
+`adjudication.tsv`. They write every table of `results/`. `loop-rule.ts` needs a checkout of the
+project and not the run folders. `inventory.ts`, `trace.ts`, `lanes.ts` and `packets.ts` refuse to write
 anything that names a path, a thread or a session.
