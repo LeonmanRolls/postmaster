@@ -6561,7 +6561,7 @@ describe("the install guard arms lanes", () => {
     });
   });
 
-  test("probeLoginEscape names the escape and stays silent when clean", () => {
+  test("probeLoginEscape names the escape the profile adds", () => {
     withTempDir((tmp) => {
       const d = join(tmp, "run");
       const bin = ensureGuardBin(d, TOOL);
@@ -6571,11 +6571,15 @@ describe("the install guard arms lanes", () => {
       mkdirSync(shadow, { recursive: true });
       writeFileSync(join(shadow, "npm"), "#!/bin/sh\nexit 0\n");
       chmodSync(join(shadow, "npm"), 0o755);
+      // The baseline is whatever this machine's login shells resolve: macOS
+      // /etc/profile reorders PATH, so the test never asserts it is empty.
+      const probe = () => probeLoginEscape({ guardBin: bin, env: { ...process.env, HOME: home } });
+      const baseline = probe();
+      expect(baseline).not.toContain(`npm:${join(shadow, "npm")}`);
       writeFileSync(join(home, ".profile"), `PATH="${shadow}:$PATH"\n`);
-      const escaped = probeLoginEscape({ guardBin: bin, env: { ...process.env, HOME: home } });
-      expect(escaped).toContain(`npm:${join(shadow, "npm")}`);
+      expect(probe()).toContain(`npm:${join(shadow, "npm")}`);
       rmSync(join(home, ".profile"));
-      expect(probeLoginEscape({ guardBin: bin, env: { ...process.env, HOME: home } })).toBe("");
+      expect(probe()).toBe(baseline);
     });
   });
 
