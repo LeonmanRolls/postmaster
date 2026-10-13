@@ -1632,6 +1632,7 @@ export function fileNameEntry(
             ? `binary file changed, ${baseBytes} bytes became ${headBytes} bytes`
             : "binary file changed";
     const rename = f.oldPath === null ? "" : `, renamed from ${f.oldPath}`;
+    // ASCII: the sentence starts from a constructed English word's first letter.
     const sentence = `${words[0]?.toUpperCase() ?? ""}${words.slice(1)}${rename}.`;
     return {
       file: f.path,
