@@ -876,8 +876,9 @@ export function parseChangeDiff(text: string): Map<string, ChangeFile> {
       const rest = line.slice("diff --git ".length);
       let b = "";
       if (rest.startsWith('"')) {
-        // ASCII: quoted paths and their C escapes are ASCII.
-        const m = /^"((?:[^"\\]|\\.)*)" "((?:[^"\\]|\\.)*)"$/u.exec(rest);
+        // ASCII: quoted paths and their C escapes are ASCII. The b-side may
+        // be plain: git quotes each side on its own, so a rename can mix them.
+        const m = /^"((?:[^"\\]|\\.)*)" (.*)$/u.exec(rest);
         if (!m) throw new Error(`bad diff --git line: ${line}`);
         b = gitPath(m[2] ?? "", "b/");
       } else {

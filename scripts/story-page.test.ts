@@ -1111,6 +1111,27 @@ describe("a change from its diff", () => {
     expect(files.get("sp ace.sh")?.modeChange).toEqual(["100644", "100755"]);
   });
 
+  test("mixed-quoted renames read either way", () => {
+    const files = parseChangeDiff(
+      [
+        'diff --git "a/caf\\303\\251.txt" b/cafe.txt',
+        "similarity index 100%",
+        'rename from "caf\\303\\251.txt"',
+        "rename to cafe.txt",
+        'diff --git a/cafe2.txt "b/caf\\303\\251-2.txt"',
+        "similarity index 100%",
+        "rename from cafe2.txt",
+        'rename to "caf\\303\\251-2.txt"',
+      ].join("\n"),
+    );
+    const first = files.get("cafe.txt");
+    expect(first?.status).toBe("renamed");
+    expect(first?.oldPath).toBe("café.txt");
+    const second = files.get("café-2.txt");
+    expect(second?.status).toBe("renamed");
+    expect(second?.oldPath).toBe("cafe2.txt");
+  });
+
   test("removed lines scrub like file text, keys untouched", () => {
     const files = parseChangeDiff(
       [
