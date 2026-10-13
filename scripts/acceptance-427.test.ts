@@ -128,7 +128,10 @@ describe("C4: the clerk considers libraries for every ticket", () => {
 
   test("the passage names no project, package manager or library", () => {
     const s = prepareSection();
-    for (const name of ["npm", "pnpm", "yarn", "pip", "cargo", "gem", "go get", "PyPI", "crates"]) {
+    // The ruling names the exact npm package name as what each Libraries line
+    // carries; that phrase alone may say npm.
+    expect(s.replaceAll("npm package name", "")).not.toContain("npm");
+    for (const name of ["pnpm", "yarn", "pip", "cargo", "gem", "go get", "PyPI", "crates"]) {
       expect(s).not.toContain(name);
     }
   });
@@ -156,5 +159,6 @@ describe("C5: the clerk vets each library before listing it", () => {
     expect(s).toContain("libraries facts");
     expect(s).toContain("only those that pass");
     expect(s).toContain("left off the list");
+    expect(s).toContain("npm package name");
   });
 });
