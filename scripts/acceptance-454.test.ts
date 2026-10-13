@@ -101,8 +101,8 @@ describe("C1: one message per thing that came up", () => {
     try {
       makeRun(sb, "1", { waiting: "QUESTION-SEALED-1", card: true });
       const r = await look(sb);
-      expectCode(r, 0);
-      expect(r.out).toContain("needs 1 GATE");
+      expectCode(r, 3);
+      expect(r.out).toContain("USER");
       const bodies = sendBodies(sb);
       expect(bodies.length).toBe(1);
       expect(bodies[0]!.text).toContain("the ship card awaits your word");
@@ -117,10 +117,13 @@ describe("C1: one message per thing that came up", () => {
     try {
       makeTicket(sb, "third title");
       const w = makeRun(sb, "1");
+      makeRun(sb, "2");
+      const landed = makeRun(sb, "3", { stage: "shipping" });
+      await look(sb);
+      expect(sendBodies(sb).length).toBe(0);
       addWall(sb, w, "luna", "2026-06-15T12:00:00+00:00", "PROVIDER-UTTERANCE-1");
       addWall(sb, w, "haiku", "none", "PROVIDER-UTTERANCE-2");
-      makeRun(sb, "2", { waiting: "QUESTION-SEALED-2" });
-      const landed = makeRun(sb, "3", { stage: "shipping" });
+      writeFileSync(join(sb.runs, "2", ".waiting-on-user"), "QUESTION-SEALED-2");
       shipRun(sb, landed);
       const r = await look(sb);
       expectCode(r, 0);
@@ -196,6 +199,8 @@ describe("C1: one message per thing that came up", () => {
     const sb = makeNotifySandbox();
     try {
       const d = makeRun(sb, "1", { stage: "shipping" });
+      await look(sb);
+      expect(sendBodies(sb).length).toBe(0);
       shipRun(sb, d);
       const r = await look(sb);
       expectCode(r, 3);
@@ -464,18 +469,20 @@ describe("C4: a failed send never stops the work", () => {
       expect(r2.err).not.toContain("notify");
       expect(r3.err).not.toContain("notify");
       expect(failedLedgerLines(sb).length).toBe(1);
+      const failedAttempts = sendBodies(sb).length;
+      expect(failedAttempts).toBe(3);
       sb.standin.setMode({ kind: "ok" });
       const r4 = await look(sb);
       expectCode(r4, 3);
-      expect(sendBodies(sb).length).toBe(1);
-      expect(sendBodies(sb)[0]!.text).toContain("#2");
+      expect(sendBodies(sb).length).toBe(failedAttempts + 1);
+      expect(sendBodies(sb)[failedAttempts]!.text).toContain("#2");
       sb.standin.setMode({ kind: "status", code: 500 });
       rmSync(join(sb.runs, "2", ".waiting-on-user"));
       writeFileSync(join(sb.runs, "2", ".waiting-on-user"), "QUESTION-SEALED-3");
       const r5 = await look(sb);
       expectCode(r5, 3);
       expect(r5.err).toContain("notify");
-      expect(sendBodies(sb).length).toBe(1);
+      expect(sendBodies(sb).length).toBe(failedAttempts + 2);
       expect(failedLedgerLines(sb).length).toBe(2);
     } finally {
       removeSandbox(sb);
