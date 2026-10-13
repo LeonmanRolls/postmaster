@@ -423,6 +423,8 @@ limits.reviewer.tasks_max? (default)          reviewer process cap override`
     }
 tracker                    github             github, plane, local or other
 confine                    off                lane confinement, on or off (see run probe-confine)
+messages                   none               telegram messages when something needs you: none or telegram
+messages.env_file          ~/.postmaster/telegram.env   telegram only; holds TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID
 plane.url                  https://api.plane.so   plane only
 plane.workspace                               plane only; the slug in the workspace's web URL
 plane.env_file             ~/.postmaster/plane.env   plane only; holds PLANE_API_KEY=<key>
@@ -980,6 +982,32 @@ if (CONFINE === "on") {
 }
 
 console.log("");
+console.log("== Telegram messages when something needs you or a run lands. ==");
+const MSG = ask(
+  "Telegram messages (none, telegram)",
+  PROJECT !== "" ? "" : "none",
+  "messages",
+  opts,
+);
+if (MSG !== "" && MSG !== "none" && MSG !== "telegram")
+  die("setup: messages must be none or telegram", 1);
+let MSGENV = "";
+if (MSG === "telegram") {
+  MSGENV = ask(
+    "  file holding TELEGRAM_BOT_TOKEN=<token> and TELEGRAM_CHAT_ID=<chat>, written by you, never pasted here",
+    PROJECT !== "" ? "" : "~/.postmaster/telegram.env",
+    "messages.env_file",
+    opts,
+  );
+  if (PROJECT === "") {
+    console.log(
+      "  write that file yourself, then confirm with scripts/run notify test; " +
+        "where this machine limits network hosts, allow api.telegram.org first",
+    );
+  }
+}
+
+console.log("");
 const PMC = ask(
   "May the postmaster create tickets without asking (yes/no)",
   PROJECT !== "" ? "" : "no",
@@ -1096,6 +1124,10 @@ if (PROJECT !== "") {
   if (OTHER !== "") trackerParts.push(`name = "${OTHER}"`);
   if (PMC !== "") trackerParts.push(`postmaster_may_create = ${PMC === "yes" ? "true" : "false"}`);
   if (trackerParts.length > 0) sections.push(`[tracker]\n${trackerParts.join("\n")}\n`);
+  const notifyParts: string[] = [];
+  if (MSG !== "") notifyParts.push(`channel = "${MSG}"`);
+  if (MSGENV !== "") notifyParts.push(`env_file = "${MSGENV}"`);
+  if (notifyParts.length > 0) sections.push(`[notify]\n${notifyParts.join("\n")}\n`);
   if (PS !== "") sections.push(`[postmaster]\npoll_seconds = ${PS}\n`);
   if (RT !== "") sections.push(`[review]\nround_timeout_seconds = ${RT}\n`);
   const planningParts: string[] = [];
@@ -1332,6 +1364,8 @@ const dateStr = new Date().toISOString().slice(0, 10);
 const LIMITS_BLOCK = onLinux
   ? `[limits]\nmemory_max = "${LM}"\ntasks_max = ${LT}\n${LIMIT_ROLE_TABLES}\n`
   : "";
+const NOTIFY_BLOCK =
+  MSG === "telegram" ? `[notify]\nchannel = "telegram"\nenv_file = "${MSGENV}"\n\n` : "";
 const OUT = `# Written by scripts/run setup on ${dateStr}. Shape: config.example.toml.
 projects_roots = ${tomlList(ROOTS)}
 confine = "${CONFINE}"
@@ -1357,7 +1391,7 @@ kind = "${TK}"
 ${TRACKER_EXTRA}
 postmaster_may_create = ${PMC === "yes" ? "true" : "false"}
 
-[review]
+${NOTIFY_BLOCK}[review]
 round_timeout_seconds = ${RT}
 
 [planning]

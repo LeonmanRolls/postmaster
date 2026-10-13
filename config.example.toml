@@ -127,6 +127,20 @@ kind = "github"
 # name = "<tracker>"                     # other only
 postmaster_may_create = false   # true lets the postmaster create tickets without asking
 
+# Telegram messages when something needs you or a run lands
+# (skills/postmaster/notifications.md): one short message per thing that came
+# up, none for anything else. Off until this table names telegram: with no
+# table, or channel "none", the flow behaves as today. The token and the chat
+# live in env_file, written by you, never pasted anywhere: two lines,
+# TELEGRAM_BOT_TOKEN=<token> and TELEGRAM_CHAT_ID=<chat>, mode 0600, outside
+# any git checkout. Confirm with scripts/run notify test; where the machine
+# limits network hosts, allow api.telegram.org first. A project's own settings
+# may switch messages off for that project alone.
+[notify]
+channel = "none"
+# channel = "telegram"
+# env_file = "~/.postmaster/telegram.env"
+
 [review]
 # Seconds a review round may run; a run keeps the value recorded in its run.json at dispatch.
 # A reviewer still running at the limit is stopped and recorded DEGRADED, with timeout as the
