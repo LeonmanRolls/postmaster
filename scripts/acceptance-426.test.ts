@@ -1294,7 +1294,13 @@ describe("C6: the fixture mechanics", () => {
   test("fixture new still makes a repository on this branch", async () => {
     const dest = join(tmp, "c6-fixture");
     const r = run(RUN, ["fixture", "new", dest, "remove"], {
-      env: process.env as Record<string, string>,
+      env: {
+        ...(process.env as Record<string, string>),
+        GIT_AUTHOR_NAME: "fixture",
+        GIT_AUTHOR_EMAIL: "fixture@example.invalid",
+        GIT_COMMITTER_NAME: "fixture",
+        GIT_COMMITTER_EMAIL: "fixture@example.invalid",
+      },
     });
     expect(r.code).toBe(0);
     expect(existsSync(join(dest, "package.json"))).toBe(true);
