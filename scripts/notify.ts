@@ -42,7 +42,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { parseTicketRead } from "./clerk.ts";
 import { tryTomlFile } from "./lib/data.ts";
 import {
@@ -668,7 +668,7 @@ export async function scanRoot(root: string): Promise<void> {
     if (prev === null) {
       if (!writeState(d, current)) {
         recordFailure(root, `cannot keep the message record in ${d}`);
-        return;
+        continue;
       }
       states.set(d, current);
     } else {
@@ -678,9 +678,11 @@ export async function scanRoot(root: string): Promise<void> {
   if (!settings.on) return;
   let events: NotifyEvent[] = [];
   for (const d of runs) {
-    events = events.concat(
-      collectEvents(basename(d), d, readWalls(d), readActionRows(d), states.get(d)!),
-    );
+    const st = states.get(d);
+    // A run whose record cannot be kept waits for a writable look; every
+    // other run's messages go.
+    if (st === undefined) continue;
+    events = events.concat(collectEvents(basename(d), d, readWalls(d), readActionRows(d), st));
   }
   if (events.length === 0) return;
   events.sort(
@@ -752,6 +754,30 @@ function displayTicket(kind: string | null, id: string): string {
   return `#${id}`;
 }
 
+/** Whether the project ledger already holds the clerk's message for this
+ * ticket, so a resumed clerk step sends it once. An unreadable ledger
+ * reads as unsent: the first message must go. */
+function clerkAlreadySent(repo: string, display: string): boolean {
+  let text: string;
+  try {
+    text = readFileSync(join(resolve(repo), ".postmaster", "runs", "ledger.jsonl"), "utf8");
+  } catch {
+    return false;
+  }
+  for (const line of text.split("\n")) {
+    if (line.trim() === "") continue;
+    let e: unknown = null;
+    try {
+      e = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!isRecord(e)) continue;
+    if (e.actor === "clerk" && e.action === "notify" && e.target === display) return true;
+  }
+  return false;
+}
+
 async function clerkCmd(repo: string, ticketArg: string): Promise<number> {
   const resolved = effectiveConfigForProject(repo);
   if (resolved.notice !== null) console.error(resolved.notice);
@@ -769,6 +795,7 @@ async function clerkCmd(repo: string, ticketArg: string): Promise<number> {
   const kind = trackerKindOf(repo);
   const title = kind === null ? null : ticketTitle(repo, kind, id);
   const display = displayTicket(kind, id);
+  if (clerkAlreadySent(repo, display)) return 0;
   const project = basename(repo.replace(/\/+$/u, ""));
   const line = buildLine(
     project,
