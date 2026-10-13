@@ -173,8 +173,7 @@ export function parseNotifyDetail(detail: string): {
 export function runTicket(runName: string): { display: string; lookup: string | null } {
   const m = /^([0-9]+)/u.exec(runName);
   if (m) return { display: `#${m[1]}`, lookup: m[1]! };
-  if (/^[A-Za-z][A-Za-z0-9]*-[0-9]+$/u.test(runName))
-    return { display: runName, lookup: runName };
+  if (/^[A-Za-z][A-Za-z0-9]*-[0-9]+$/u.test(runName)) return { display: runName, lookup: runName };
   return { display: runName, lookup: null };
 }
 
