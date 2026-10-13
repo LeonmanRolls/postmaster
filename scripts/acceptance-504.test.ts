@@ -95,7 +95,7 @@ describe("C2: with the setting on the pull request opens as a draft", () => {
     const s = standin("c2");
     const cfg = globalConfig();
     const setup = expectOk(projectSetup(s.repo, "draft_pull_requests=on", cfg), "setup --project");
-    expect(setup.out).toContain("draft_pull_requests");
+    expect(setup.out).toContain("Draft pull requests (on, off): on");
     const settings = readFileSync(join(s.repo, ".postmaster", "settings.toml"), "utf8");
     expect(settings).toContain('draft_pull_requests = "on"');
     expectOk(recordRun(s.dispatch, s.repo, cfg), "run-meta");

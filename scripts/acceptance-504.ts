@@ -76,14 +76,14 @@ case "$op" in
     cat "$GH504_DIR/list.json" 2>/dev/null || echo "[]"
     ;;
   create)
-    if [ -f "$GH504_DIR/create.fail" ]; then
-      cat "$GH504_DIR/create.fail" >&2
-      exit 1
-    fi
     draft="false"
     for a in "$@"; do
       if [ "$a" = "--draft" ]; then draft="true"; fi
     done
+    if [ "$draft" = "true" ] && [ -f "$GH504_DIR/create.fail" ]; then
+      cat "$GH504_DIR/create.fail" >&2
+      exit 1
+    fi
     echo "$draft" > "$GH504_DIR/isdraft"
     cat "$GH504_DIR/pr-url" 2>/dev/null || echo "https://github.com/example/repo/pull/1"
     ;;
