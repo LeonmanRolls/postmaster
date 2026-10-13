@@ -2787,7 +2787,7 @@ describe("wait and the round's reach check", () => {
         writeFileSync(taskFile, '{"type":"result","result":"done"}\n');
         writeFileSync(
           join(d, "logs", "review-r1-bug-ghost.jsonl"),
-          `${JSON.stringify({ type: "system", subtype: "task_notification", output_file: taskFile })}\n`,
+          `${JSON.stringify({ type: "system", subtype: "task_notification", summary: "/code-review", output_file: taskFile })}\n`,
         );
         writeFileSync(join(d, "logs", "review-r1-bug-ghost.done"), "");
         const r = run(self, ["review-round", "wait", d, "1", repo, "bug:ghost"]);
