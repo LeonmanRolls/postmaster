@@ -39,3 +39,8 @@
 #
 # [tracker]
 # binding = "the board, workspace or team name for this checkout"
+#
+# Telegram messages off for this project alone; the global [notify] stays for
+# every other project.
+# [notify]
+# channel = "none"
