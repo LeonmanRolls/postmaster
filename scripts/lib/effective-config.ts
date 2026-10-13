@@ -538,6 +538,7 @@ export const GLOBAL_KEYS = new Set([
   "review",
   "planning",
   "ship",
+  "notify",
 ]);
 
 const CONFIG_TABLE_KEYS = new Set([
@@ -549,6 +550,7 @@ const CONFIG_TABLE_KEYS = new Set([
   "review",
   "planning",
   "ship",
+  "notify",
 ]);
 
 export const validateCommon = (data: Rec, label: string, local: boolean): Rec => {

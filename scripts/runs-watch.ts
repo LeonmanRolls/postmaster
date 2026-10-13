@@ -43,6 +43,11 @@
 // INSPECT (a stall, or an attempt without its record), and any step the watcher could not
 // complete. USER (already put to the user), WAIT (a leg at work) and - (closed) never do.
 //
+// On every look it also sends the user's message for that look through run notify scan,
+// where messages are on (skills/postmaster/notifications.md): one request with a line
+// per thing that came up, held runs included. A send that fails is recorded once and
+// never changes the exit.
+//
 // It looks at once, then every postmaster.poll_seconds (default 120) from the watched
 // project's effective config (POSTMASTER_CONFIG overrides the path). A run listed in
 // <runs>/postmaster/held, one ticket
@@ -733,7 +738,7 @@ function repoFromChecks(dispatch: string): string {
 }
 
 /** The target repo, from the waybill or the recorded checks. */
-function runRepo(dispatch: string): string | null {
+export function runRepo(dispatch: string): string | null {
   const brief = repoFromBrief(dispatch);
   if (brief.startsWith("/")) return brief;
   const checks = repoFromChecks(dispatch);
@@ -1684,6 +1689,11 @@ function watch(root: string, config: string, timeout: number | null): never {
     // name it wakes to, and the ceiling is checked here, not there.
     const room = Math.max(seen.capacity - activeRunCount(root), 0);
     const readyNeeds = ready.slice(0, room).map((id) => `needs READY ${id}`);
+    // The user's message for the look, where messages are on: one request
+    // with a line per thing that came up, held runs included. Silent unless
+    // a send newly fails, and never changing this exit (notify.ts).
+    const scanned = run(statusSh, ["notify", "scan", root]);
+    if (scanned.err) process.stderr.write(scanned.err);
     if (steps.needs.length > 0 || readyNeeds.length > 0) {
       process.stdout.write(`${table}\n${[...steps.needs, ...readyNeeds].join("\n")}\n`);
       process.exit(0);
