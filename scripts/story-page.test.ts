@@ -1493,6 +1493,23 @@ describe("a change's criteria", () => {
     ]);
   });
 
+  test("criterion items take the gate's paren, indent and bare forms", () => {
+    const eol = String.fromCharCode(10);
+    const body = [
+      "## Acceptance criteria",
+      "",
+      "1) Paren form.",
+      "   2. Indented form.",
+      "3.",
+      "Text on the line below.",
+    ].join(eol);
+    expect(parseCriteria(body)).toEqual([
+      { n: 1, words: "Paren form." },
+      { n: 2, words: "Indented form." },
+      { n: 3, words: "Text on the line below." },
+    ]);
+  });
+
   test("every criterion needs its section quoting its words", () => {
     const story = {
       ticket: 7,
