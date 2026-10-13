@@ -86,6 +86,13 @@ repository the change belongs to.
 6. The page is for reading: it takes no comments and has no verdict. The user answers in
    the chat and edits the ticket in its document, as now.
 
+## A story page for a change
+
+1. Write the story beside the ticket: a `story.json` naming the base and the head instead of `at` (no `mode`, no pull request), the sections (the opening, one per acceptance criterion, the end), the scenes (the picture, as the ticket's, and the ticket's text; a drawing per part with named states; files at the head with `head` and at the merge base with `base`; the list of changed lines and files no step shows) and the steps (a title, two to four sentences, the scene, and what it lights), with each drawing as an SVG beside it. Every criterion needs its section quoting its words, every section its drawing before its code, and every touched file a step or the list. Any agent can write one: the checks refuse a criterion with no section and a line or file on neither a step nor the list.
+2. Build it: `<tool>/scripts/run story-page build <repo> <story-dir> <dir> --ticket-body <ticket.json>`, with the base and the head in `story.json` and the ticket's `{title, body}` in `<ticket.json>`. The builder reads the diff, the code and the commits from git in `<repo>` and nothing from GitHub, so it works on a branch that was never pushed, in a repository with no remote. It writes `index.html`, `sheet.html`, `build.json` and the picture only when every check passes. The page says which version of the branch it tells: the branch, its head commit and the base it was compared with.
+3. Look at the picture and the sheet at phone width, in light and dark. `<tool>/scripts/run story-page check <dir> --ticket-body <ticket.json> --repo <repo>` says whether a built story is still the branch's head; a new version of the branch gets a new story, rebuilt with `--keep-picture` so it keeps its picture.
+4. Publish `index.html` as one file and stop this session's watch on it.
+
 ## Never
 
 - Share a page, or publish one that holds a credential, a home path, a host name, an email
