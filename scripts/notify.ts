@@ -283,9 +283,14 @@ export function readEnvFile(rawPath: string): EnvResult {
   if (origin === "") return { ok: true, secrets: { token, chat, origin: DEFAULT_ORIGIN } };
   const bad = originError(origin);
   if (bad !== null) {
+    // The origin echoes back, so a token misfiled into this key would print:
+    // redact what this file already parsed before refusing.
     return {
       ok: false,
-      refusal: `TELEGRAM_API_ORIGIN in ${path} is ${bad}; only a loopback address may override the API origin`,
+      refusal: redact(
+        `TELEGRAM_API_ORIGIN in ${path} is ${bad}; only a loopback address may override the API origin`,
+        [token, chat],
+      ),
     };
   }
   return { ok: true, secrets: { token, chat, origin } };
