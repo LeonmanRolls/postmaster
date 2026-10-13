@@ -1266,11 +1266,19 @@ export const inspect = (repo: string, opts?: { storePath?: string }): Rec => {
 };
 
 // --- writes ----------------------------------------------------------------------------------------
-// The folder's own ignore rules: run records, drafts and local verifiers stay
-// ignored whatever the user answers. The person's settings file is never
-// ignored here: setup offers to have git ignore it, and only the user's yes
-// adds that rule (ignoreSettings).
-const IGNORE_RECORDS = ["runs/", "clerk/", "project.toml", "verifier/", ".gitignore"] as const;
+// The folder's own ignore rules: run records, drafts, local verifiers and the
+// experiments record stay ignored whatever the user answers. The person's
+// settings file is never ignored here: setup offers to have git ignore it,
+// and only the user's yes adds that rule (ignoreSettings).
+const IGNORE_RECORDS = [
+  "runs/",
+  "clerk/",
+  "project.toml",
+  "verifier/",
+  "experiments.jsonl",
+  "experiments-page.url",
+  ".gitignore",
+] as const;
 
 const IGNORE_HEADER =
   "# .postmaster/ holds this instance's settings and every run's full record.\n" +
