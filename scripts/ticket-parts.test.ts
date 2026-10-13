@@ -10,6 +10,7 @@ import { join } from "node:path";
 import {
   analyze,
   countSentences,
+  isNpmPackageName,
   MAX_CRITERIA,
   MAX_CRITERION_SENTENCES,
   MAX_CRITERION_WORDS,
@@ -758,5 +759,143 @@ describe("the template's example", () => {
       block().replace("<base sha>", "0123abc").replace("(proposed)", "(SomeModel)"),
     );
     expect(kind(named, "mark").length).toBe(1);
+  });
+});
+
+describe("the Libraries section npm names", () => {
+  const withLibraries = (...lines: string[]): string =>
+    edit(FIT, "## Turnpikes", ["## Libraries", "", ...lines, "", "## Turnpikes"].join("\n"));
+
+  test("dotted, scoped and underscore names pass under --final", () => {
+    const out = cli(
+      withLibraries(
+        "- highlight.js 11.9.0 Kept widely used release with a clean scan.",
+        "- chart.js 4.4.1 Kept widely used release with a clean scan.",
+        "- @scope/pkg 1.0.0 Kept widely used release with a clean scan.",
+        "- under_score 2.0.0 Kept widely used release with a clean scan.",
+      ),
+      "--final",
+    );
+    expect(out.findings).toEqual([]);
+    expect(out.code).toBe(0);
+  });
+
+  test("an uppercase name is refused as not an npm name", () => {
+    const out = cli(withLibraries("- Highlight.js 1.0.0 Vetted and kept."), "--final");
+    expect(out.code).toBe(1);
+    expect(kind(out, "npm-name").length).toBe(1);
+    expect(kind(out, "npm-name")[0]).toContain("Highlight.js");
+  });
+
+  test("a quoted name with a space is refused as not an npm name", () => {
+    const out = cli(withLibraries('- "my lib" 1.0.0 Vetted and kept.'), "--final");
+    expect(out.code).toBe(1);
+    expect(kind(out, "npm-name").length).toBe(1);
+  });
+
+  test("a path-like name is refused as not an npm name", () => {
+    const out = cli(withLibraries("- scripts/foo 1.0.0 Vetted and kept."), "--final");
+    expect(out.code).toBe(1);
+    expect(kind(out, "npm-name").length).toBe(1);
+  });
+
+  test("a file name outside the section is still a file finding", () => {
+    const body = edit(
+      withLibraries("- highlight.js 11.9.0 Kept widely used release."),
+      "None: any approach that meets the criteria.",
+      "None: any approach that meets the criteria, even one using highlight.js.",
+    );
+    const out = cli(body, "--final");
+    expect(out.code).toBe(1);
+    expect(kind(out, "file").length).toBe(1);
+    expect(kind(out, "file")[0]).toContain(`line ${lineOf(body, "even one using")}:`);
+    expect(kind(out, "npm-name")).toEqual([]);
+  });
+
+  test("the version and the vetting words after the name are still checked", () => {
+    const out = cli(
+      withLibraries("- lodash 1.0.0 See scripts/setup.sh for the vetting."),
+      "--final",
+    );
+    expect(out.code).toBe(1);
+    expect(kind(out, "path").length).toBe(1);
+    expect(kind(out, "npm-name")).toEqual([]);
+  });
+
+  test("names colliding with the path and flag rules pass under --final", () => {
+    const out = cli(
+      withLibraries(
+        "- @lib/parser 1.0.0 Kept widely used release with a clean scan.",
+        "- @tests/foo 1.0.0 Kept widely used release with a clean scan.",
+        "- --foo 1.0.0 Kept widely used release with a clean scan.",
+      ),
+      "--final",
+    );
+    expect(out.findings).toEqual([]);
+    expect(out.code).toBe(0);
+  });
+
+  test("a flag in the vetting words after the name is still a finding", () => {
+    const out = cli(withLibraries("- lodash 1.0.0 Vetted with --verbose logging on."), "--final");
+    expect(out.code).toBe(1);
+    expect(kind(out, "flag").length).toBe(1);
+    expect(kind(out, "npm-name")).toEqual([]);
+  });
+
+  test("a file, a flag and an identifier outside the section are still findings", () => {
+    const body = edit(
+      withLibraries("- highlight.js 11.9.0 Kept widely used release."),
+      "None: any approach that meets the criteria.",
+      "None: any approach that meets the criteria, even one using highlight.js with --verbose and my_var.",
+    );
+    const out = cli(body, "--final");
+    expect(out.code).toBe(1);
+    expect(kind(out, "file").length).toBe(1);
+    expect(kind(out, "flag").length).toBe(1);
+    expect(kind(out, "identifier").length).toBe(1);
+    expect(kind(out, "npm-name")).toEqual([]);
+  });
+
+  test("a leading dot or underscore is refused as not an npm name", () => {
+    const out = cli(
+      withLibraries("- .foo 1.0.0 Vetted and kept.", "- _foo 1.0.0 Vetted and kept."),
+      "--final",
+    );
+    expect(out.code).toBe(1);
+    expect(kind(out, "npm-name").length).toBe(2);
+  });
+});
+
+describe("isNpmPackageName", () => {
+  test("accepts lowercase URL-safe names with an optional scope", () => {
+    for (const name of [
+      "highlight.js",
+      "chart.js",
+      "@scope/pkg",
+      "under_score",
+      "a",
+      "~tilde",
+      "-dash",
+      "a".repeat(214),
+    ]) {
+      expect(isNpmPackageName(name)).toBe(true);
+    }
+  });
+
+  test("refuses the rest", () => {
+    for (const name of [
+      "Highlight.js",
+      ".foo",
+      "_foo",
+      "foo bar",
+      "scripts/foo",
+      "@scope/",
+      "@scope",
+      "",
+      "a".repeat(215),
+      "foo!",
+    ]) {
+      expect(isNpmPackageName(name)).toBe(false);
+    }
   });
 });
