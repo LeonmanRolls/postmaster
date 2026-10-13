@@ -321,6 +321,7 @@ declare module "node:fs" {
     gid: number;
     dev: number;
     ino: number;
+    birthtimeMs: number;
   };
   export function lstatSync(path: string): {
     isFile(): boolean;
