@@ -19,9 +19,10 @@
 //
 //   exit 0  config written (or printed), or keys listed
 //   exit 1  a harness was named that is not on PATH, the coachman shares a lane's model, fewer
-//           than two lanes were given, a reviewer is not a lane, an answer was missing, a round
+//           than two lanes were given, a reviewer or the surveyor is not a lane, an answer was missing, a round
 //           time limit was not a whole number of seconds from 1 to 86400, a planning review link
-//           omitted {path}, a mode other than synthesis, single-thread or alternate, a
+//           omitted {path}, a planning stories value other than on or off, a mode other than
+//           synthesis, single-thread or alternate, a
 //           ticket_notes other than given or held-back, or an existing config was not overwritten
 //
 // Control: the written file is parsed back as TOML where a parser is available, and its reviewer
@@ -59,6 +60,7 @@ import {
 } from "./lib/effective-config.ts";
 import { scriptsDir } from "./lib/paths.ts";
 import { die, run } from "./lib/proc.ts";
+import { SURVEYOR_HARNESS_HELP, SURVEYOR_HARNESSES } from "./surveyor.ts";
 
 const HERE = scriptsDir(import.meta);
 
@@ -105,6 +107,18 @@ function roleLine(name: string, h: string, m: string, e: string, ef: string): st
 function needHarness(h: string): void {
   const problem = harnessProblem(h);
   if (problem !== null) die(problem, 1);
+}
+
+// A surveyor on a harness the call cannot read is refused here, where the
+// user can pick another lane, rather than at the first survey. An empty
+// harness is malformed input other checks own, so it passes through.
+function needSurveyorHarness(name: string, harness: string): void {
+  if (harness !== "" && !SURVEYOR_HARNESSES.has(harness)) {
+    die(
+      `setup: surveyor '${name}' uses ${harness}, which has no recorded final-message shape; name a lane on ${SURVEYOR_HARNESS_HELP}`,
+      1,
+    );
+  }
 }
 
 interface AskOpts {
@@ -238,6 +252,32 @@ function blankLinkClear(k: string, optional: boolean): boolean {
   return optional && (k === "review_link" || k === "planning.review_link");
 }
 
+// answersOnly <prompt> <k> <opts>: an answers-file key that is never asked,
+// so it stays out of the setup conversation. Missing or blank reads unset;
+// a found value is validated by the caller.
+function answersOnly(prompt: string, k: string, opts: AskOpts): string {
+  if (opts.answers === "") return "";
+  let found: string | undefined;
+  try {
+    const text = readFileSync(opts.answers, "utf8");
+    for (const line of text.split("\n")) {
+      if (line.startsWith(`${k}=`)) {
+        found = line.slice(k.length + 1);
+        break;
+      }
+    }
+  } catch {
+    /* fall through */
+  }
+  if (found === undefined || found === "") {
+    console.log(`${prompt}: ${PROJECT !== "" ? "(not set)" : "on (default)"}`);
+    return "";
+  }
+  if (PROJECT !== "") GIVEN.add(k);
+  console.log(`${prompt}: ${found}`);
+  return found;
+}
+
 // Lane names implied by lane.* answers, for the scaffolding when `lanes` is
 // not answered: unioned with the named set, never replacing it.
 function impliedLanes(answersFile: string): string[] {
@@ -348,6 +388,7 @@ lane.<name>.env_file?      (none)             env file for an alternate backend
 workhorses                 <lanes>            workhorse lanes, comma separated
 reviewers                  <workhorses>       reviewer lanes, comma separated
 reviewers.<lens>?          (reviewers)        reviewer lanes for one lens only; bug reviewers need a code-review form
+surveyor?                (first reviewer)   the surveyor's lane; blank runs it on the first reviewer lane
 coachman.harness                              never a lane's model
 coachman.model
 coachman.effort?           (none)
@@ -392,6 +433,7 @@ merge_authority            user               user or postmaster
 checkpoint_mode            autonomous         autonomous or consult
 review_link?               (none)             template with {path}
 planning.review_link?      (none)             code-server template with {path} for ticket drafts
+planning.stories           on                 clerk stories with ticket drafts: on or off (answers file only)
 overwrite                  no                 yes replaces an existing config
 ignore_settings            no                 project only: yes has git ignore the settings file
 project mode (--project <repo>): writes only answered keys; projects_roots is refused there`);
@@ -672,6 +714,14 @@ for (const lens of lenses) {
   LENS_VALS[lens] = LR;
 }
 if (LENS_TABLE) LENS_TABLE = `\n[team.lens_reviewers]\n${LENS_TABLE}`;
+const SURVEYOR = ask("Surveyor lane (blank: the first reviewer lane)", "", "surveyor?", opts);
+if (SURVEYOR !== "" && !MERGED_NAMES.includes(SURVEYOR)) {
+  die(`setup: surveyor '${SURVEYOR}' is not one of the lanes (${MERGED_TEXT})`, 1);
+}
+if (SURVEYOR !== "") {
+  const found = LANE_HARNESSES.find((lh) => lh.startsWith(`${SURVEYOR}=`));
+  needSurveyorHarness(SURVEYOR, found === undefined ? "" : found.slice(SURVEYOR.length + 1));
+}
 
 if (PROJECT === "") {
   console.log("");
@@ -979,6 +1029,12 @@ const PRL = ask(
   opts,
 );
 if (PRL && !PRL.includes("{path}")) die("setup: planning.review_link must contain {path}", 1);
+// Stories start on and stay out of the setup conversation: the key is
+// answered by file or hand-edited, never asked.
+const STORIES = answersOnly("Stories with ticket drafts (on, off)", "planning.stories", opts);
+if (STORIES !== "" && STORIES !== "on" && STORIES !== "off") {
+  die("setup: planning.stories must be on or off", 1);
+}
 
 let TRACKER_EXTRA = "";
 if (PWS) TRACKER_EXTRA = `url = "${PURL}"\nworkspace = "${PWS}"\nenv_file = "${PENV}"`;
@@ -1010,6 +1066,7 @@ if (PROJECT !== "") {
   const teamParts: string[] = [];
   if (WORKHORSES !== "") teamParts.push(`workhorses = ${tomlList(WORKHORSES)}`);
   if (REVIEWERS !== "") teamParts.push(`reviewers = ${tomlList(REVIEWERS)}`);
+  if (SURVEYOR !== "") teamParts.push(`surveyor = "${SURVEYOR}"`);
   for (const entry of [
     roleLine("coachman", CH, CM, CE, CEF),
     roleLine("coachman_fallback", FH, FM, FE, FEF),
@@ -1041,7 +1098,10 @@ if (PROJECT !== "") {
   if (trackerParts.length > 0) sections.push(`[tracker]\n${trackerParts.join("\n")}\n`);
   if (PS !== "") sections.push(`[postmaster]\npoll_seconds = ${PS}\n`);
   if (RT !== "") sections.push(`[review]\nround_timeout_seconds = ${RT}\n`);
-  if (GIVEN.has("planning.review_link")) sections.push(`[planning]\nreview_link = "${PRL}"\n`);
+  const planningParts: string[] = [];
+  if (GIVEN.has("planning.review_link")) planningParts.push(`review_link = "${PRL}"`);
+  if (GIVEN.has("planning.stories")) planningParts.push(`stories = "${STORIES}"`);
+  if (planningParts.length > 0) sections.push(`[planning]\n${planningParts.join("\n")}\n`);
   const shipParts: string[] = [];
   if (MA !== "") shipParts.push(`merge_authority = "${MA}"`);
   if (CPM !== "") shipParts.push(`checkpoint_mode = "${CPM}"`);
@@ -1090,6 +1150,18 @@ if (PROJECT !== "") {
     if (isDie(e)) die(`setup: ${e.message}`, 1);
     throw e;
   }
+  // A Plane tracker with no API origin cannot work: the merged view is what
+  // the Plane commands read, so refusing here covers the answers, the
+  // existing file and the global config together, the dry run, and an
+  // update that does not touch the tracker. A degenerate origin counts as
+  // none: plane.ts strips trailing slashes before testing for empty, and
+  // whitespace alone is never an origin.
+  const mergedTracker = recOf(merged.tracker);
+  if (
+    mergedTracker.kind === "plane" &&
+    (typeof mergedTracker.url !== "string" || mergedTracker.url.trim().replace(/\/+$/u, "") === "")
+  )
+    die("setup: a Plane API origin is needed; answer plane.url", 1);
   const mergedLanes = recOf(merged.lanes);
   const mergedNames = Object.keys(mergedLanes);
   const mergedIssue = laneCountProblem(mergedNames);
@@ -1143,6 +1215,13 @@ if (PROJECT !== "") {
   for (const rv of splitList(REVIEWERS)) {
     const p = reviewerProblem(rv, mergedNames, mergedNames.join(", "));
     if (p !== null) die(p, 1);
+  }
+  if (SURVEYOR !== "" && !mergedNames.includes(SURVEYOR)) {
+    die(`setup: surveyor '${SURVEYOR}' is not one of the lanes (${mergedNames.join(", ")})`, 1);
+  }
+  if (SURVEYOR !== "") {
+    const harness = recOf(mergedLanes[SURVEYOR]).harness;
+    needSurveyorHarness(SURVEYOR, typeof harness === "string" ? harness : "");
   }
   for (const [lens, list] of Object.entries(LENS_VALS)) {
     for (const rv of splitList(list)) {
@@ -1261,7 +1340,7 @@ ${LANE_BLOCKS}
 [team]
 workhorses = ${tomlList(WORKHORSES)}
 reviewers = ${tomlList(REVIEWERS)}
-coachman = { harness = "${CH}", model = "${CM}"${roleExtra(CE, CEF)} }
+${SURVEYOR !== "" ? `surveyor = "${SURVEYOR}"\n` : ""}coachman = { harness = "${CH}", model = "${CM}"${roleExtra(CE, CEF)} }
 coachman_fallback = { harness = "${FH}", model = "${FM}"${roleExtra(FE, FEF)} }
 postmaster = { harness = "${PH}", model = "${PM}"${roleExtra(PE, PEF)} }
 clerk = { harness = "${CLH}", model = "${CLM}"${roleExtra(CLE, CLEF)} }
@@ -1283,7 +1362,7 @@ round_timeout_seconds = ${RT}
 
 [planning]
 review_link = "${PRL}"
-
+${STORIES !== "" ? `stories = "${STORIES}"\n` : ""}
 [ship]
 merge_authority = "${MA}"
 checkpoint_mode = "${CPM}"

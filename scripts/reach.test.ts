@@ -2,6 +2,7 @@
 // the run's synthesis and lane worktrees, review scratches, records and a private HOME.
 import { afterEach, describe, expect, test } from "bun:test";
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -630,7 +631,10 @@ describe("C8-C9: escalation boundary", () => {
       ),
     ).toBe(false);
     const coachman = readFileSync(join(TOOL, "skills/postmaster/coachman.md"), "utf8");
-    const roundCheck = coachman.indexOf("run reach round <dispatch> r<round>");
+    expect(coachman).toContain("round's check for changes by its reviewers");
+    // #391 collects and fixes per finished reviewer, so the close reads the check
+    // after the last fix; the escalate still exits before further fixes or launches.
+    const roundCheck = coachman.indexOf("Close the round once every reviewer is in");
     const userFinding = coachman.indexOf("escalate:", roundCheck);
     expect(roundCheck).toBeGreaterThanOrEqual(0);
     expect(userFinding).toBeGreaterThanOrEqual(0);
@@ -1658,5 +1662,78 @@ describe("Fixture: a fix logged as apply before the check reads explained", () =
     expect(existsSync(join(layout.dispatch, "reach", "r1", "branches", "refs_heads_T.patch"))).toBe(
       true,
     );
+  });
+
+  test("a reviewer record that cannot be read voids its verdict and resets the explained move", () => {
+    const layout = makeLayout();
+    expect(before(layout).code).toBe(0);
+    const fix = addCommit(layout.repo, layout.synth, "fix.txt", "fixed\n");
+    writeAction(layout, "coachman", "apply", fix, "fix.txt:1");
+    writeReviewer(layout, "mimo", []);
+    const result = check(layout, "r1");
+    expect(result.code).toBe(2);
+    expect(degrades(layout)).toEqual(["mimo"]);
+    const restore = call(layout, ["restore", layout.dispatch, "r1"]);
+    expect(restore.code).toBe(0);
+    expect(restore.out).toContain("could not be checked");
+    expect(git(layout.repo, "rev-parse", "refs/heads/T")).toBe(layout.base);
+    expect(git(layout.repo, "-C", layout.synth, "rev-parse", "HEAD")).toBe(layout.base);
+  });
+
+  test("a reviewer record that cannot be read voids its verdict even with no move", () => {
+    const layout = makeLayout();
+    expect(before(layout).code).toBe(0);
+    writeReviewer(layout, "mimo", []);
+    const result = check(layout, "r1");
+    expect(result.code).toBe(2);
+    expect(degrades(layout)).toEqual(["mimo"]);
+    const restore = call(layout, ["restore", layout.dispatch, "r1"]);
+    expect(restore.code).toBe(0);
+    expect(git(layout.repo, "rev-parse", "refs/heads/T")).toBe(layout.base);
+  });
+
+  test("a malformed coachman apply row does not void an explained move", () => {
+    const layout = makeLayout();
+    expect(before(layout).code).toBe(0);
+    const fix = addCommit(layout.repo, layout.synth, "fix.txt");
+    writeAction(layout, "coachman", "apply", fix, "fix.txt:1");
+    writeAction(layout, "coachman", "apply", "scripts/review-round.ts:553", "backwards row");
+    const result = check(layout, "r1");
+    expect(result.code).toBe(0);
+    expect(result.out).not.toContain("unexplained");
+    expect(degrades(layout)).toEqual([]);
+  });
+
+  test("an apply naming no commit does not void an explained move", () => {
+    const layout = makeLayout();
+    expect(before(layout).code).toBe(0);
+    const fix = addCommit(layout.repo, layout.synth, "fix.txt");
+    writeAction(layout, "coachman", "apply", fix, "fix.txt:1");
+    writeAction(layout, "coachman", "apply", "deadbee", "typo sha");
+    const result = check(layout, "r1");
+    expect(result.code).toBe(0);
+    expect(result.out).not.toContain("unexplained");
+    expect(degrades(layout)).toEqual([]);
+  });
+
+  test("malformed lines in the log do not void an explained move", () => {
+    const layout = makeLayout();
+    expect(before(layout).code).toBe(0);
+    const fix = addCommit(layout.repo, layout.synth, "fix.txt");
+    writeAction(layout, "coachman", "apply", fix, "fix.txt:1");
+    appendFileSync(join(layout.dispatch, "actions.jsonl"), "{oops\nnull\n");
+    const result = check(layout, "r1");
+    expect(result.code).toBe(0);
+    expect(result.out).not.toContain("unexplained");
+    let degraded = 0;
+    for (const line of readFileSync(join(layout.dispatch, "actions.jsonl"), "utf8").split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        if ((JSON.parse(line) as Record<string, unknown>).action === "degrade") degraded++;
+      } catch {
+        // The planted garbage parses nowhere, including here.
+      }
+    }
+    expect(degraded).toBe(0);
   });
 });

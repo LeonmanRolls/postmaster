@@ -10,6 +10,8 @@ the adversarial review rounds its ticket names, then leaves a ship card for the
 project's landing route. Pull-request projects are merged by the user; local-merge projects use
 the merge authority in the config.
 
+A design goal of postmaster is not to give you a complete solution. It is to let you run experiments on different flows, so that you can find what works for your project.
+
 ## The four roles
 
 | role | does | never does |
@@ -70,6 +72,13 @@ The record of what they did is how the work gets checked, and how the flow itsel
 - **Checks are scripts with controls.** Anything deterministic is a script, and every count
   comes with a control that could have come out the other way, so a passing check means
   something.
+
+## Adding a library takes the user's word
+
+postmaster does not let agents add packages as they see fit. A run adds
+only a library its ticket lists, and its coachman asks the postmaster, who
+asks the user, before adding it. Anything else is refused before it
+downloads, and the landing checks again before it merges.
 
 ## Wiki
 

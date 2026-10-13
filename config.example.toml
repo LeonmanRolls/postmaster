@@ -78,6 +78,12 @@ ticket_notes = "given"                    # what the coachman and the workhorses
 # [team.coachman_legs]
 # synthesis = { harness = "codex", model = "gpt-6-astra", effort = "max" }
 
+# Optional: the surveyor's lane, for the independent judgement a run asks for
+# with one question. A lane defined above, on a harness with a recorded
+# final-message shape (claude, codex, pi, muse or mimo). Unset runs the
+# surveyor on the run's first reviewer lane.
+# surveyor = "luna"
+
 # Optional: a lens's own reviewer lanes, where they differ from `reviewers`, such as a lane
 # whose harness has a skill for that lens alone. A lens not named here is reviewed by
 # `reviewers`. The lenses are the review stage's: `scripts/run reviewers lenses` lists them, and
@@ -134,6 +140,11 @@ round_timeout_seconds = 2400
 # send the file's path alone. The host is private to this machine, so it lives
 # here and never in a ticket.
 review_link = ""
+
+# Whether the booking clerk makes a story with every ticket draft it shows
+# the user: "on" or "off", "on" when absent. A project's own settings may
+# turn stories off for that project alone (scripts/run setup --project).
+stories = "on"
 
 [ship]
 # Who authorizes a local merge: "user" (a person, live) or "postmaster" (the supervising

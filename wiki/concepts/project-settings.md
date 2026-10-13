@@ -3,7 +3,7 @@ title: A project's .postmaster/ holds its settings and every run's record
 type: concept
 standing: claimed
 sources: []
-updated: 2026-10-10
+updated: 2026-10-11
 ---
 
 # A project's .postmaster/ holds its settings and every run's record
@@ -79,4 +79,7 @@ path in the shared one. `scripts/run turnpikes` expands `default` from a project
 conversation offers a project decision for `.postmaster/` and says which file it proposes.
 A run resolves the target's local roles at dispatch, and every run launch's durable session
 is exported into the run record beside its event stream.
+Verifiers made for a project live at `<project>/.postmaster/verifier/`, one folder per
+named surface, unless the user asks for the repository
+([issue #472](https://github.com/brindlewick/postmaster/issues/472)).
 This repo carries its own `.postmaster/` as the first test of it.

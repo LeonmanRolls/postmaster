@@ -198,7 +198,17 @@ describe("make with no host: the headless fallback", () => {
       const env = makeEnv(sandbox, { POSTMASTER_HOST: "none" });
       const r = run(
         RUN,
-        ["verifier", "make", sandbox.repo, "cli", "--run", sandbox.dispatch, "--timeout", "120"],
+        [
+          "verifier",
+          "make",
+          sandbox.repo,
+          "cli",
+          "--run",
+          sandbox.dispatch,
+          "--timeout",
+          "120",
+          "--repository",
+        ],
         { env },
       );
       expectCode(r, 0);
@@ -229,7 +239,17 @@ describe("make with no host: the headless fallback", () => {
       });
       const r = run(
         RUN,
-        ["verifier", "make", sandbox.repo, "cli", "--run", sandbox.dispatch, "--timeout", "120"],
+        [
+          "verifier",
+          "make",
+          sandbox.repo,
+          "cli",
+          "--run",
+          sandbox.dispatch,
+          "--timeout",
+          "120",
+          "--repository",
+        ],
         { env },
       );
       expectCode(r, 0);
@@ -263,7 +283,17 @@ describe("make with a host: the interactive open", () => {
       });
       const r = run(
         RUN,
-        ["verifier", "make", sandbox.repo, "cli", "--run", sandbox.dispatch, "--timeout", "120"],
+        [
+          "verifier",
+          "make",
+          sandbox.repo,
+          "cli",
+          "--run",
+          sandbox.dispatch,
+          "--timeout",
+          "120",
+          "--repository",
+        ],
         { env },
       );
       expectCode(r, 0);
@@ -303,7 +333,17 @@ describe("make with a host: the interactive open", () => {
       });
       const r = run(
         RUN,
-        ["verifier", "make", sandbox.repo, "cli", "--run", sandbox.dispatch, "--timeout", "2"],
+        [
+          "verifier",
+          "make",
+          sandbox.repo,
+          "cli",
+          "--run",
+          sandbox.dispatch,
+          "--timeout",
+          "2",
+          "--repository",
+        ],
         { env },
       );
       expectCode(r, 1);
@@ -344,13 +384,33 @@ describe("make with a host: the interactive open", () => {
       envB.PATH = `${a.bin}:${process.env.PATH ?? ""}`;
       const ra = run(
         RUN,
-        ["verifier", "make", a.repo, "cli", "--run", a.dispatch, "--timeout", "120"],
+        [
+          "verifier",
+          "make",
+          a.repo,
+          "cli",
+          "--run",
+          a.dispatch,
+          "--timeout",
+          "120",
+          "--repository",
+        ],
         { env: envA },
       );
       expectCode(ra, 0);
       const rb = run(
         RUN,
-        ["verifier", "make", b.repo, "cli", "--run", b.dispatch, "--timeout", "120"],
+        [
+          "verifier",
+          "make",
+          b.repo,
+          "cli",
+          "--run",
+          b.dispatch,
+          "--timeout",
+          "120",
+          "--repository",
+        ],
         { env: envB },
       );
       expectCode(rb, 0);
@@ -376,7 +436,17 @@ describe("make with a host: the interactive open", () => {
       });
       const r = run(
         RUN,
-        ["verifier", "make", sandbox.repo, "cli", "--run", sandbox.dispatch, "--timeout", "30"],
+        [
+          "verifier",
+          "make",
+          sandbox.repo,
+          "cli",
+          "--run",
+          sandbox.dispatch,
+          "--timeout",
+          "30",
+          "--repository",
+        ],
         { env },
       );
       expectCode(r, 1);
@@ -400,7 +470,17 @@ describe("make with a host: the interactive open", () => {
       });
       const r = run(
         RUN,
-        ["verifier", "make", sandbox.repo, "cli", "--run", sandbox.dispatch, "--timeout", "30"],
+        [
+          "verifier",
+          "make",
+          sandbox.repo,
+          "cli",
+          "--run",
+          sandbox.dispatch,
+          "--timeout",
+          "30",
+          "--repository",
+        ],
         { env },
       );
       expectCode(r, 1);

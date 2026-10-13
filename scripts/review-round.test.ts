@@ -9,6 +9,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -19,10 +20,13 @@ import { bootId, processState } from "./lib/processes.ts";
 import {
   ARG_SPLIT_RE,
   cutRound,
+  fixRound,
+  gateRound,
   harvestRound,
   launchRound,
   monotonic,
   reachCheckMissing,
+  roundPointRecorded,
   type StepChild,
   type StepDeps,
 } from "./review-round.ts";
@@ -309,7 +313,7 @@ esac
     limit("3");
     cutScratch("bug", "one");
     cutScratch("bug", "two");
-    runSelf("start", d, "1");
+    runSelf("start", d, "1", "bug:one bug:two");
     check(
       "start clears the round's markers and fixes its limit from run.json",
       rc === 0 &&
@@ -386,7 +390,7 @@ esac
     );
     runSelf("teardown", d, "1", repo);
     check(
-      "teardown takes the reviewers the wait recorded, and removes each scratch",
+      "teardown takes the reviewers the start recorded, and removes each scratch",
       rc === 0 &&
         !existsSync(join(repo, ".worktrees/T-1-rev-bug-one")) &&
         !existsSync(join(repo, ".worktrees/T-1-rev-bug-two")) &&
@@ -397,7 +401,7 @@ esac
     // the wait before it polled, or the second run outlasted its 3s window. Age a real deadline.
     limit("30");
     cutScratch("bug", "three");
-    runSelf("start", d, "2");
+    runSelf("start", d, "2", "bug:three");
     launch(2, "bug", "three", "slow");
     try {
       slow = parseInt(readFileSync(join(tmp, "pids", `launch.${n}`), "utf8").trim(), 10);
@@ -454,7 +458,7 @@ esac
 
     limit("60");
     cutScratch("style", "one");
-    runSelf("start", d, "3");
+    runSelf("start", d, "3", "style:one");
     launch(3, "style", "one", "leaves");
     let childPid = 0;
     try {
@@ -487,7 +491,7 @@ esac
     limit("60");
     cutScratch("bug", "stub");
     cutScratch("security", "sec");
-    runSelf("start", d, "5");
+    runSelf("start", d, "5", "bug:stub security:sec");
     launch(5, "bug", "stub", "fast");
     launch(5, "security", "sec", "fast");
     const codexWall = "You’ve hit your usage limit. try again at 2:29 AM.";
@@ -514,6 +518,35 @@ esac
         actionsLines('"target":"stub","detail":"bug r5: provider wall:') === 1 &&
         actionsLines('"target":"sec","detail":"security r5: provider wall:') === 1 &&
         !existsSync(join(d, ".escalation-ready")),
+    );
+
+    // A lost wall: the launch detected the provider wall but could not record it,
+    // leaving logs/<lane>.wall-lost with no `wall` line; the marker still lands,
+    // since the host touches it whatever the exit. The wait reads the lost
+    // content and the round closes without the reviewer, as on a recorded wall.
+    limit("60");
+    cutScratch("bug", "lost");
+    runSelf("start", d, "13", "bug:lost");
+    launch(13, "bug", "lost", "fast");
+    writeFileSync(join(d, "logs", "lost.wall-lost"), "reviewer bug 13 none usage limit hit\n");
+    runSelf("wait", d, "13", repo, "bug:lost");
+    let lostRunLog = "";
+    try {
+      lostRunLog = readFileSync(join(d, "run-log.md"), "utf8");
+    } catch {
+      lostRunLog = "";
+    }
+    check(
+      "a reviewer whose wall was lost is DEGRADED with what the launch detected, and the round closes",
+      rc === 0 &&
+        lostRunLog.includes(
+          'lost bug: DEGRADED, provider wall: "detected but not recorded: usage limit hit"',
+        ) &&
+        has(
+          'WALL bug lost: DEGRADED, provider wall: "detected but not recorded: usage limit hit"',
+        ) &&
+        actionsLines('"action":"degrade"') === 5 &&
+        actionsLines('"target":"lost","detail":"bug r13: provider wall:') === 1,
     );
 
     console.log("negative controls");
@@ -753,12 +786,13 @@ describe("positive controls", () => {
     "run-log.md records it as <lane> <lens>: DEGRADED, timeout",
     "a degrade line records it, with the lens, the round and the cause",
     "host.sh stop ends it, and its child in a session of its own",
-    "teardown takes the reviewers the wait recorded, and removes each scratch",
+    "teardown takes the reviewers the start recorded, and removes each scratch",
     "a wait run again keeps the round's deadline rather than starting a new one",
     "when every marker is in, wait exits 0 and records nothing",
     "teardown stops what a finished reviewer's launch left running, and says so",
     "a scratch a reviewer switched onto a branch is still removed, and the branch kept",
     "a walled reviewer is DEGRADED with the provider's message and the round closes (C11)",
+    "a reviewer whose wall was lost is DEGRADED with what the launch detected, and the round closes",
   ];
   for (const label of labels) {
     test(label, () => {
@@ -869,6 +903,9 @@ describe("the round's three steps", () => {
     const dispatch = join(root, "repo", ".postmaster", "runs", "T-1");
     mkdirSync(join(dispatch, "logs"), { recursive: true });
     writeFileSync(join(dispatch, "manifest.json"), `${JSON.stringify({ base: "BASESHA" })}\n`);
+    for (const lens of ["style", "security"]) {
+      writeFileSync(join(dispatch, `review-${lens}-brief.md`), `# ${lens} brief\n`);
+    }
     return {
       dispatch,
       repo: join(root, "repo"),
@@ -1039,6 +1076,25 @@ describe("the round's three steps", () => {
       }, "review-round-cutwrite2-");
     });
 
+    test("a pass text that cannot be kept stops it, on a true gate record", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        mkdirSync(join(p.dispatch, "logs", "gate-SNAP.txt"));
+        const { calls, deps } = stand(green);
+        const res = cutRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(one(calls, "log-action", (c) => c.args[2] === "gate")?.args[4]).toBe(
+          "review round 1, run verify exit 0",
+        );
+        expect(res.err.join("\n")).toContain("gate-SNAP.txt cannot be written");
+        expect(of(calls, "git").some((c) => c.args.includes("prune"))).toBe(false);
+        expect(of(calls, "cut-scratch").length).toBe(0);
+      }, "review-round-cutkeep-");
+    });
+
     test("a lens whose lanes do not resolve stops it after the prune", () => {
       withTempDir((root) => {
         const p = paths(root);
@@ -1104,12 +1160,429 @@ describe("the round's three steps", () => {
         expect(of(calls, "cut-scratch").length).toBe(3);
       }, "review-round-cutbroken-");
     });
+
+    describe("gate reuse", () => {
+      const SHA = "9f2c4a1b7d3e8f0a5b6c9d2e4f7a1b3c5d6e8f0a";
+      const gateRow = (target: string, detail: string): string =>
+        `${JSON.stringify({ ts: "2026-10-11T00:00:00Z", project: "p", run: "r", actor: "coachman", action: "gate", target, detail })}\n`;
+      const shaHandler =
+        (extra?: Handler): Handler =>
+        (name, args) => {
+          const answered = extra?.(name, args);
+          if (answered) return answered;
+          if (name === "git" && args.includes("rev-parse"))
+            return { code: 0, out: `${SHA}\n`, err: "" };
+          if (name === "git" && args.includes("status")) return { code: 0, out: "", err: "" };
+          return green(name, args);
+        };
+
+      test("a recorded mid-round pass on the snapshot is reused: no verify, copied text, reuse row", () => {
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 1, run verify exit 0, mid-round gate"),
+          );
+          writeFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "gate: pass\n");
+          let verified = false;
+          const { calls, deps } = stand(
+            shaHandler((name, _args) => {
+              if (name === "verify") {
+                verified = true;
+                return { code: 0, out: "gate: pass\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(0);
+          expect(verified).toBe(false);
+          expect(readFileSync(join(p.dispatch, "logs", "review-r2-checks.txt"), "utf8")).toBe(
+            "gate: pass\n",
+          );
+          expect(res.out).toContain(
+            `review-round: round 2 reuses the gate pass on ${SHA.slice(0, 12)} from round 1`,
+          );
+          expect(one(calls, "log-action", (c) => c.args[2] === "gate")?.args).toEqual([
+            p.dispatch,
+            "coachman",
+            "gate",
+            SHA,
+            "review round 2, gate pass reused from round 1 (run verify exit 0)",
+          ]);
+          expect(of(calls, "cut-scratch").length).toBe(2);
+        }, "review-round-reuse-mid-");
+      });
+
+      test("a cut pass on an unchanged snapshot reuses the commit's kept text", () => {
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 1, run verify exit 0"),
+          );
+          writeFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "gate: pass\n");
+          let verified = false;
+          const { calls, deps } = stand(
+            shaHandler((name, _args) => {
+              if (name === "verify") {
+                verified = true;
+                return { code: 0, out: "gate: pass\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(0);
+          expect(verified).toBe(false);
+          expect(readFileSync(join(p.dispatch, "logs", "review-r2-checks.txt"), "utf8")).toBe(
+            "gate: pass\n",
+          );
+          expect(one(calls, "log-action", (c) => c.args[2] === "gate")?.args[4]).toBe(
+            "review round 2, gate pass reused from round 1 (run verify exit 0)",
+          );
+        }, "review-round-reuse-cut-");
+      });
+
+      test("a fail after the newest pass on the snapshot runs verify instead of reusing", () => {
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 1, run verify exit 0") +
+              gateRow(SHA, "review round 1, run verify exit 2, mid-round gate"),
+          );
+          writeFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "gate: pass\n");
+          let verified = false;
+          const { calls, deps } = stand(
+            shaHandler((name, _args) => {
+              if (name === "verify") {
+                verified = true;
+                return { code: 0, out: "gate: pass\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(0);
+          expect(verified).toBe(true);
+          expect(one(calls, "log-action", (c) => c.args[2] === "gate")?.args[4]).toBe(
+            "review round 2, run verify exit 0",
+          );
+        }, "review-round-reuse-fail-");
+      });
+
+      test("a pass after a fail on the snapshot still reuses: the latest evidence decides", () => {
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 1, run verify exit 2, mid-round gate") +
+              gateRow(SHA, "review round 1, run verify exit 0, mid-round gate"),
+          );
+          writeFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "gate: pass\n");
+          let verified = false;
+          const { calls, deps } = stand(
+            shaHandler((name, _args) => {
+              if (name === "verify") {
+                verified = true;
+                return { code: 0, out: "gate: pass\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(0);
+          expect(verified).toBe(false);
+          expect(one(calls, "log-action", (c) => c.args[2] === "gate")?.args[4]).toBe(
+            "review round 2, gate pass reused from round 1 (run verify exit 0)",
+          );
+        }, "review-round-reuse-failpass-");
+      });
+
+      test("a refused run after a pass on the snapshot still reuses: a refusal is not evidence", () => {
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 1, run verify exit 0") +
+              gateRow(SHA, "review round 1, run verify exit 1"),
+          );
+          writeFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "gate: pass\n");
+          let verified = false;
+          const { calls, deps } = stand(
+            shaHandler((name, _args) => {
+              if (name === "verify") {
+                verified = true;
+                return { code: 0, out: "gate: pass\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(0);
+          expect(verified).toBe(false);
+          expect(one(calls, "log-action", (c) => c.args[2] === "gate")?.args[4]).toBe(
+            "review round 2, gate pass reused from round 1 (run verify exit 0)",
+          );
+        }, "review-round-reuse-refused-");
+      });
+
+      test("a cut pass reads its commit's kept text, not the round's rewritten checks file", () => {
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 1, run verify exit 0"),
+          );
+          writeFileSync(join(p.dispatch, "logs", "review-r1-checks.txt"), "STALE TEXT\n");
+          writeFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "gate: pass\n");
+          let verified = false;
+          const { deps } = stand(
+            shaHandler((name, _args) => {
+              if (name === "verify") {
+                verified = true;
+                return { code: 0, out: "gate: pass\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(0);
+          expect(verified).toBe(false);
+          expect(readFileSync(join(p.dispatch, "logs", "review-r2-checks.txt"), "utf8")).toBe(
+            "gate: pass\n",
+          );
+        }, "review-round-reuse-kept-");
+      });
+
+      test("a failing verify on a passed commit leaves the kept pass text alone", () => {
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 1, run verify exit 0"),
+          );
+          writeFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "gate: pass\n");
+          const { deps } = stand(
+            shaHandler((name, args) => {
+              if (name === "git" && args.includes("status"))
+                return { code: 0, out: " M src/dirty.ts\n", err: "" };
+              if (name === "verify") return { code: 1, out: "REFUSED\n", err: "" };
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(1);
+          expect(readFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "utf8")).toBe(
+            "gate: pass\n",
+          );
+        }, "review-round-reuse-keptfail-");
+      });
+
+      test("a cut pass with no kept text runs verify instead of reading the round's file", () => {
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 1, run verify exit 0"),
+          );
+          writeFileSync(join(p.dispatch, "logs", "review-r1-checks.txt"), "gate: pass\n");
+          let verified = false;
+          const { deps } = stand(
+            shaHandler((name, _args) => {
+              if (name === "verify") {
+                verified = true;
+                return { code: 0, out: "gate: pass\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(0);
+          expect(verified).toBe(true);
+          expect(res.out.some((l) => l.includes("reuses the gate pass"))).toBe(false);
+        }, "review-round-reuse-unkept-");
+      });
+
+      test("a reuse row reuses the commit's kept text", () => {
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 2, gate pass reused from round 1 (run verify exit 0)"),
+          );
+          writeFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "gate: pass\n");
+          let verified = false;
+          const { calls, deps } = stand(
+            shaHandler((name, _args) => {
+              if (name === "verify") {
+                verified = true;
+                return { code: 0, out: "gate: pass\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "3", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(0);
+          expect(verified).toBe(false);
+          expect(readFileSync(join(p.dispatch, "logs", "review-r3-checks.txt"), "utf8")).toBe(
+            "gate: pass\n",
+          );
+          expect(one(calls, "log-action", (c) => c.args[2] === "gate")?.args[4]).toBe(
+            "review round 3, gate pass reused from round 2 (run verify exit 0)",
+          );
+        }, "review-round-reuse-reuse-");
+      });
+
+      test("the newest pass with its text wins; a pass without text falls back to verify", () => {
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 1, run verify exit 0") +
+              gateRow(SHA, "review round 2, gate pass reused from round 1 (run verify exit 0)"),
+          );
+          writeFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "gate: pass\n");
+          let verified = false;
+          const { deps } = stand(
+            shaHandler((name, _args) => {
+              if (name === "verify") {
+                verified = true;
+                return { code: 0, out: "gate: pass\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "3", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(0);
+          // Both rows share the commit's kept text; the newest row names the pass.
+          expect(verified).toBe(false);
+          expect(readFileSync(join(p.dispatch, "logs", "review-r3-checks.txt"), "utf8")).toBe(
+            "gate: pass\n",
+          );
+          expect(res.out).toContain(
+            `review-round: round 3 reuses the gate pass on ${SHA.slice(0, 12)} from round 2`,
+          );
+        }, "review-round-reuse-older-");
+
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 1, run verify exit 0, mid-round gate"),
+          );
+          let verified = false;
+          const { deps } = stand(
+            shaHandler((name, _args) => {
+              if (name === "verify") {
+                verified = true;
+                return { code: 0, out: "gate: pass\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(0);
+          expect(verified).toBe(true);
+          expect(res.out.some((l) => l.includes("reuses the gate pass"))).toBe(false);
+        }, "review-round-reuse-lost-");
+      });
+
+      test("a pass on another commit, a failed gate, or a dirty tree runs verify", () => {
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow("0".repeat(40), "review round 1, run verify exit 0") +
+              gateRow(SHA, "review round 1, run verify exit 2"),
+          );
+          writeFileSync(join(p.dispatch, "logs", "review-r1-checks.txt"), "gate: pass\n");
+          let verified = false;
+          const { deps } = stand(
+            shaHandler((name, _args) => {
+              if (name === "verify") {
+                verified = true;
+                return { code: 0, out: "gate: pass\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(res.code).toBe(0);
+          expect(verified).toBe(true);
+        }, "review-round-reuse-miss-");
+
+        withTempDir((root) => {
+          const p = paths(root);
+          writeFileSync(
+            join(p.dispatch, "actions.jsonl"),
+            gateRow(SHA, "review round 1, run verify exit 0, mid-round gate"),
+          );
+          writeFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "gate: pass\n");
+          let verified = false;
+          const { deps } = stand(
+            shaHandler((name, args) => {
+              if (name === "git" && args.includes("status"))
+                return { code: 0, out: " M src/dirty.ts\n", err: "" };
+              if (name === "verify") {
+                verified = true;
+                return { code: 2, out: "dirty\n", err: "" };
+              }
+              return null;
+            }),
+          );
+          const res = cutRound(
+            { dispatch: p.dispatch, round: "2", repo: p.repo, synthesis: p.synthesis },
+            deps,
+          );
+          expect(verified).toBe(true);
+          expect(res.code).toBe(1);
+        }, "review-round-reuse-dirty-");
+      });
+    });
   });
 
   describe("launch", () => {
     const entry = join(import.meta.dir, "run");
 
-    test("writes every prompt file, launches each reviewer under its lens, and ends in the wait", () => {
+    test("writes every prompt file, records the reviewers at the start, launches each reviewer under its lens, and returns for the wait-next loop", () => {
       withTempDir((root) => {
         const p = paths(root);
         const { calls, deps } = stand((name, args) => {
@@ -1117,8 +1590,6 @@ describe("the round's three steps", () => {
             return { code: 0, out: "SECURITY TEXT\n", err: "" };
           if (name === "host" && args[0] === "name")
             return { code: 0, out: `${args[4]}-name\n`, err: "" };
-          if (name === "review-round" && args[0] === "wait")
-            return { code: 0, out: "round 1: every marker in\n", err: "" };
           return green(name, args);
         });
         const res = launchRound(
@@ -1126,7 +1597,10 @@ describe("the round's three steps", () => {
           deps,
         );
         expect(res.code).toBe(0);
-        expect(res.out).toContain("round 1: every marker in");
+        expect(res.out).toContain(
+          "review-round: round 1 launched, 3 reviewers; collect them with wait-next",
+        );
+        expect(of(calls, "review-round").some((c) => c.args[0] === "wait")).toBe(false);
         expect(readFileSync(join(p.dispatch, "review-r1-style-prompt.txt"), "utf8")).toBe(
           `Read ${p.dispatch}/review-style-brief.md and execute it. Report findings as your final message. Do not modify any file you are reviewing.\n`,
         );
@@ -1182,17 +1656,19 @@ describe("the round's three steps", () => {
           join(p.dispatch, "logs", "review-r1-bug-luna-last.md"),
         );
         expect(bug?.args.join(" ")).toContain("--run");
-        const wait = calls.find((c) => c.name === "review-round" && c.args[0] === "wait");
-        expect(wait?.args).toEqual([
-          "wait",
+        const before = one(calls, "reach");
+        expect(before?.args).toEqual(["before", p.dispatch, "1"]);
+        expect(calls.indexOf(before!)).toBeLessThan(startAt);
+        const start = one(calls, "review-round", (c) => c.args[0] === "start");
+        expect(start?.args).toEqual([
+          "start",
           p.dispatch,
           "1",
-          p.repo,
           "style:luna",
           "bug:luna",
           "security:luna",
         ]);
-        expect(calls.indexOf(wait!)).toBeGreaterThan(calls.indexOf(runs[2]!));
+        expect(calls.indexOf(start!)).toBeLessThan(calls.indexOf(runs[0]!));
       }, "review-round-launch-");
     });
 
@@ -1216,6 +1692,30 @@ describe("the round's three steps", () => {
           [p.dispatch, "coachman", "review-launch", "luna", "security round 1"],
         ]);
       }, "review-round-launchrows-");
+    });
+
+    test("a reviewer whose host run fails stops it with no launch row for that reviewer", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) => {
+          if (name === "launch" && args[0] === "skill")
+            return { code: 0, out: "SECURITY TEXT\n", err: "" };
+          if (name === "host" && args[0] === "name")
+            return { code: 0, out: `${args[4]}-name\n`, err: "" };
+          if (name === "host" && args[0] === "run")
+            return { code: 1, out: "", err: "spawn failed\n" };
+          return green(name, args);
+        });
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err.join("\n")).toContain("style luna did not start");
+        const launches = of(calls, "log-action").filter((c) => c.args[2] === "review-launch");
+        expect(launches.length).toBe(0);
+        expect(res.out.join("\n")).not.toContain("launched, 3 reviewers");
+      }, "review-round-launchfail-");
     });
 
     test("a scratch that is not ready stops it before the round starts", () => {
@@ -1275,7 +1775,7 @@ describe("the round's three steps", () => {
       }, "review-round-launchsec3-");
     });
 
-    test("a round that will not start launches nothing, and the wait's exit is the launch's", () => {
+    test("a round that will not start launches nothing", () => {
       withTempDir((root) => {
         const p = paths(root);
         const failed = stand((name, args) =>
@@ -1288,20 +1788,27 @@ describe("the round's three steps", () => {
           failed.deps,
         );
         expect(res.code).toBe(1);
+        expect(res.err).toContain("round not started");
         expect(of(failed.calls, "host").length).toBe(0);
-
-        const timed = stand((name, args) =>
-          name === "review-round" && args[0] === "wait"
-            ? { code: 3, out: "WAIT-TIMEOUT\n", err: "" }
-            : green(name, args),
-        );
-        const res2 = launchRound(
-          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
-          timed.deps,
-        );
-        expect(res2.code).toBe(3);
-        expect(res2.out).toContain("WAIT-TIMEOUT");
       }, "review-round-launchstart-");
+    });
+
+    test("a round with no reviewers launches nothing", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) => {
+          if (name === "turnpikes") return { code: 0, out: "1 synthesis\n2 review\n", err: "" };
+          return green(name, args);
+        });
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err).toContain("review-round: round 1 has no reviewers; nothing launched");
+        expect(of(calls, "review-round").length).toBe(0);
+        expect(of(calls, "host").length).toBe(0);
+      }, "review-round-launchempty-");
     });
 
     test("round 2 runs the gating lenses alone", () => {
@@ -1316,6 +1823,132 @@ describe("the round's three steps", () => {
         expect(of(calls, "reviewers").map((c) => c.args[2])).toEqual(["bug", "security"]);
         expect(existsSync(join(p.dispatch, "review-r2-style-prompt.txt"))).toBe(false);
       }, "review-round-launchr2-");
+    });
+
+    test("a missing brief stops it before anything is written or started", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        rmSync(join(p.dispatch, "review-style-brief.md"));
+        const { calls, deps } = stand(green);
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err.join("\n")).toContain("review-style-brief.md");
+        expect(res.err.join("\n")).toContain("nothing launched");
+        expect(readdirSync(p.dispatch).filter((f) => f.startsWith("review-r1-")).length).toBe(0);
+        expect(of(calls, "review-round").length).toBe(0);
+        expect(of(calls, "host").length).toBe(0);
+        expect(of(calls, "reach").length).toBe(0);
+        expect(of(calls, "log-action").length).toBe(0);
+      }, "review-round-launchbrief-");
+    });
+
+    test("a security lane with its own skill needs no brief", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        rmSync(join(p.dispatch, "review-security-brief.md"));
+        const { deps } = stand((name, args) => {
+          if (name === "launch" && args[0] === "skill")
+            return { code: 0, out: "SECURITY TEXT\n", err: "" };
+          return green(name, args);
+        });
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(0);
+      }, "review-round-launchskill-");
+    });
+
+    test("a security lane without a skill is refused on the missing brief", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        rmSync(join(p.dispatch, "review-security-brief.md"));
+        const { calls, deps } = stand((name, args) => {
+          if (name === "launch" && args[0] === "skill") return { code: 3, out: "", err: "" };
+          return green(name, args);
+        });
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err.join("\n")).toContain("review-security-brief.md");
+        expect(of(calls, "review-round").length).toBe(0);
+        expect(of(calls, "host").length).toBe(0);
+      }, "review-round-launchsecbrief-");
+    });
+
+    test("a starting state that cannot be saved launches nothing", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) =>
+          name === "reach" ? { code: 1, out: "", err: "reach: cannot save\n" } : green(name, args),
+        );
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err.join("\n")).toContain("starting state could not be saved");
+        expect(of(calls, "review-round").length).toBe(0);
+        expect(of(calls, "host").length).toBe(0);
+      }, "review-round-launchbefore-");
+    });
+
+    test("a round whose reach check is already recorded is not launched again", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        writeFileSync(join(p.dispatch, "actions.jsonl"), `${pointLine("r1")}\n`);
+        const { calls, deps } = stand(green);
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err.join("\n")).toContain("already has its reach check recorded");
+        expect(res.err.join("\n")).toContain("nothing launched");
+        expect(readdirSync(p.dispatch).filter((f) => f.startsWith("review-r1-")).length).toBe(0);
+        expect(of(calls, "review-round").length).toBe(0);
+        expect(of(calls, "host").length).toBe(0);
+        expect(of(calls, "reach").length).toBe(0);
+        expect(of(calls, "log-action").length).toBe(0);
+      }, "review-round-launchcollected-");
+    });
+
+    test("a retried round keeps its first starting state", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        mkdirSync(join(p.dispatch, "reach"), { recursive: true });
+        writeFileSync(join(p.dispatch, "reach", "before-r1.json"), '{"round":1}\n');
+        const { calls, deps } = stand(green);
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(0);
+        expect(res.out.join("\n")).toContain("keeps its first starting state");
+        expect(of(calls, "reach").length).toBe(0);
+        expect(readFileSync(join(p.dispatch, "reach", "before-r1.json"), "utf8")).toBe(
+          '{"round":1}\n',
+        );
+      }, "review-round-launchretry-");
+    });
+
+    test("an unreadable journal does not stop the launch", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        writeFileSync(join(p.dispatch, "actions.jsonl"), "not json\n");
+        const { calls, deps } = stand(green);
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(0);
+        expect(of(calls, "reach").length).toBe(1);
+      }, "review-round-launchbadjournal-");
     });
   });
 
@@ -1398,6 +2031,352 @@ describe("the round's three steps", () => {
         ]);
       }, "review-round-harvestok-");
     });
+
+    test("named bug reviewers harvest alone; the others are untouched", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) => {
+          if (name === "reviewers") return { code: 0, out: "one\ntwo\n", err: "" };
+          if (name === "review-findings" && args[0] === "normalize")
+            return { code: 0, out: '[{"file":"a.ts"}]', err: "" };
+          return null;
+        });
+        const res = harvestRound(
+          { dispatch: p.dispatch, round: "9", repo: p.repo, only: [["bug", "two"]] },
+          deps,
+        );
+        expect(res.code).toBe(0);
+        expect(
+          readFileSync(join(p.dispatch, "logs", "review-r9-bug-two-findings.json"), "utf8"),
+        ).toBe('[{"file":"a.ts"}]');
+        expect(existsSync(join(p.dispatch, "logs", "review-r9-bug-one-findings.json"))).toBe(false);
+        expect(
+          of(calls, "review-findings")
+            .filter((c) => c.args[0] === "normalize")
+            .map((c) => c.args[1]),
+        ).toEqual(["two"]);
+      }, "review-round-harvestonly-");
+    });
+
+    test("a named reviewer under another lens notes its raw report and harvests nothing", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, _args) => {
+          if (name === "reviewers") return { code: 0, out: "one\n", err: "" };
+          return null;
+        });
+        const res = harvestRound(
+          {
+            dispatch: p.dispatch,
+            round: "9",
+            repo: p.repo,
+            only: [
+              ["style", "one"],
+              ["bug", "one"],
+            ],
+          },
+          deps,
+        );
+        expect(res.code).toBe(0);
+        expect(res.out).toContain(
+          "review round 9 one: style has no normalized report; reading the raw report by hand",
+        );
+        expect(of(calls, "review-findings").length).toBe(2);
+      }, "review-round-harvestlens-");
+    });
+
+    test("a named lane that is no bug reviewer stops it", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, _args) => {
+          if (name === "reviewers") return { code: 0, out: "one\n", err: "" };
+          return null;
+        });
+        const res = harvestRound(
+          { dispatch: p.dispatch, round: "9", repo: p.repo, only: [["bug", "ghost"]] },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err).toContain("review-round: ghost is not a bug reviewer of round 9");
+        expect(of(calls, "review-findings").length).toBe(0);
+      }, "review-round-harvestghost-");
+    });
+  });
+
+  describe("fix", () => {
+    const PARENT = "1".repeat(40);
+    const SHA = "2".repeat(40);
+
+    test("stages the named paths, commits, and records the apply in one step", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const shas = [PARENT, SHA];
+        const { calls, deps } = stand((name, args) => {
+          if (name === "git" && args.includes("rev-parse"))
+            return { code: 0, out: `${shas.shift() ?? ""}\n`, err: "" };
+          return green(name, args);
+        });
+        const res = fixRound(
+          {
+            dispatch: p.dispatch,
+            synthesis: p.synthesis,
+            message: "Fix the wording",
+            findings: ["a.ts:1", "b.ts:2"],
+            paths: ["a.ts", "b.ts"],
+          },
+          deps,
+        );
+        expect(res.code).toBe(0);
+        expect(res.out).toContain(`review-round: fix ${SHA} recorded (a.ts:1 b.ts:2)`);
+        expect(one(calls, "git", (c) => c.args.includes("add"))?.args).toEqual([
+          "-C",
+          p.synthesis,
+          "add",
+          "--",
+          "a.ts",
+          "b.ts",
+        ]);
+        expect(one(calls, "git", (c) => c.args.includes("commit"))?.args).toEqual([
+          "-C",
+          p.synthesis,
+          "commit",
+          "-m",
+          "Fix the wording",
+          "--",
+          "a.ts",
+          "b.ts",
+        ]);
+        expect(one(calls, "log-action")?.args).toEqual([
+          p.dispatch,
+          "coachman",
+          "apply",
+          SHA,
+          "a.ts:1 b.ts:2",
+        ]);
+        expect(of(calls, "git").some((c) => c.args.includes("reset"))).toBe(false);
+      }, "review-round-fix-");
+    });
+
+    test("a failing add unstages what it staged", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const shas = [PARENT, PARENT];
+        const { calls, deps } = stand((name, args) => {
+          if (name === "git" && args.includes("rev-parse"))
+            return { code: 0, out: `${shas.shift() ?? ""}\n`, err: "" };
+          if (name === "git" && args.includes("add"))
+            return { code: 1, out: "", err: "pathspec did not match\n" };
+          return green(name, args);
+        });
+        const res = fixRound(
+          {
+            dispatch: p.dispatch,
+            synthesis: p.synthesis,
+            message: "Fix the wording",
+            findings: ["a.ts:1"],
+            paths: ["a.ts"],
+          },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err.join("\n")).toContain("cannot stage the fix");
+        expect(one(calls, "git", (c) => c.args.includes("reset"))?.args).toEqual([
+          "-C",
+          p.synthesis,
+          "reset",
+          "-q",
+          "--mixed",
+          PARENT,
+        ]);
+      }, "review-round-fixadd-");
+    });
+
+    test("a failing commit unstages the staged paths", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const shas = [PARENT, PARENT];
+        const { calls, deps } = stand((name, args) => {
+          if (name === "git" && args.includes("rev-parse"))
+            return { code: 0, out: `${shas.shift() ?? ""}\n`, err: "" };
+          if (name === "git" && args.includes("commit"))
+            return { code: 1, out: "", err: "pre-commit hook declined\n" };
+          return green(name, args);
+        });
+        const res = fixRound(
+          {
+            dispatch: p.dispatch,
+            synthesis: p.synthesis,
+            message: "Fix the wording",
+            findings: ["a.ts:1"],
+            paths: ["a.ts"],
+          },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err.join("\n")).toContain("cannot commit the fix");
+        expect(one(calls, "git", (c) => c.args.includes("reset"))?.args).toEqual([
+          "-C",
+          p.synthesis,
+          "reset",
+          "-q",
+          "--mixed",
+          PARENT,
+        ]);
+      }, "review-round-fixcommit-");
+    });
+
+    test("an unrecorded apply rolls the commit back to its parent", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const shas = [PARENT, SHA, SHA];
+        const { calls, deps } = stand((name, args) => {
+          if (name === "git" && args.includes("rev-parse"))
+            return { code: 0, out: `${shas.shift() ?? ""}\n`, err: "" };
+          if (name === "log-action") return { code: 1, out: "", err: "cannot append\n" };
+          return green(name, args);
+        });
+        const res = fixRound(
+          {
+            dispatch: p.dispatch,
+            synthesis: p.synthesis,
+            message: "Fix the wording",
+            findings: ["a.ts:1"],
+            paths: ["a.ts"],
+          },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.out).toContain(
+          `review-round: fix ${SHA} was not recorded; rolled back to ${PARENT} and unstaged`,
+        );
+        expect(one(calls, "git", (c) => c.args.includes("reset"))?.args).toEqual([
+          "-C",
+          p.synthesis,
+          "reset",
+          "-q",
+          "--mixed",
+          PARENT,
+        ]);
+      }, "review-round-fixback-");
+    });
+
+    test("a moved HEAD is never rolled back; the apply is recorded by hand instead", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const shas = [PARENT, SHA, "3".repeat(40)];
+        const { calls, deps } = stand((name, args) => {
+          if (name === "git" && args.includes("rev-parse"))
+            return { code: 0, out: `${shas.shift() ?? ""}\n`, err: "" };
+          if (name === "log-action") return { code: 1, out: "", err: "cannot append\n" };
+          return green(name, args);
+        });
+        const res = fixRound(
+          {
+            dispatch: p.dispatch,
+            synthesis: p.synthesis,
+            message: "Fix the wording",
+            findings: ["a.ts:1"],
+            paths: ["a.ts"],
+          },
+          deps,
+        );
+        expect(res.code).toBe(1);
+        expect(res.err.join("\n")).toContain("HEAD moved meanwhile");
+        expect(of(calls, "git").some((c) => c.args.includes("reset"))).toBe(false);
+      }, "review-round-fixmoved-");
+    });
+  });
+
+  describe("gate", () => {
+    const SHA = "4".repeat(40);
+
+    test("a dirty tree is refused before verify runs, with no row and no pass file", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        let verified = false;
+        const { calls, deps } = stand((name, args) => {
+          if (name === "git" && args.includes("rev-parse"))
+            return { code: 0, out: `${SHA}\n`, err: "" };
+          if (name === "git" && args.includes("status"))
+            return { code: 0, out: " M src/dirty.ts\n", err: "" };
+          if (name === "verify") {
+            verified = true;
+            return { code: 0, out: "", err: "" };
+          }
+          return green(name, args);
+        });
+        const res = gateRound({ dispatch: p.dispatch, round: "1", synthesis: p.synthesis }, deps);
+        expect(res.code).toBe(1);
+        expect(verified).toBe(false);
+        expect(res.err.join("\n")).toContain("src/dirty.ts");
+        expect(of(calls, "log-action").length).toBe(0);
+        expect(existsSync(join(p.dispatch, "logs", `gate-${SHA}.txt`))).toBe(false);
+      }, "review-round-gatedirty-");
+    });
+
+    test("a green gate writes the pass file and logs the mid-round row", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) => {
+          if (name === "git" && args.includes("rev-parse"))
+            return { code: 0, out: `${SHA}\n`, err: "" };
+          if (name === "git" && args.includes("status")) return { code: 0, out: "", err: "" };
+          if (name === "verify") return { code: 0, out: "gate: pass\n", err: "" };
+          return green(name, args);
+        });
+        const res = gateRound({ dispatch: p.dispatch, round: "1", synthesis: p.synthesis }, deps);
+        expect(res.code).toBe(0);
+        expect(readFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "utf8")).toBe(
+          "gate: pass\n",
+        );
+        expect(res.out).toContain("gate: pass");
+        expect(one(calls, "log-action", (c) => c.args[2] === "gate")?.args).toEqual([
+          p.dispatch,
+          "coachman",
+          "gate",
+          SHA,
+          "review round 1, run verify exit 0, mid-round gate",
+        ]);
+      }, "review-round-gateok-");
+    });
+
+    test("a failing gate still records its true row and exits 1", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        const { calls, deps } = stand((name, args) => {
+          if (name === "git" && args.includes("rev-parse"))
+            return { code: 0, out: `${SHA}\n`, err: "" };
+          if (name === "git" && args.includes("status")) return { code: 0, out: "", err: "" };
+          if (name === "verify") return { code: 2, out: "gate: fail\n", err: "" };
+          return green(name, args);
+        });
+        const res = gateRound({ dispatch: p.dispatch, round: "1", synthesis: p.synthesis }, deps);
+        expect(res.code).toBe(1);
+        expect(res.out).toContain("gate: fail");
+        expect(one(calls, "log-action", (c) => c.args[2] === "gate")?.args[4]).toBe(
+          "review round 1, run verify exit 2, mid-round gate",
+        );
+      }, "review-round-gategail-");
+    });
+
+    test("a failing gate leaves an earlier kept pass text alone", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        writeFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "gate: pass\n");
+        const { deps } = stand((name, args) => {
+          if (name === "git" && args.includes("rev-parse"))
+            return { code: 0, out: `${SHA}\n`, err: "" };
+          if (name === "git" && args.includes("status")) return { code: 0, out: "", err: "" };
+          if (name === "verify") return { code: 2, out: "gate: fail\n", err: "" };
+          return green(name, args);
+        });
+        const res = gateRound({ dispatch: p.dispatch, round: "1", synthesis: p.synthesis }, deps);
+        expect(res.code).toBe(1);
+        expect(readFileSync(join(p.dispatch, "logs", `gate-${SHA}.txt`), "utf8")).toBe(
+          "gate: pass\n",
+        );
+      }, "review-round-gatekeptfail-");
+    });
   });
 });
 
@@ -1412,6 +2391,20 @@ const pointLine = (point: string): string =>
     target: point,
     detail: JSON.stringify({ kind: "point", point, result: "clean" }),
   });
+
+/** How many reach points named `point` the journal holds. */
+const pointCount = (journal: string, point: string): number =>
+  journal.split("\n").filter((line) => {
+    if (line.trim() === "") return false;
+    try {
+      const row = JSON.parse(line) as { action?: unknown; detail?: unknown };
+      if (row.action !== "reach" || typeof row.detail !== "string") return false;
+      const detail = JSON.parse(row.detail) as { kind?: unknown; point?: unknown };
+      return detail.kind === "point" && detail.point === point;
+    } catch {
+      return false;
+    }
+  }).length;
 
 interface Torn {
   code: number;
@@ -1460,6 +2453,21 @@ function teardown(snapshot: boolean, actions: string[], named: boolean): Torn {
     };
   });
 }
+
+describe("roundPointRecorded", () => {
+  test("it reads the round's own point, and never refuses on an unreadable journal", () => {
+    withTempDir((root) => {
+      const d = join(root, "T-1");
+      mkdirSync(d, { recursive: true });
+      expect(roundPointRecorded(d, "1")).toBe(false);
+      writeFileSync(join(d, "actions.jsonl"), `${pointLine("r1")}\n${pointLine("card")}\n`);
+      expect(roundPointRecorded(d, "1")).toBe(true);
+      expect(roundPointRecorded(d, "2")).toBe(false);
+      writeFileSync(join(d, "actions.jsonl"), "not json\n");
+      expect(roundPointRecorded(d, "1")).toBe(false);
+    }, "review-round-pointrecorded-");
+  });
+});
 
 describe("reachCheckMissing", () => {
   test("it waits only for the round's own teardown of a round with no point of its own", () => {
@@ -1516,5 +2524,364 @@ describe("teardown and the round's reach check", () => {
     expect(t.code).toBe(1);
     expect(t.out).toContain("cannot read the reach record to teardown round 1");
     expect(t.runLog).not.toContain("round 1: removed");
+  });
+});
+
+describe("wait and the round's reach check", () => {
+  test("a timed-out round still ends with the round's check", () => {
+    withTempDir((root) => {
+      const repo = join(root, "repo");
+      const ticket = "T-9";
+      mkdirSync(repo, { recursive: true });
+      const git = (...args: string[]): void => {
+        const r = run("git", ["-C", repo, ...args]);
+        if (r.code !== 0) throw new Error(`git ${args.join(" ")}: ${r.err.trim()}`);
+      };
+      git("init", "-q", "-b", "main");
+      git("config", "user.name", "t");
+      git("config", "user.email", "t@t");
+      git("config", "commit.gpgsign", "false");
+      writeFileSync(join(repo, "file.txt"), "base\n");
+      git("add", "file.txt");
+      git("commit", "-q", "-m", "base");
+      const base = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+      git("checkout", "-q", "-b", ticket);
+      git("checkout", "-q", "main");
+      const synthesis = join(repo, ".worktrees", ticket);
+      git("worktree", "add", "-q", synthesis, ticket);
+      const d = join(repo, ".postmaster", "runs", ticket);
+      mkdirSync(join(d, "logs"), { recursive: true });
+      mkdirSync(join(d, "reach"), { recursive: true });
+      writeFileSync(
+        join(d, "manifest.json"),
+        `${JSON.stringify({ stage: "review", leg: 2, base, lanes: {}, coachman: { legs: {} } })}\n`,
+      );
+      writeFileSync(
+        join(d, "run.json"),
+        `${JSON.stringify({ coachman_contract: 2, config: { review: { round_timeout_seconds: 2 } } })}\n`,
+      );
+      writeFileSync(
+        join(d, "brief.md"),
+        `# Waybill: ${ticket}\nturnpikes: style\n\n## Project profile\nrepo: ${repo}          default branch: main       BASE: ${base}\n`,
+      );
+      writeFileSync(join(d, "actions.jsonl"), "");
+      writeFileSync(join(d, "run-log.md"), "");
+      expect(run(self, ["reach", "before", d, "1"]).code).toBe(0);
+      expect(run(self, ["review-round", "start", d, "1", "style:ghost", "bug:ghost"]).code).toBe(0);
+      writeFileSync(join(d, "logs", "review-r1-style-ghost.done"), "");
+      const r = run(self, ["review-round", "wait", d, "1", repo, "style:ghost", "bug:ghost"]);
+      expect(r.code).toBe(3);
+      expect(r.out).toContain("r1: ");
+      const journal = readFileSync(join(d, "actions.jsonl"), "utf8");
+      expect(journal).toContain('"target":"r1"');
+      expect(journal).toContain("TIMEOUT");
+    }, "review-round-waitcheck-");
+  });
+
+  test("a reviewer still running at the time limit stops the leg with no check", () => {
+    withTempDir((root) => {
+      const repo = join(root, "repo");
+      const ticket = "T-9";
+      mkdirSync(repo, { recursive: true });
+      const git = (...args: string[]): void => {
+        const r = run("git", ["-C", repo, ...args]);
+        if (r.code !== 0) throw new Error(`git ${args.join(" ")}: ${r.err.trim()}`);
+      };
+      git("init", "-q", "-b", "main");
+      git("config", "user.name", "t");
+      git("config", "user.email", "t@t");
+      git("config", "commit.gpgsign", "false");
+      writeFileSync(join(repo, "file.txt"), "base\n");
+      git("add", "file.txt");
+      git("commit", "-q", "-m", "base");
+      const base = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+      git("checkout", "-q", "-b", ticket);
+      git("checkout", "-q", "main");
+      const synthesis = join(repo, ".worktrees", ticket);
+      git("worktree", "add", "-q", synthesis, ticket);
+      const d = join(repo, ".postmaster", "runs", ticket);
+      mkdirSync(join(d, "logs"), { recursive: true });
+      mkdirSync(join(d, "reach"), { recursive: true });
+      writeFileSync(
+        join(d, "manifest.json"),
+        `${JSON.stringify({ stage: "review", leg: 2, base, lanes: {}, coachman: { legs: {} } })}\n`,
+      );
+      writeFileSync(
+        join(d, "run.json"),
+        `${JSON.stringify({ coachman_contract: 2, config: { review: { round_timeout_seconds: 2 } } })}\n`,
+      );
+      writeFileSync(
+        join(d, "brief.md"),
+        `# Waybill: ${ticket}\nturnpikes: style\n\n## Project profile\nrepo: ${repo}          default branch: main       BASE: ${base}\n`,
+      );
+      writeFileSync(join(d, "actions.jsonl"), "");
+      writeFileSync(join(d, "run-log.md"), "");
+      expect(run(self, ["reach", "before", d, "1"]).code).toBe(0);
+      expect(run(self, ["review-round", "start", d, "1", "style:ghost"]).code).toBe(0);
+      // A path the stop cannot stop: host stop exits nonzero, as for a launch
+      // it cannot prove stopped, so the wait takes the STILL RUNNING branch.
+      mkdirSync(join(repo, ".worktrees"), { recursive: true });
+      writeFileSync(join(repo, ".worktrees", `${ticket}-rev-style-ghost`), "not a scratch\n");
+      const r = run(self, ["review-round", "wait", d, "1", repo, "style:ghost"]);
+      expect(r.code).toBe(4);
+      expect(r.out).toContain("STILL RUNNING");
+      expect(r.out).toContain("the round's check is not run");
+      const journal = readFileSync(join(d, "actions.jsonl"), "utf8");
+      expect(journal).toContain("still running after the time limit");
+      expect(journal).not.toContain('"point":"r1"');
+      expect(existsSync(join(d, "reach", "r1"))).toBe(false);
+    }, "review-round-waitstill-");
+  });
+
+  test("a recorded point without a finished collection completes its restore", () => {
+    withTempDir((root) => {
+      const repo = join(root, "repo");
+      const ticket = "T-9";
+      mkdirSync(repo, { recursive: true });
+      const git = (...args: string[]): void => {
+        const r = run("git", ["-C", repo, ...args]);
+        if (r.code !== 0) throw new Error(`git ${args.join(" ")}: ${r.err.trim()}`);
+      };
+      git("init", "-q", "-b", "main");
+      git("config", "user.name", "t");
+      git("config", "user.email", "t@t");
+      git("config", "commit.gpgsign", "false");
+      writeFileSync(join(repo, "file.txt"), "base\n");
+      git("add", "file.txt");
+      git("commit", "-q", "-m", "base");
+      const base = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+      git("checkout", "-q", "-b", ticket);
+      git("checkout", "-q", "main");
+      const synthesis = join(repo, ".worktrees", ticket);
+      git("worktree", "add", "-q", synthesis, ticket);
+      const d = join(repo, ".postmaster", "runs", ticket);
+      mkdirSync(join(d, "logs"), { recursive: true });
+      mkdirSync(join(d, "reach"), { recursive: true });
+      writeFileSync(
+        join(d, "manifest.json"),
+        `${JSON.stringify({ stage: "review", leg: 2, base, lanes: {}, coachman: { legs: {} } })}\n`,
+      );
+      writeFileSync(
+        join(d, "run.json"),
+        `${JSON.stringify({ coachman_contract: 2, config: { review: { round_timeout_seconds: 2 } } })}\n`,
+      );
+      writeFileSync(
+        join(d, "brief.md"),
+        `# Waybill: ${ticket}\nturnpikes: style\n\n## Project profile\nrepo: ${repo}          default branch: main       BASE: ${base}\n`,
+      );
+      // A collection cut short after its point: the check is recorded, the
+      // restore never finished, and reviewer dirt is still in the worktree.
+      writeFileSync(join(d, "actions.jsonl"), `${pointLine("r1")}\n`);
+      writeFileSync(join(d, "run-log.md"), "");
+      expect(run(self, ["reach", "before", d, "1"]).code).toBe(0);
+      expect(run(self, ["review-round", "start", d, "1", "style:ghost"]).code).toBe(0);
+      writeFileSync(join(synthesis, "file.txt"), "reviewer dirt\n");
+      const r = run(self, ["review-round", "wait", d, "1", repo, "style:ghost"]);
+      expect(r.code).toBe(3);
+      expect(r.out).toContain("completing its restore");
+      expect(readFileSync(join(synthesis, "file.txt"), "utf8")).toBe("base\n");
+      const journal = readFileSync(join(d, "actions.jsonl"), "utf8");
+      expect(pointCount(journal, "r1")).toBe(1);
+      expect(existsSync(join(d, "reach", "r1.collected"))).toBe(true);
+    }, "review-round-waitresume-");
+  });
+
+  test("a finished collection is never repeated", () => {
+    withTempDir((root) => {
+      const repo = join(root, "repo");
+      const ticket = "T-9";
+      mkdirSync(repo, { recursive: true });
+      const git = (...args: string[]): void => {
+        const r = run("git", ["-C", repo, ...args]);
+        if (r.code !== 0) throw new Error(`git ${args.join(" ")}: ${r.err.trim()}`);
+      };
+      git("init", "-q", "-b", "main");
+      git("config", "user.name", "t");
+      git("config", "user.email", "t@t");
+      git("config", "commit.gpgsign", "false");
+      writeFileSync(join(repo, "file.txt"), "base\n");
+      git("add", "file.txt");
+      git("commit", "-q", "-m", "base");
+      const base = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+      git("checkout", "-q", "-b", ticket);
+      git("checkout", "-q", "main");
+      const synthesis = join(repo, ".worktrees", ticket);
+      git("worktree", "add", "-q", synthesis, ticket);
+      const d = join(repo, ".postmaster", "runs", ticket);
+      mkdirSync(join(d, "logs"), { recursive: true });
+      mkdirSync(join(d, "reach"), { recursive: true });
+      writeFileSync(
+        join(d, "manifest.json"),
+        `${JSON.stringify({ stage: "review", leg: 2, base, lanes: {}, coachman: { legs: {} } })}\n`,
+      );
+      writeFileSync(
+        join(d, "run.json"),
+        `${JSON.stringify({ coachman_contract: 2, config: { review: { round_timeout_seconds: 2 } } })}\n`,
+      );
+      writeFileSync(
+        join(d, "brief.md"),
+        `# Waybill: ${ticket}\nturnpikes: style\n\n## Project profile\nrepo: ${repo}          default branch: main       BASE: ${base}\n`,
+      );
+      writeFileSync(join(d, "actions.jsonl"), `${pointLine("r1")}\n`);
+      writeFileSync(join(d, "reach", "r1.collected"), "");
+      writeFileSync(join(d, "run-log.md"), "");
+      expect(run(self, ["reach", "before", d, "1"]).code).toBe(0);
+      expect(run(self, ["review-round", "start", d, "1", "style:ghost"]).code).toBe(0);
+      writeFileSync(join(synthesis, "file.txt"), "later dirt\n");
+      const r = run(self, ["review-round", "wait", d, "1", repo, "style:ghost"]);
+      expect(r.code).toBe(3);
+      expect(r.out).toContain("already has its reach check recorded");
+      expect(r.out).not.toContain("completing its restore");
+      expect(readFileSync(join(synthesis, "file.txt"), "utf8")).toBe("later dirt\n");
+      const journal = readFileSync(join(d, "actions.jsonl"), "utf8");
+      expect(pointCount(journal, "r1")).toBe(1);
+      expect(existsSync(join(d, "reach", "r1"))).toBe(false);
+    }, "review-round-waitskip-");
+  });
+
+  test("the wait copies bug lanes' task transcripts before the round's check", () => {
+    withTempDir((root) => {
+      const repo = join(root, "repo");
+      const ticket = "T-9";
+      mkdirSync(repo, { recursive: true });
+      const git = (...args: string[]): void => {
+        const r = run("git", ["-C", repo, ...args]);
+        if (r.code !== 0) throw new Error(`git ${args.join(" ")}: ${r.err.trim()}`);
+      };
+      git("init", "-q", "-b", "main");
+      git("config", "user.name", "t");
+      git("config", "user.email", "t@t");
+      git("config", "commit.gpgsign", "false");
+      writeFileSync(join(repo, "file.txt"), "base\n");
+      git("add", "file.txt");
+      git("commit", "-q", "-m", "base");
+      const base = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+      git("checkout", "-q", "-b", ticket);
+      git("checkout", "-q", "main");
+      const synthesis = join(repo, ".worktrees", ticket);
+      git("worktree", "add", "-q", synthesis, ticket);
+      const d = join(repo, ".postmaster", "runs", ticket);
+      mkdirSync(join(d, "logs"), { recursive: true });
+      mkdirSync(join(d, "reach"), { recursive: true });
+      writeFileSync(
+        join(d, "manifest.json"),
+        `${JSON.stringify({ stage: "review", leg: 2, base, lanes: {}, coachman: { legs: {} } })}\n`,
+      );
+      writeFileSync(
+        join(d, "run.json"),
+        `${JSON.stringify({ coachman_contract: 2, config: { review: { round_timeout_seconds: 30 } } })}\n`,
+      );
+      writeFileSync(
+        join(d, "brief.md"),
+        `# Waybill: ${ticket}\nturnpikes: bug\n\n## Project profile\nrepo: ${repo}          default branch: main       BASE: ${base}\n`,
+      );
+      writeFileSync(join(d, "actions.jsonl"), "");
+      writeFileSync(join(d, "run-log.md"), "");
+      expect(run(self, ["reach", "before", d, "1"]).code).toBe(0);
+      expect(run(self, ["review-round", "start", d, "1", "bug:ghost"]).code).toBe(0);
+      const uid = process.getuid?.() ?? 0;
+      const taskHome = join(`/tmp/claude-${uid}`, `postmaster-rr2-${process.pid}`);
+      try {
+        mkdirSync(taskHome, { recursive: true });
+        const taskFile = join(taskHome, "task-output.txt");
+        writeFileSync(taskFile, '{"type":"result","result":"done"}\n');
+        writeFileSync(
+          join(d, "logs", "review-r1-bug-ghost.jsonl"),
+          `${JSON.stringify({ type: "system", subtype: "task_notification", output_file: taskFile })}\n`,
+        );
+        writeFileSync(join(d, "logs", "review-r1-bug-ghost.done"), "");
+        const r = run(self, ["review-round", "wait", d, "1", repo, "bug:ghost"]);
+        expect(r.code).toBe(0);
+        const copied = join(d, "logs", "review-r1-bug-ghost-claude-task-01-task-output.txt");
+        expect(existsSync(copied)).toBe(true);
+        expect(r.out).toContain("claude-task-01-task-output.txt");
+        expect(r.out).toContain("r1: ");
+      } finally {
+        rmSync(taskHome, { recursive: true, force: true });
+      }
+    }, "review-round-waittasks-");
+  });
+});
+
+describe("a pairs collection and the round's reach check", () => {
+  test("a pairs wait with no recorded roster and a starting state refuses before collecting, and starting again stays open", () => {
+    withTempDir((root) => {
+      const repo = join(root, "repo");
+      const ticket = "T-9";
+      mkdirSync(repo, { recursive: true });
+      expect(run("git", ["-C", repo, "init", "-q", "-b", "main"]).code).toBe(0);
+      const d = join(repo, ".postmaster", "runs", ticket);
+      mkdirSync(join(d, "logs"), { recursive: true });
+      mkdirSync(join(d, "reach"), { recursive: true });
+      writeFileSync(join(d, "actions.jsonl"), "");
+      writeFileSync(join(d, "run-log.md"), "");
+      writeFileSync(join(d, "reach", "before-r1.json"), "{}\n");
+      expect(run(self, ["review-round", "start", d, "1"]).code).toBe(0);
+      const r = run(self, ["review-round", "wait", d, "1", repo, "style:ghost"]);
+      expect(r.code).toBe(1);
+      expect(r.out + r.err).toContain(
+        "round 1 has no reviewers recorded; start it again with its <lens>:<lane> pairs",
+      );
+      expect(readFileSync(join(d, "actions.jsonl"), "utf8")).toBe("");
+      expect(readFileSync(join(d, "run-log.md"), "utf8")).toBe("");
+      expect(run(self, ["review-round", "start", d, "1", "style:ghost"]).code).toBe(0);
+      const st = JSON.parse(readFileSync(join(d, "logs", "review-r1.json"), "utf8")) as {
+        reviewers?: unknown;
+      };
+      expect(st.reviewers).toEqual([["style", "ghost"]]);
+    }, "review-round-noroster-");
+  });
+
+  test("a subset collection records no check, and the whole round's collection after it does", () => {
+    withTempDir((root) => {
+      const repo = join(root, "repo");
+      const ticket = "T-9";
+      mkdirSync(repo, { recursive: true });
+      const git = (...args: string[]): void => {
+        const r = run("git", ["-C", repo, ...args]);
+        if (r.code !== 0) throw new Error(`git ${args.join(" ")}: ${r.err.trim()}`);
+      };
+      git("init", "-q", "-b", "main");
+      git("config", "user.name", "t");
+      git("config", "user.email", "t@t");
+      git("config", "commit.gpgsign", "false");
+      writeFileSync(join(repo, "file.txt"), "base\n");
+      git("add", "file.txt");
+      git("commit", "-q", "-m", "base");
+      const base = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+      git("checkout", "-q", "-b", ticket);
+      git("checkout", "-q", "main");
+      const synthesis = join(repo, ".worktrees", ticket);
+      git("worktree", "add", "-q", synthesis, ticket);
+      const d = join(repo, ".postmaster", "runs", ticket);
+      mkdirSync(join(d, "logs"), { recursive: true });
+      mkdirSync(join(d, "reach"), { recursive: true });
+      writeFileSync(
+        join(d, "manifest.json"),
+        `${JSON.stringify({ stage: "review", leg: 2, base, lanes: {}, coachman: { legs: {} } })}\n`,
+      );
+      writeFileSync(
+        join(d, "run.json"),
+        `${JSON.stringify({ coachman_contract: 2, config: { review: { round_timeout_seconds: 2 } } })}\n`,
+      );
+      writeFileSync(
+        join(d, "brief.md"),
+        `# Waybill: ${ticket}\nturnpikes: style\n\n## Project profile\nrepo: ${repo}          default branch: main       BASE: ${base}\n`,
+      );
+      writeFileSync(join(d, "actions.jsonl"), "");
+      writeFileSync(join(d, "run-log.md"), "");
+      expect(run(self, ["reach", "before", d, "1"]).code).toBe(0);
+      expect(run(self, ["review-round", "start", d, "1", "style:ghost", "bug:ghost"]).code).toBe(0);
+      writeFileSync(join(d, "logs", "review-r1-style-ghost.done"), "");
+      const sub = run(self, ["review-round", "wait", d, "1", repo, "style:ghost"]);
+      expect(sub.code).toBe(0);
+      expect(sub.out).toContain("the round's reach check waits for the whole round");
+      expect(readFileSync(join(d, "actions.jsonl"), "utf8")).not.toContain('"target":"r1"');
+      const whole = run(self, ["review-round", "wait", d, "1", repo]);
+      expect(whole.code).toBe(3);
+      const journal = readFileSync(join(d, "actions.jsonl"), "utf8");
+      expect(journal).toContain('"target":"r1"');
+      expect(journal).toContain("TIMEOUT");
+    }, "review-round-subsetcheck-");
   });
 });

@@ -1,0 +1,13 @@
+diff --git a/src/cli.ts b/src/cli.ts
+index a035d34..1e68f57 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -62,7 +62,7 @@ async function run(args: readonly string[], path: string, { out, err }: Output):
+     }
+     case "remove": {
+       const ids = rest.map(parseId).filter((id) => id !== undefined);
+-      if (ids.length === 0 || ids.length !== rest.length) {
++      if (ids.length !== rest.length) {
+         err(USAGE);
+         return 2;
+       }

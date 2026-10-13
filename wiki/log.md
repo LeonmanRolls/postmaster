@@ -26,6 +26,30 @@ were running. No rule, runbook, template or gate changed, and six changes to the
 proposed. No stop signal tried predicted a clean next round above about half. No other standing
 changed.
 
+## [2026-10-11] ingest | one person's reading of a function with and without mutation
+
+Followed the reading trial of the same day. The user was shown `textWrap` of `view-stream.ts` in its original and
+its functional version on a page made for a phone, labelled A and B in an order fixed by a seeded coin, with three
+questions, and answered "I think B is much better"; B was the functional version. Recorded in
+`raw/trials/2026-10-11-functional-reading-one-reader/` and added to the trial's section in
+[the functional-core page](concepts/functional-core-and-verification.md) as one datum that points the other way
+from the model readers. No standing changed.
+
+## [2026-10-11] ingest | whether functional code is easier for a model to follow
+
+At the user's request, with no ticket. Wrote a functional and a tidy arrangement of three of the project's modules
+(485, 1,134 and 1,827 lines), proved each the same program by the module's own tests, a differential check and
+the answers to 26 questions, and had fresh sessions of a small model read all nine in two modes. The record is
+`raw/trials/2026-10-11-functional-reading/`: the design and apparatus first, then the questions and the
+arrangements, then the 126 sessions and the results. A calibration on the original showed the reader at the
+ceiling, so the primary measure became its effort. Of 18 comparisons by the rules fixed beforehand 17 read no
+difference and one reads easier; the functional arrangement was never easier than the tidy one, and pooled it
+took about 5% more effort than the original and 9% more than the tidy one. Added the trial after the fifth in
+[the functional-core page](concepts/functional-core-and-verification.md) and changed one sentence of its first
+proposal. Nothing in the gate, the rules or the runbooks changed. The question writer found a defect in
+`scripts/style-findings.ts` (`Tree.up` never returns when no name is found below the root), told to the
+postmaster and the user, not ticketed. No standing changed.
+
 ## [2026-10-11] ingest | trial 1: laws written blind against #202's shell-command classifier
 
 Issue #367. Recorded `raw/trials/2026-10-11-blind-laws-classifier/`: a sub-agent that saw only #202's text, the

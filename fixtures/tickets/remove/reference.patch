@@ -94,7 +94,7 @@ index 0be13d6..5b88ec6 100644
    return (
      isRecord(value) &&
 diff --git a/src/tasks.ts b/src/tasks.ts
-index 50864ae..9b87e73 100644
+index 50864ae..6ad76fb 100644
 --- a/src/tasks.ts
 +++ b/src/tasks.ts
 @@ -9,18 +9,19 @@ export type Task = {
@@ -134,8 +134,8 @@ index 50864ae..9b87e73 100644
 +}
 +
 +/**
-+ * Removes the tasks with the given ids, each once, in the order given. Every id must be on the
-+ * list: when one is not, nothing is removed and the first missing id is returned instead.
++ * Removes the tasks with the given ids, in the order given. Every id must be on the list: when
++ * one is not, nothing is removed and the first missing id is returned instead.
 + */
 +export function removeTasks(
 +  list: TodoList,
@@ -145,7 +145,7 @@ index 50864ae..9b87e73 100644
 +  if (missing !== undefined) {
 +    return { missing };
 +  }
-+  const removed = [...new Set(ids)];
++  const removed = [...ids];
 +  return {
 +    list: { ...list, tasks: list.tasks.filter((task) => !removed.includes(task.id)) },
 +    removed,
@@ -154,7 +154,7 @@ index 50864ae..9b87e73 100644
  
  export function formatTask(task: Task): string {
 diff --git a/test/cli.test.ts b/test/cli.test.ts
-index dd49de0..c9d2fc3 100644
+index dd49de0..0e5ea9f 100644
 --- a/test/cli.test.ts
 +++ b/test/cli.test.ts
 @@ -52,6 +52,45 @@ describe("done", () => {
@@ -166,7 +166,7 @@ index dd49de0..c9d2fc3 100644
 +    for (const text of ["a", "b", "c", "d"]) {
 +      await todo("add", text);
 +    }
-+    expect(await todo("remove", "3", "1", "3")).toEqual({
++    expect(await todo("remove", "3", "1")).toEqual({
 +      code: 0,
 +      out: ["removed 3", "removed 1"],
 +      err: [],
@@ -265,7 +265,7 @@ index 2964804..e551be1 100644
      }
    });
 diff --git a/test/tasks.test.ts b/test/tasks.test.ts
-index 00de47e..7ff9b8d 100644
+index 00de47e..fcc3163 100644
 --- a/test/tasks.test.ts
 +++ b/test/tasks.test.ts
 @@ -1,11 +1,19 @@
@@ -317,8 +317,8 @@ index 00de47e..7ff9b8d 100644
 +    lastId: 4,
 +  };
 +
-+  test("removes each task named, once, in the order given", () => {
-+    expect(removeTasks(four, [3, 1, 3])).toEqual({
++  test("removes each task named, in the order given", () => {
++    expect(removeTasks(four, [3, 1])).toEqual({
 +      list: {
 +        tasks: [
 +          { id: 2, text: "b", done: true },

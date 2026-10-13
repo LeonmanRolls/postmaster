@@ -6,9 +6,12 @@ import {
   checkDrawings,
   computeGaps,
   cutDoc,
+  draftDigest,
   fill,
   gapRows,
+  keptPicture,
   mimeOf,
+  parseBuildRecord,
   parseBoxes,
   parseCited,
   parseStory,
@@ -22,6 +25,7 @@ import {
   repoOf,
   sceneBlocks,
   scrubStory,
+  staleReason,
   startsInFence,
   stepsHtml,
   tagSvg,
@@ -708,5 +712,78 @@ describe("page pieces", () => {
       mimeOf(Uint8Array.from([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50])),
     ).toBe("image/webp");
     expect(() => mimeOf(Uint8Array.from([1, 2, 3]))).toThrow("no PNG, JPEG or WebP");
+  });
+});
+
+describe("the build record", () => {
+  test("the draft digest is stable and moves with the title or the body", () => {
+    const a = draftDigest("T", "B");
+    expect(a).toBe(draftDigest("T", "B"));
+    expect(a).toMatch(/^[0-9a-f]{64}$/u);
+    expect(draftDigest("T2", "B")).not.toBe(a);
+    expect(draftDigest("T", "B2")).not.toBe(a);
+  });
+
+  test("a record round-trips, and anything else reads as no record", () => {
+    const record = {
+      version: 1,
+      title: "T",
+      draft: draftDigest("T", "B"),
+      pictures: { hero: "picture.png" },
+    };
+    expect(parseBuildRecord(JSON.stringify(record))).toEqual(record);
+    for (const bad of [
+      "not json",
+      JSON.stringify({ ...record, version: 2 }),
+      JSON.stringify({ ...record, title: 7 }),
+      JSON.stringify({ ...record, draft: null }),
+      JSON.stringify({ ...record, pictures: ["picture.png"] }),
+      JSON.stringify({ ...record, pictures: { hero: "" } }),
+      JSON.stringify({ ...record, pictures: { hero: 7 } }),
+      JSON.stringify([1, 2]),
+    ]) {
+      expect(parseBuildRecord(bad)).toBeNull();
+    }
+  });
+
+  test("the verdict names a missing record, page, title or draft, else current", () => {
+    const record = {
+      version: 1 as const,
+      title: "T",
+      draft: draftDigest("T", "B"),
+      pictures: { hero: "picture.png" },
+    };
+    const fresh = {
+      record,
+      recordPresent: true,
+      pagePresent: true,
+      title: "T",
+      digest: draftDigest("T", "B"),
+      outDir: "/tmp/out",
+    };
+    expect(staleReason(fresh)).toBeNull();
+    expect(staleReason({ ...fresh, recordPresent: false, record: null })).toContain(
+      "no build recorded",
+    );
+    expect(staleReason({ ...fresh, record: null })).toBe("the build record cannot be read");
+    expect(staleReason({ ...fresh, pagePresent: false })).toContain("no page built");
+    expect(staleReason({ ...fresh, title: "T2" })).toBe("the title changed");
+    expect(staleReason({ ...fresh, digest: draftDigest("T", "B2") })).toBe("the draft changed");
+  });
+
+  test("a kept picture needs the same title and a plain file for the scene", () => {
+    const record = {
+      version: 1 as const,
+      title: "T",
+      draft: "d",
+      pictures: { hero: "picture.png", other: "picture-other.jpg" },
+    };
+    expect(keptPicture(record, "T", "hero")).toBe("picture.png");
+    expect(keptPicture(record, "T", "other")).toBe("picture-other.jpg");
+    expect(keptPicture(record, "T2", "hero")).toBeNull();
+    expect(keptPicture(null, "T", "hero")).toBeNull();
+    expect(keptPicture(record, "T", "missing")).toBeNull();
+    expect(keptPicture({ ...record, pictures: { hero: "../x.png" } }, "T", "hero")).toBeNull();
+    expect(keptPicture({ ...record, pictures: { hero: "d\\x.png" } }, "T", "hero")).toBeNull();
   });
 });

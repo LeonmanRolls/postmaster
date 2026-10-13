@@ -36,6 +36,7 @@ import { homedir, machine, release, tmpdir, type as osType } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { tryJsonFile } from "./lib/data.ts";
 import { runMode } from "./lib/run-mode.ts";
+import { expectedStages, hasReviewLeg } from "./lib/stages.ts";
 import { ticketNotes } from "./lib/ticket-notes.ts";
 import { effortsLine } from "./run-meta.ts";
 import {
@@ -693,25 +694,11 @@ function runGate(
 }
 
 function checkStages(dispatch: string): { ok: boolean; detail: string } {
-  const r = sh([join(HERE, "run"), "stage", "--list"]);
-  const listed = pyWords(r.out ?? "");
-  if (r.code !== 0 || !listed.includes("done")) {
-    return { ok: false, detail: "scripts/run stage --list names no done stage" };
-  }
-  let expected = listed.slice(0, listed.indexOf("done") + 1);
   const legsR = sh([join(HERE, "run"), "turnpikes", "legs", dispatch]);
   if (legsR.code !== 0)
     return { ok: false, detail: `scripts/run turnpikes legs: ${tail(legsR.out ?? "")}` };
-  const hasReview = pySplitLines(legsR.out ?? "").some((line) => {
-    const words = pyWords(line);
-    return words.length > 1 && words[1] === "review";
-  });
-  expected = expected.filter((s) => s !== "review" || hasReview);
-  // A single-thread run never enters workhorses-running: the coachman writes the change
-  // itself in the synthesis stage, so that stage is not part of its schedule (D5).
-  if (runMode(dispatch) === "single-thread") {
-    expected = expected.filter((s) => s !== "workhorses-running");
-  }
+  // The same order the stage command refuses a skip against.
+  const expected = expectedStages(hasReviewLeg(legsR.out ?? ""), runMode(dispatch));
   const events = readActions(dispatch);
   if (events === null) return { ok: false, detail: "no actions.jsonl" };
   const entered = events.filter((e) => e.action === "stage").map((e) => e.target);

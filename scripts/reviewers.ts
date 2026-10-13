@@ -7,6 +7,7 @@
 //   run reviewers lines [--config <path>] [--project <repo>]   the waybill's reviewer lines, from the config (or the project's effective config)
 //   run reviewers eligible <lens> [--config <path>] [--project <repo>]  configured lanes for a lens, checked for eligibility
 //   run reviewers lanes <waybill> <lens>    the lanes for one lens, one per line, from a waybill
+//   run reviewers first <waybill>           the first lane on the waybill's reviewers: line
 //   run reviewers lenses                    the lenses, in the order the review stage runs them
 //
 // `lines` prints `reviewers: <lane>, <lane>`, a `bug reviewers:` line containing only eligible
@@ -15,7 +16,8 @@
 // project's effective config instead of the live one. `lanes` reads only the waybill's `## Team`
 // section: the lens's own line where it has one, the `reviewers:` line otherwise, except the
 // bug lens, which is refused when its own line is missing rather than reading unfiltered
-// reviewers. The lenses are the entries of the review stage in skills/postmaster/coachman.md,
+// reviewers. `first` reads only the `reviewers:` line itself, for the surveyor's fallback.
+// The lenses are the entries of the review stage in skills/postmaster/coachman.md,
 // and change with it.
 //
 //   exit 0  printed
@@ -41,7 +43,7 @@ interface CmdResult {
 
 function usage(): never {
   console.error(
-    "usage: run reviewers lines [--config <path>] [--project <repo>] | eligible <lens> [--config <path>] [--project <repo>] | lanes <waybill> <lens> | lenses",
+    "usage: run reviewers lines [--config <path>] [--project <repo>] | eligible <lens> [--config <path>] [--project <repo>] | lanes <waybill> <lens> | first <waybill> | lenses",
   );
   process.exit(1);
 }
@@ -191,6 +193,42 @@ export function eligible(configPath: string, lens: string, project = ""): CmdRes
 const ANY_HEAD_RE = new RegExp(`^##[${PY_S_CLASS}]`, "u");
 const TEAM_HEAD_RE = new RegExp(`^##[${PY_S_CLASS}]+Team[${PY_S_CLASS}]*$`, "u");
 
+/** The waybill's `## Team` section lines, or null when it cannot be read. */
+function readTeam(waybill: string): string[] | null {
+  let text: string;
+  try {
+    text = readFileSync(waybill, "utf8");
+  } catch {
+    return null;
+  }
+  const team: string[] = [];
+  let inside = false;
+  for (const line of pySplitLines(text)) {
+    if (ANY_HEAD_RE.test(line)) {
+      inside = TEAM_HEAD_RE.test(line);
+      continue;
+    }
+    if (inside) team.push(line);
+  }
+  return team;
+}
+
+function listedLine(team: string[], prefix: string): string[] | null {
+  for (const line of team) {
+    const m = new RegExp(
+      `^[${PY_S_CLASS}]*${prefix.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}[${PY_S_CLASS}]*:[${PY_S_CLASS}]*(${PY_DOT}*?)[${PY_S_CLASS}]*$`,
+      "u",
+    ).exec(line);
+    if (m) {
+      return (m[1] ?? "")
+        .split(",")
+        .map((name) => pyTrim(name))
+        .filter((name) => name !== "");
+    }
+  }
+  return null;
+}
+
 /** lanes <waybill> <lens>: the lanes for one lens, one per line, from a waybill. */
 export function lanes(waybill: string, lens: string): CmdResult {
   const err: string[] = [];
@@ -208,30 +246,11 @@ export function lanes(waybill: string, lens: string): CmdResult {
   if (!isLens(lens)) {
     return fail2(`reviewers: ${lens} is not a lens (one of: ${LENSES.join(" ")})`);
   }
-  const team: string[] = [];
-  let inside = false;
-  for (const line of pySplitLines(readFileSync(waybill, "utf8"))) {
-    if (ANY_HEAD_RE.test(line)) {
-      inside = TEAM_HEAD_RE.test(line);
-      continue;
-    }
-    if (inside) team.push(line);
+  const team = readTeam(waybill);
+  if (team === null) {
+    return fail1(`reviewers: cannot read the waybill: ${waybill}`);
   }
-  const listed = (prefix: string): string[] | null => {
-    for (const line of team) {
-      const m = new RegExp(
-        `^[${PY_S_CLASS}]*${prefix.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}[${PY_S_CLASS}]*:[${PY_S_CLASS}]*(${PY_DOT}*?)[${PY_S_CLASS}]*$`,
-        "u",
-      ).exec(line);
-      if (m) {
-        return (m[1] ?? "")
-          .split(",")
-          .map((name) => pyTrim(name))
-          .filter((name) => name !== "");
-      }
-    }
-    return null;
-  };
+  const listed = (prefix: string): string[] | null => listedLine(team, prefix);
   let found = listed(`${lens} reviewers`);
   if (found === null && lens === "bug") {
     return fail2(
@@ -248,6 +267,31 @@ export function lanes(waybill: string, lens: string): CmdResult {
     return fail2(`reviewers: the Team section of ${waybill} has no reviewers line for ${lens}`);
   }
   return { code: 0, out: `${found.join("\n")}\n`, err: "" };
+}
+
+/** first <waybill>: the first lane on the waybill's reviewers: line. */
+export function first(waybill: string): CmdResult {
+  const err: string[] = [];
+  const fail1 = (msg: string): CmdResult => {
+    err.push(msg);
+    return { code: 1, out: "", err: `${err.join("\n")}\n` };
+  };
+  const fail2 = (msg: string): CmdResult => {
+    err.push(msg);
+    return { code: 2, out: "", err: `${err.join("\n")}\n` };
+  };
+  if (!existsSync(waybill)) {
+    return fail1(`reviewers: no such waybill: ${waybill}`);
+  }
+  const team = readTeam(waybill);
+  if (team === null) {
+    return fail1(`reviewers: cannot read the waybill: ${waybill}`);
+  }
+  const found = listedLine(team, "reviewers");
+  if (!found || found.length === 0) {
+    return fail2(`reviewers: the Team section of ${waybill} has no reviewers line`);
+  }
+  return { code: 0, out: `${found[0] ?? ""}\n`, err: "" };
 }
 
 function printResult(r: CmdResult): never {
@@ -300,6 +344,11 @@ function main(argv: string[]): void {
     case "lanes": {
       if (argv.length !== 3) usage();
       printResult(lanes(argv[1] ?? "", argv[2] ?? ""));
+      break;
+    }
+    case "first": {
+      if (argv.length !== 2) usage();
+      printResult(first(argv[1] ?? ""));
       break;
     }
     case "lenses": {

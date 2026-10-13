@@ -1,0 +1,68 @@
+<title>Text Wrap, Two Ways</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* One column of prose with two code listings, read on a phone. The accent only marks A and B. */
+  :root {
+    --bg: #f6f7f9; --fg: #1a2230; --muted: #566174; --rule: #d6dbe3;
+    --code-bg: #edf0f5; --comment: #62708a; --accent: #1b5ab8; --accent-bg: #dfe9f8;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #11151c; --fg: #e4e8ef; --muted: #9ba6b8; --rule: #2a3341;
+      --code-bg: #171d27; --comment: #8693aa; --accent: #8db3ff; --accent-bg: #1e2a40;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #11151c; --fg: #e4e8ef; --muted: #9ba6b8; --rule: #2a3341;
+    --code-bg: #171d27; --comment: #8693aa; --accent: #8db3ff; --accent-bg: #1e2a40;
+    color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 16px; line-height: 1.55; }
+  main { max-width: 44rem; margin-inline: auto; padding-inline: 16px; padding-block: 24px 48px; display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); }
+  main > * { min-width: 0; }
+  h1 { font-size: 1.6rem; line-height: 1.2; margin: 0; font-weight: 600; text-wrap: balance; }
+  h2 { font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 8px 0 0; font-weight: 600; }
+  p { margin: 0; max-width: 65ch; }
+  .tag { display: inline-block; font-family: var(--mono); font-weight: 500; font-size: 0.95rem; color: var(--accent); background: var(--accent-bg); padding: 2px 10px; border-radius: 4px; }
+  .listing { display: grid; gap: 8px; }
+  pre { margin: 0; background: var(--code-bg); border: 1px solid var(--rule); border-radius: 6px; padding: 12px 0; overflow-x: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.6; tab-size: 2; }
+  code { display: block; width: max-content; min-width: 100%; font-family: inherit; }
+  .l { display: block; white-space: pre; padding-right: 14px; }
+  .l::before { content: attr(data-n); display: inline-block; width: 2.4em; margin-right: 12px; text-align: right; color: var(--muted); user-select: none; }
+  .c { color: var(--comment); }
+  ol { margin: 0; padding-left: 1.3em; display: grid; gap: 10px; max-width: 65ch; }
+  .note { color: var(--muted); font-size: 0.9rem; }
+</style>
+<main>
+  <h1>Text wrap, two ways</h1>
+  <p>Both versions do the same job. <code style="display:inline;width:auto;min-width:0">textWrap</code> takes a line of text, a width and an indent, and breaks the text into lines no wider than the width, with the indent on every line after the first. A word longer than a whole line is broken. The two modules these come from pass the same tests, and a comparison on more than 280,000 inputs found no difference in their output.</p>
+  <p>Read each one as you would before changing it. Then answer the three questions at the bottom in the chat. A letter is enough, and a few words of why is welcome.</p>
+
+  <section class="listing" aria-labelledby="a">
+    <h2 id="a">Version <span class="tag">A</span></h2>
+    <pre><code><span class="l c" data-n="1">/** Python textwrap.wrap with main&#x27;s settings: content width, a two-space continuation indent,</span><span class="l c" data-n="2"> * whitespace kept, long words broken, no hyphen breaks. */</span><span class="l" data-n="3">function textWrap(text: string, w: number, indent: string): string[] {</span><span class="l" data-n="4">  const chunks = text.split(WORDSEP_SIMPLE).filter((c) =&gt; c !== &quot;&quot;);</span><span class="l" data-n="5">  chunks.reverse();</span><span class="l" data-n="6">  const lines: string[] = [];</span><span class="l" data-n="7">  while (chunks.length &gt; 0) {</span><span class="l" data-n="8">    const curLine: string[] = [];</span><span class="l" data-n="9">    let curLen = 0;</span><span class="l" data-n="10">    const ind = lines.length &gt; 0 ? indent : &quot;&quot;;</span><span class="l" data-n="11">    const lw = w - cpLen(ind);</span><span class="l" data-n="12">    while (chunks.length &gt; 0) {</span><span class="l" data-n="13">      const l = cpLen(chunks[chunks.length - 1]!);</span><span class="l" data-n="14">      if (curLen + l &lt;= lw) {</span><span class="l" data-n="15">        curLine.push(chunks.pop()!);</span><span class="l" data-n="16">        curLen += l;</span><span class="l" data-n="17">      } else break;</span><span class="l" data-n="18">    }</span><span class="l" data-n="19">    if (chunks.length &gt; 0 &amp;&amp; cpLen(chunks[chunks.length - 1]!) &gt; lw) {</span><span class="l" data-n="20">      const spaceLeft = lw &lt; 1 ? 1 : lw - curLen;</span><span class="l" data-n="21">      const chunk = chunks[chunks.length - 1]!;</span><span class="l" data-n="22">      const [head, tail] = cpSlice(chunk, spaceLeft);</span><span class="l" data-n="23">      curLine.push(head);</span><span class="l" data-n="24">      chunks[chunks.length - 1] = tail;</span><span class="l" data-n="25">      curLen = curLine.reduce((a, c) =&gt; a + cpLen(c), 0);</span><span class="l" data-n="26">    }</span><span class="l" data-n="27">    if (curLine.length &gt; 0) lines.push(ind + curLine.join(&quot;&quot;));</span><span class="l" data-n="28">  }</span><span class="l" data-n="29">  return lines;</span><span class="l" data-n="30">}</span></code></pre>
+  </section>
+
+  <section class="listing" aria-labelledby="b">
+    <h2 id="b">Version <span class="tag">B</span></h2>
+    <pre><code><span class="l c" data-n="1">/** What textWrap has so far: the lines it has closed, and the one it is filling. */</span><span class="l" data-n="2">interface Wrapping {</span><span class="l" data-n="3">  readonly lines: string[];</span><span class="l c" data-n="4">  /** the chunks on the line being filled */</span><span class="l" data-n="5">  readonly open: string[];</span><span class="l c" data-n="6">  /** their length in code points */</span><span class="l" data-n="7">  readonly openLen: number;</span><span class="l" data-n="8">}</span><span class="l" data-n="9"> </span><span class="l c" data-n="10">/** The line being filled, closed: with its indent unless it is the first, and not at all when empty. */</span><span class="l" data-n="11">function closeLine(wrapping: Wrapping, indent: string): Wrapping {</span><span class="l" data-n="12">  if (wrapping.open.length === 0) return wrapping;</span><span class="l" data-n="13">  const ind = wrapping.lines.length &gt; 0 ? indent : &quot;&quot;;</span><span class="l" data-n="14">  return { lines: [...wrapping.lines, ind + wrapping.open.join(&quot;&quot;)], open: [], openLen: 0 };</span><span class="l" data-n="15">}</span><span class="l" data-n="16"> </span><span class="l c" data-n="17">/** Put one chunk on the line being filled, closing lines as it needs. */</span><span class="l" data-n="18">function place(wrapping: Wrapping, chunk: string, w: number, indent: string): Wrapping {</span><span class="l" data-n="19">  const ind = wrapping.lines.length &gt; 0 ? indent : &quot;&quot;;</span><span class="l" data-n="20">  const room = w - cpLen(ind);</span><span class="l" data-n="21">  const size = cpLen(chunk);</span><span class="l" data-n="22">  if (wrapping.openLen + size &lt;= room) {</span><span class="l" data-n="23">    return { ...wrapping, open: [...wrapping.open, chunk], openLen: wrapping.openLen + size };</span><span class="l" data-n="24">  }</span><span class="l" data-n="25">  if (size &gt; room) {</span><span class="l c" data-n="26">    // longer than a whole line: fill what is left of this one, and go on with the rest</span><span class="l" data-n="27">    const spaceLeft = room &lt; 1 ? 1 : room - wrapping.openLen;</span><span class="l" data-n="28">    const [head, tail] = cpSlice(chunk, spaceLeft);</span><span class="l" data-n="29">    const filled = { ...wrapping, open: [...wrapping.open, head] };</span><span class="l" data-n="30">    return place(closeLine(filled, indent), tail, w, indent);</span><span class="l" data-n="31">  }</span><span class="l" data-n="32">  return place(closeLine(wrapping, indent), chunk, w, indent);</span><span class="l" data-n="33">}</span><span class="l" data-n="34"> </span><span class="l c" data-n="35">/** Python textwrap.wrap with main&#x27;s settings: content width, a two-space continuation indent,</span><span class="l c" data-n="36"> * whitespace kept, long words broken, no hyphen breaks. */</span><span class="l" data-n="37">function textWrap(text: string, w: number, indent: string): string[] {</span><span class="l" data-n="38">  const chunks = text.split(WORDSEP_SIMPLE).filter((c) =&gt; c !== &quot;&quot;);</span><span class="l" data-n="39">  const filled = chunks.reduce&lt;Wrapping&gt;((so, chunk) =&gt; place(so, chunk, w, indent), {</span><span class="l" data-n="40">    lines: [],</span><span class="l" data-n="41">    open: [],</span><span class="l" data-n="42">    openLen: 0,</span><span class="l" data-n="43">  });</span><span class="l" data-n="44">  return closeLine(filled, indent).lines;</span><span class="l" data-n="45">}</span></code></pre>
+  </section>
+
+  <section class="listing" aria-labelledby="s">
+    <h2 id="s">What both use</h2>
+    <pre><code><span class="l c" data-n="1">// textwrap&#x27;s ASCII whitespace set: only these split words (U+00A0 and friends never break).</span><span class="l" data-n="2">const WORDSEP_SIMPLE = /([\t\n\x0b\x0c\r ]+)/u;</span><span class="l" data-n="3"> </span><span class="l c" data-n="4">/** Code points, as Python len() counts them. */</span><span class="l" data-n="5">function cpLen(s: string): number {</span><span class="l" data-n="6">  return [...s].length;</span><span class="l" data-n="7">}</span><span class="l" data-n="8"> </span><span class="l" data-n="9">function cpSlice(s: string, end: number): [string, string] {</span><span class="l" data-n="10">  const chars = [...s];</span><span class="l" data-n="11">  return [chars.slice(0, end).join(&quot;&quot;), chars.slice(end).join(&quot;&quot;)];</span><span class="l" data-n="12">}</span></code></pre>
+    <p class="note">The text is split into words and runs of whitespace, and both are kept. The order of A and B means nothing.</p>
+  </section>
+
+  <section class="listing" aria-labelledby="q">
+    <h2 id="q">Three questions</h2>
+    <ol>
+      <li>Which is easier to follow?</li>
+      <li>Which would you rather change, say to let a word longer than a line run past the width instead of breaking it?</li>
+      <li>Which are you more sure is correct, reading it without running it?</li>
+    </ol>
+  </section>
+</main>

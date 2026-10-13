@@ -27,7 +27,8 @@ again.
 
 The postmaster's launch, or your own start, writes a brief that names the ticket's id and
 tracker, the repository, `<tool>`, the base commit, the draft's path, the editor link, the
-standing preferences and this skill's path. Read it first. Then read the ticket as it stands,
+standing preferences, whether to make a story with the draft and where its files go, and
+this skill's path. Read it first. Then read the ticket as it stands,
 `<tool>/AGENTS.md`, [ticket-template.md](ticket-template.md) and the code.
 
 You are the strongest model the user has, because the decisions in the ticket are yours to make

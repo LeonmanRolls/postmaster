@@ -18,7 +18,10 @@
 // run's branches and synthesis worktree around a round. What a lane's record
 // names outside its own folder is a note listing the lane and the path; it
 // never says read or write, and never voids a verdict. A change is tied to a
-// lane when that lane's record names the path or the branch.
+// lane when that lane's record names the path or the branch. A recorded fix
+// that changed a path a reviewer's record names voids that reviewer alone,
+// and restore resets the branch and the worktree to the snapshot: the fix may
+// hold the reviewer's change, and the two cannot be told apart.
 
 import {
   existsSync,
@@ -26,30 +29,32 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
-  realpathSync,
   renameSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { reachTarget } from "./check-target.ts";
-import { toolRoot } from "./lib/paths.ts";
+import { briefSection, profileRepo } from "./lib/brief.ts";
+import { physical, toolRoot } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
+import {
+  array,
+  claudeTaskPrefix,
+  inputCommand,
+  inputPath,
+  parseEventFile,
+  rec,
+  text,
+  toolCallsFromEvents,
+  type Access,
+  type Harness,
+  type RecordOf,
+  type ToolCall,
+} from "./lib/tool-calls.ts";
 
-type RecordOf<T = unknown> = Record<string, T>;
-type Harness = "codex" | "claude" | "muse" | "mimo" | "pi" | string;
-/** Observed changes read "read" or "write"; a named path reads "names", never either. */
-type Access = "read" | "write" | "names";
 type Place = "inside" | "main checkout" | "synthesis worktree" | "another worktree" | "elsewhere";
-
-interface ToolCall {
-  name: string;
-  input: RecordOf;
-  output: string;
-  exitCode: unknown;
-  direct: Array<{ path: string; access: Access }>;
-}
 
 interface Touch {
   path: string;
@@ -119,22 +124,6 @@ interface ReachEvent {
 const TOOL = toolRoot(import.meta);
 const RUN = join(TOOL, "scripts", "run");
 
-const DATA_RE = /^[ \t\r\n]*\{[^]*\}[ \t\r\n]*$/u;
-
-function rec(value: unknown): RecordOf {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as RecordOf)
-    : {};
-}
-
-function array(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
-function text(value: unknown): string {
-  return typeof value === "string" ? value : "";
-}
-
 function readJson(path: string, what: string): RecordOf {
   let parsed: unknown;
   try {
@@ -148,44 +137,9 @@ function readJson(path: string, what: string): RecordOf {
   return parsed as RecordOf;
 }
 
-export function physical(path: string): string {
-  const absolute = resolve(path);
-  const suffix: string[] = [];
-  let probe = absolute;
-  while (!existsSync(probe)) {
-    const parent = dirname(probe);
-    if (parent === probe) return normalize(absolute);
-    suffix.unshift(basename(probe));
-    probe = parent;
-  }
-  try {
-    return normalize(join(realpathSync(probe), ...suffix));
-  } catch {
-    return normalize(absolute);
-  }
-}
-
 function inside(path: string, dir: string): boolean {
   const rel = relative(dir, path);
   return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
-}
-
-/** A waybill section by heading; the last one wins, since the ticket may quote one. */
-function briefSection(brief: string, heading: string): string {
-  const lines = brief.split("\n");
-  let start = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i]?.startsWith(heading)) start = i + 1;
-  }
-  if (start < 0) return "";
-  let end = lines.length;
-  for (let i = start; i < lines.length; i++) {
-    if (lines[i]?.startsWith("## ")) {
-      end = i;
-      break;
-    }
-  }
-  return lines.slice(start, end).join("\n");
 }
 
 function pathFromBrief(
@@ -197,15 +151,10 @@ function pathFromBrief(
   // The ticket travels in the waybill verbatim and may quote a repo: line, so
   // only the Project profile section counts; a waybill without one reads whole.
   const scope = briefSection(brief, "## Project profile") || brief;
-  // The path runs to the end of the line: it may itself hold spaces, and only
-  // a "default branch:" marker ends it early.
-  const profile =
-    /^repo:[ \t]*([^ \r\n]*(?:[ \t]+(?!default branch:)[^ \t\r\n]+)*)(?:[ \t]+default branch:[ \t]*([^ \t\r\n]+))?/mu.exec(
-      scope,
-    );
-  const namedRepo = profile?.[1] ? physical(profile[1]) : repo;
+  const profile = profileRepo(scope);
+  const namedRepo = profile.repo ? physical(profile.repo) : repo;
   const target = rec(run.target);
-  let defaultBranch = profile?.[2] ?? text(target.branch);
+  let defaultBranch = profile.branch || text(target.branch);
   if (!defaultBranch || defaultBranch === "(detached HEAD)") {
     const originHead = runGit(namedRepo, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]);
     if (originHead.code === 0) defaultBranch = originHead.out.trim().replace(/^origin\//u, "");
@@ -295,141 +244,8 @@ function expandPath(token: string, cwd: string): string | null {
   return physical(value);
 }
 
-function toolCallsFromEvents(harness: Harness, events: unknown[]): ToolCall[] {
-  const calls: ToolCall[] = [];
-  const add = (
-    name: unknown,
-    input: unknown,
-    output = "",
-    exitCode: unknown = undefined,
-    direct: ToolCall["direct"] = [],
-  ): number => {
-    calls.push({ name: text(name) || "tool", input: rec(input), output, exitCode, direct });
-    return calls.length - 1;
-  };
-  const linked = new Map<string, number>();
-  const pending = new Map<string, number>();
-  for (const raw of events) {
-    const event = rec(raw);
-    if (harness === "codex") {
-      if (event.type !== "item.completed") continue;
-      const item = rec(event.item);
-      if (item.type === "command_execution") {
-        add(
-          "shell",
-          { command: text(item.command) },
-          `${text(item.aggregated_output)}\n${text(item.output)}`,
-          item.exit_code,
-        );
-      } else if (item.type === "file_change") {
-        const direct = array(item.changes).flatMap((entry) => {
-          const path = text(rec(entry).path);
-          return path ? [{ path, access: "write" as const }] : [];
-        });
-        add("file_change", {}, "", undefined, direct);
-      } else if (item.type === "mcp_tool_call") {
-        add("mcp", item);
-      }
-    } else if (harness === "claude") {
-      const msg = rec(event.message);
-      for (const blockValue of array(msg.content)) {
-        const block = rec(blockValue);
-        if (event.type === "assistant" && block.type === "tool_use") {
-          const index = add(block.name, block.input);
-          if (typeof block.id === "string") linked.set(block.id, index);
-        } else if (event.type === "user" && block.type === "tool_result") {
-          const id = text(block.tool_use_id);
-          const index = linked.get(id);
-          if (index !== undefined) {
-            const body =
-              typeof block.content === "string"
-                ? block.content
-                : JSON.stringify(block.content ?? "");
-            calls[index]!.output += `\n${body}`;
-          }
-        }
-      }
-    } else if (harness === "mimo") {
-      if (event.type !== "tool_use") continue;
-      const part = rec(event.part);
-      const state = rec(part.state);
-      add(part.tool, state.input, text(state.output), rec(state.metadata).exit);
-    } else if (harness === "pi") {
-      if (event.type === "tool_execution_start") {
-        const index = add(event.toolName, event.args);
-        const id = text(event.toolCallId || event.callId || event.id);
-        if (id) linked.set(id, index);
-        else pending.set(text(event.toolName), index);
-      } else if (event.type === "tool_execution_end") {
-        const id = text(event.toolCallId || event.callId || event.id);
-        const index = linked.get(id) ?? pending.get(text(event.toolName));
-        if (index !== undefined) calls[index]!.output = text(event.result ?? event.output);
-      }
-    } else if (harness === "muse") {
-      if (event.payload_type !== "tool.result") continue;
-      const payload = rec(event.payload);
-      const facts = rec(payload.correlation_facts);
-      const editFacts = rec(payload.edit_facts);
-      let input: RecordOf = { ...editFacts };
-      const resultText = text(payload.text);
-      if (resultText.trimStart().startsWith("{")) {
-        const first = resultText.trimStart().split("\n", 1)[0] ?? "";
-        if (DATA_RE.test(first)) {
-          try {
-            input = { ...(JSON.parse(first) as RecordOf), ...input };
-          } catch {
-            // Non-JSON result text can still carry the edit_facts record.
-          }
-        }
-      } else {
-        const readFile = /^Read text file `([^`]+)`/u.exec(resultText.trimStart());
-        if (readFile?.[1] && !input.path && !input.file_path) input.path = readFile[1];
-      }
-      const direct: ToolCall["direct"] = [];
-      const toolName = text(facts.tool_name);
-      const access: Access =
-        /write|edit|create|patch|apply|delete|remove|move|copy|install|save/iu.test(toolName)
-          ? "write"
-          : "read";
-      for (const field of ["path", "file_path"]) {
-        const p = text(input[field]);
-        if (p) direct.push({ path: p, access });
-      }
-      add(toolName, input, resultText, facts.outcome, direct);
-    }
-  }
-  return calls;
-}
-
-function parseEventFile(path: string): unknown[] | null {
-  let contents: string;
-  try {
-    contents = readFileSync(path, "utf8");
-  } catch {
-    return null;
-  }
-  const events: unknown[] = [];
-  for (const line of contents.split(/\r?\n/u)) {
-    if (!line.trim()) continue;
-    try {
-      events.push(JSON.parse(line) as unknown);
-    } catch {
-      return null;
-    }
-  }
-  return events;
-}
-
 function parseTaskFile(path: string): unknown[] | null {
   return parseEventFile(path);
-}
-
-function inputPath(input: RecordOf): string | null {
-  for (const key of ["file_path", "path", "filePath", "filename", "target"]) {
-    const value = text(input[key]);
-    if (value) return value;
-  }
-  return null;
 }
 
 /**
@@ -541,7 +357,7 @@ function directCallMentions(
   const touches: Touch[] = [];
   const refs: string[] = [];
   for (const call of calls) {
-    const command = text(call.input.command ?? call.input.cmd);
+    const command = inputCommand(call.input);
     if (command) {
       const named = commandMentions(command, info, lane, ownFolder, lens);
       touches.push(...named.touches);
@@ -607,10 +423,7 @@ function readLane(
   const allEvents = [...parsed];
   if (harness === "claude") {
     const logs = join(info.dispatch, "logs");
-    // The review harvester prefixes copied Claude fork records with the bug lane's stream name.
-    const streamName = basename(events).replace(/\.jsonl$/u, "");
-    const taskPrefix = streamName.startsWith("review-r") ? streamName : lane;
-    const taskName = `${taskPrefix}-claude-task-`;
+    const taskName = claudeTaskPrefix(basename(events), lane);
     try {
       for (const name of readdirSync(logs)) {
         if (name.startsWith(taskName)) {
@@ -920,6 +733,14 @@ function addMainChanges(
 /** Coachman apply targets, oldest first, expanded to full commits.
  * An unreadable log or an unresolvable target excuses nothing: the
  * caller treats a null return as no exemption. */
+/**
+ * The commits the coachman's apply rows name, oldest first. A line that is
+ * not an action object, or an apply row that does not name a commit, is
+ * skipped, never fatal: one malformed row must not brick every later
+ * explained move. Null only when the log itself cannot be read, which no
+ * row can repair; a skipped row that was a real apply still fails its own
+ * move closed, and the next apply repairs it.
+ */
 function loggedApplies(repo: string, dispatch: string): string[] | null {
   let contents: string;
   try {
@@ -931,20 +752,24 @@ function loggedApplies(repo: string, dispatch: string): string[] | null {
   const targets: string[] = [];
   for (const line of contents.split(/\r?\n/u)) {
     if (!line.trim()) continue;
-    let row: Record<string, unknown>;
+    let row: unknown;
     try {
-      row = JSON.parse(line) as Record<string, unknown>;
+      row = JSON.parse(line) as unknown;
     } catch {
-      return null;
+      continue;
     }
-    if (row.action !== "apply" || row.actor !== "coachman") continue;
-    if (typeof row.target !== "string" || !/^[0-9a-f]{4,40}$/iu.test(row.target)) return null;
-    targets.push(row.target);
+    if (row === null || typeof row !== "object" || Array.isArray(row)) continue;
+    const action = (row as Record<string, unknown>).action;
+    const actor = (row as Record<string, unknown>).actor;
+    const target = (row as Record<string, unknown>).target;
+    if (action !== "apply" || actor !== "coachman") continue;
+    if (typeof target !== "string" || !/^[0-9a-f]{4,40}$/iu.test(target)) continue;
+    targets.push(target);
   }
   const expanded: string[] = [];
   for (const target of targets) {
     const sha = runGit(repo, ["rev-parse", "--verify", "--quiet", `${target}^{commit}`]);
-    if (sha.code !== 0 || !/^[0-9a-f]{40}$/u.test(sha.out.trim())) return null;
+    if (sha.code !== 0 || !/^[0-9a-f]{40}$/u.test(sha.out.trim())) continue;
     expanded.push(sha.out.trim());
   }
   return expanded;
@@ -978,6 +803,40 @@ function moveExplained(
   const inChain = new Set(commits);
   const logged = applies.filter((sha) => inChain.has(sha));
   return logged.length === commits.length && logged.every((sha, i) => sha === commits[i]);
+}
+
+/**
+ * Reviewers whose record names a file the move changed: a fix the coachman saved
+ * during the round swept a reviewer's change into itself. Only checked records count;
+ * the move's files live in the synthesis worktree, so only paths there can match.
+ */
+function sweptReviewers(
+  info: RunInfo,
+  reads: LaneRead[],
+  before: string,
+  after: string,
+): Array<{ read: LaneRead; paths: string[] }> {
+  if (!/^[0-9a-f]{40}$/u.test(before) || !/^[0-9a-f]{40}$/u.test(after)) return [];
+  if (before === after) return [];
+  const moved = runGit(info.repo, ["diff", "--no-renames", "--name-only", before, after]);
+  if (moved.code !== 0) throw new Error(`cannot diff the ticket move: ${moved.err.trim()}`);
+  const synth = physical(synthesisPath(info));
+  const changed = new Set(
+    moved.out
+      .split("\n")
+      .filter(Boolean)
+      .map((name) => physical(join(synth, name))),
+  );
+  if (changed.size === 0) return [];
+  const out: Array<{ read: LaneRead; paths: string[] }> = [];
+  for (const read of reads) {
+    if (read.status !== "checked") continue;
+    const paths = [
+      ...new Set(read.touches.map((touch) => touch.path).filter((path) => changed.has(path))),
+    ].sort();
+    if (paths.length > 0) out.push({ read, paths });
+  }
+  return out;
 }
 
 function roundChanges(
@@ -1087,6 +946,9 @@ function roundChanges(
   };
   const ticketRefOwner = checked.find((read) => named(read, ticketRef));
   const applies = loggedApplies(info.repo, info.dispatch);
+  // The ticket move is seen twice, as its ref and as its worktree: each swept
+  // reviewer and path is reported once.
+  const sweptDone = new Set<string>();
   for (const change of changes) {
     const refName = change.path.startsWith("refs/heads/") ? change.path : "";
     const exactPath = change.path;
@@ -1126,7 +988,28 @@ function roundChanges(
       // order, is the coachman's own fix, not an unexplained change. Tied
       // lanes keep their findings; anything unlogged reads as before.
       const isTicket = refName === ticketRef || exactPath === ticketWorktree;
-      if (isTicket && moveExplained(info.repo, applies, change.before, change.after)) continue;
+      if (isTicket && moveExplained(info.repo, applies, change.before, change.after)) {
+        // Unless the recorded fixes changed a path a reviewer's record names: that
+        // reviewer's change rode into the fix, so the move is not explained for them.
+        // The finding voids that reviewer alone; restore resets the whole move.
+        for (const { read, paths } of sweptReviewers(info, checked, change.before, change.after)) {
+          for (const path of paths) {
+            const key = `${read.lens ?? ""}\0${read.lane}\0${path}`;
+            if (sweptDone.has(key)) continue;
+            sweptDone.add(key);
+            const touch = pathChangeTouch(
+              info,
+              path,
+              "write",
+              read.lane,
+              "reviewer-named path changed by recorded fixes",
+            );
+            touch.lens = read.lens;
+            touches.push(touch);
+          }
+        }
+        continue;
+      }
       const humanPath = displayPath(info, change.path);
       const detail = `${change.before} -> ${change.after}`;
       const touch = pathChangeTouch(info, change.path, "read", "", `unexplained change ${detail}`);
@@ -1283,6 +1166,22 @@ function checkRound(info: RunInfo, round: number): number {
   const snapshot = loadSnapshot(info, round);
   const changes = roundChanges(info, round, snapshot, reads);
   touches.push(...changes.touches);
+  // A reviewer the check could not read is a finding, not only a note: its
+  // change may ride in the round's fixes unseen, so its verdict is voided
+  // and restore resets the move it cannot verify.
+  for (const read of reads) {
+    if (read.status === "checked") continue;
+    touches.push({
+      lane: read.lane,
+      ...(read.lens ? { lens: read.lens } : {}),
+      path: read.ownFolder,
+      access: "names",
+      place: placeOf(info, read.ownFolder, read.ownFolder),
+      kind: "finding",
+      source: "round",
+      detail: `not checked: ${read.reason ?? "the lane record could not be read"}`,
+    });
+  }
   const { result } = addMainChanges(info, `r${round}`, touches, false);
 
   const voided = new Set<string>();
@@ -1360,6 +1259,49 @@ function pathExists(path: string): boolean {
   }
 }
 
+/** Whether the ticket move swept a reviewer's change into the round's recorded fixes:
+ * the same rule as check, so restore resets what check voided for. A reviewer
+ * record that cannot be read blocks preservation too: the move may hold that
+ * reviewer's change unseen, so it resets with the rest. Returns the reason to
+ * reset, or null when the move stands. */
+function restoreSwept(
+  info: RunInfo,
+  round: number,
+  snapshot: Snapshot,
+  nowRefs: Record<string, string>,
+  current: string,
+): string | null {
+  let reviewers: Array<[string, string]>;
+  try {
+    reviewers = reviewersFor(info, round);
+  } catch {
+    return null;
+  }
+  const reads = reviewers.map(([lens, lane]) =>
+    readLane(
+      info,
+      lane,
+      reviewerEvents(info, round, lens, lane),
+      roundOwnFolder(info, lens, lane),
+      lens,
+    ),
+  );
+  const unchecked = reads.filter((read) => read.status !== "checked");
+  if (unchecked.length > 0) {
+    const lanes = unchecked.map((read) => read.lane).join(", ");
+    return `a reviewer record could not be checked (${lanes})`;
+  }
+  const checked = reads.filter((read) => read.status === "checked");
+  const ticketRef = `refs/heads/${info.ticket}`;
+  const pairs: Array<[string, string]> = [
+    [snapshot.refs[ticketRef] ?? "", nowRefs[ticketRef] ?? ""],
+    [snapshot.synthesisHead, current],
+  ];
+  return pairs.some(([before, after]) => sweptReviewers(info, checked, before, after).length > 0)
+    ? "the round's recorded fixes changed a reviewer-named path"
+    : null;
+}
+
 function restoreRound(info: RunInfo, round: number): number {
   // The worktree must be verifiable, but it may be detached or switched: the
   // reattach below puts the recorded branch back.
@@ -1369,16 +1311,22 @@ function restoreRound(info: RunInfo, round: number): number {
   mkdirSync(saved, { recursive: true });
   // The same rule as check: a move that is exactly the logged applies, in
   // order, is the coachman's own fix and is left as it is, never archived
-  // as undone work. Everything else restores exactly as before.
+  // as undone work. Everything else restores exactly as before. A move the
+  // recorded fixes swept a reviewer-named path into resets with the rest:
+  // the fix may hold the reviewer's change, and the two cannot be told apart.
   const applies = loggedApplies(info.repo, info.dispatch);
   const ticketRef = `refs/heads/${info.ticket}`;
   const nowRefs = refsMap(info.repo, info.ticket);
-  const refExplained = moveExplained(
-    info.repo,
-    applies,
-    snapshot.refs[ticketRef] ?? "",
-    nowRefs[ticketRef] ?? "",
-  );
+  const synth = synthesisPath(info);
+  const currentHead = currentHeadForRestore(info.repo, synth);
+  const sweptReason = restoreSwept(info, round, snapshot, nowRefs, currentHead);
+  if (sweptReason !== null) {
+    console.log(`swept move reset for r${round}: ${sweptReason}`);
+  }
+  const swept = sweptReason !== null;
+  const refExplained =
+    !swept &&
+    moveExplained(info.repo, applies, snapshot.refs[ticketRef] ?? "", nowRefs[ticketRef] ?? "");
   const changedRefs = new Set([...Object.keys(snapshot.refs), ...Object.keys(nowRefs)]);
   for (const ref of [...changedRefs].sort()) {
     const before = snapshot.refs[ref] ?? "";
@@ -1403,9 +1351,8 @@ function restoreRound(info: RunInfo, round: number): number {
     );
   }
 
-  const synth = synthesisPath(info);
-  const currentHead = currentHeadForRestore(info.repo, synth);
-  const synthExplained = moveExplained(info.repo, applies, snapshot.synthesisHead, currentHead);
+  const synthExplained =
+    !swept && moveExplained(info.repo, applies, snapshot.synthesisHead, currentHead);
   if (synthExplained) {
     console.log(
       `left an explained move in place: ${displayPath(info, synth)}: ${snapshot.synthesisHead} -> ${currentHead}`,
