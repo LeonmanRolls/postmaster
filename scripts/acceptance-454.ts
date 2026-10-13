@@ -117,14 +117,18 @@ export function makeTicket(sb: NotifySandbox, title: string): string {
   return r.out.trim();
 }
 
-export function makeNotifySandbox(opts: { messages?: boolean } = {}): NotifySandbox {
+export function makeNotifySandbox(
+  opts: { messages?: boolean; runsInRepo?: boolean } = {},
+): NotifySandbox {
   const messages = opts.messages ?? true;
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "acceptance-454-")));
   const repo = join(dir, "acme");
   initRepo(repo);
   writeRepoFile(repo, "README.md", "# acme\n");
   commitAll(repo, "first");
-  const runs = join(dir, "runs");
+  // Inside the repo, the scan resolves the repo's own settings; outside, the
+  // global config alone.
+  const runs = opts.runsInRepo === true ? join(repo, ".postmaster", "runs") : join(dir, "runs");
   mkdirSync(join(runs, "postmaster"), { recursive: true });
   const token = `454tok${randomBytes(16).toString("hex")}`;
   const chat = `454${[...randomBytes(5)].map((b) => String(b % 10)).join("")}`;

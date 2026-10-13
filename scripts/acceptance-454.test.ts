@@ -197,6 +197,29 @@ describe("C1: one message per thing that came up", () => {
     }
   });
 
+  test("the project's own off switch silences the scan", async () => {
+    const sb = makeNotifySandbox({ runsInRepo: true });
+    try {
+      writeFileSync(join(sb.repo, ".postmaster", "settings.toml"), '[notify]\nchannel = "none"\n');
+      makeRun(sb, "1", { waiting: "QUESTION-SEALED-1" });
+      const r = await look(sb);
+      expectCode(r, 3);
+      expect(r.out).toContain("USER");
+      expect(sendBodies(sb).length).toBe(0);
+      expect(pyLower(r.err)).not.toContain("notify");
+      expect(existsSync(join(sb.runs, "postmaster", ".notify-failed"))).toBe(false);
+      writeFileSync(
+        join(sb.repo, ".postmaster", "settings.toml"),
+        `[notify]\nchannel = "telegram"\nenv_file = "${sb.tokenFile}"\n`,
+      );
+      const r2 = await look(sb);
+      expectCode(r2, 3);
+      expect(sendBodies(sb).length).toBe(1);
+    } finally {
+      removeSandbox(sb);
+    }
+  });
+
   test("a landed run sends once and names no place to answer", async () => {
     const sb = makeNotifySandbox();
     try {
