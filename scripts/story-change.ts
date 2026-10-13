@@ -614,6 +614,9 @@ const stepsHtml = story.steps
   .join("\n");
 
 const first = stepData[0]!;
+// The closing line for the user who asked for the page; a page shared with others sets its own footer.
+const DEFAULT_FOOTER =
+  "Built from the local branch and the local copy of the ticket. Nothing is pushed. This page is for reading. Comments and decisions go in your chat with the session.";
 const stageHead = `<div class="stagehead"><span class="slabel" id="slabel">${esc(first.label)}</span><span class="schip" id="schip">${esc(first.chip)}</span><span id="slines">${esc(first.lines)}</span><span class="scount" id="scount">Step 1 of ${N}</span></div>`;
 const page = `<title>${esc(story.title)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -797,7 +800,7 @@ ${scenesHtml}
 ${stepsHtml}
     </div>
   </section>
-  <p class="foot">${esc(story.footer ?? "Built from the local branch and the local copy of the ticket. Nothing is pushed.")} The code is at ${esc(headSha.slice(0, 7))} against ${esc(mergeBase.slice(0, 7))}. This page is for reading. Comments and decisions go in your chat with the session.</p>
+  <p class="foot">${esc(story.footer ?? DEFAULT_FOOTER)} The code is at ${esc(headSha.slice(0, 7))} against ${esc(mergeBase.slice(0, 7))}.</p>
 </div>
 
 <script type="application/json" id="story-data">${JSON.stringify({ n: N, steps: stepData }).replace(/</gu, "\\u003c")}</script>

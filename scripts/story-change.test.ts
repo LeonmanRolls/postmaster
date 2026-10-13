@@ -222,6 +222,23 @@ describe("story-change build", () => {
     });
   });
 
+  test("a footer in the story replaces the whole closing line, and the default points at the chat", () => {
+    withFixture((f) => {
+      expect(build(f).code).toBe(0);
+      const page = readFileSync(join(f.out, "index.html"), "utf8");
+      expect(page).toContain("Comments and decisions go in your chat with the session.");
+      writeFileSync(
+        join(f.storyDir, "story.json"),
+        JSON.stringify({ ...baseStory(f), footer: "Built from the branch of this pull request." }),
+      );
+      expect(build(f).code).toBe(0);
+      const shared = readFileSync(join(f.out, "index.html"), "utf8");
+      expect(shared).toContain("Built from the branch of this pull request. The code is at");
+      expect(shared).not.toContain("your chat with the session");
+      expect(shared).not.toContain("Nothing is pushed");
+    });
+  });
+
   test("--drop leaves one step out", () => {
     withFixture((f) => {
       const r = build(f, ["--drop", "boxes"]);
