@@ -567,6 +567,125 @@ describe("harvest", () => {
   });
 });
 
+describe("a review that ran commands of its own", () => {
+  const reviewId = "task-review-455";
+  const commandId = "task-command-455";
+  const reviewStarted = {
+    type: "system",
+    subtype: "task_started",
+    task_id: reviewId,
+    task_type: "local_agent",
+    description: "/code-review",
+  };
+  const commandStarted = {
+    type: "system",
+    subtype: "task_started",
+    task_id: commandId,
+    parent_task_id: reviewId,
+    task_type: "local_bash",
+    owned_by_subagent: true,
+    description: "Run the project's tests",
+  };
+  const done = { type: "result", subtype: "success", result: "[]" };
+  const reviewNote = (output_file: unknown) => ({
+    type: "system",
+    subtype: "task_notification",
+    task_id: reviewId,
+    summary: "/code-review",
+    output_file,
+  });
+  const commandNote = (output_file: unknown) => ({
+    type: "system",
+    subtype: "task_notification",
+    task_id: commandId,
+    summary: "Run the project's tests",
+    output_file,
+  });
+  const reviewRecord = (name: string): string => {
+    const record = join(taskHome, `review-record-455-${name}.jsonl`);
+    writeFileSync(
+      record,
+      `${JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Read", input: { file_path: "src/page.js" } }] } })}\n`,
+    );
+    return record;
+  };
+  const commandOutput = (name: string): string => {
+    const output = join(taskHome, `command-output-455-${name}.txt`);
+    writeFileSync(output, "TAP output of the test run\n");
+    return output;
+  };
+
+  test("a review whose command names no file is collected from its own task", () => {
+    const record = reviewRecord("c1");
+    const events = writeEvents("harvest-455-c1.events", [
+      reviewStarted,
+      commandStarted,
+      commandNote(""),
+      reviewNote(record),
+      done,
+    ]);
+    const ownLogs = join(root, "logs-455-c1");
+    const r = cli("harvest", events, ownLogs, "--prefix", "r1-bug-one");
+    const copied = join(ownLogs, `r1-bug-one-claude-task-01-${basename(record)}`);
+    expect(r.code).toBe(0);
+    expect(pyTrim(r.out)).toBe(copied);
+    expect(readdirSync(ownLogs)).toEqual([basename(copied)]);
+    expect(readFileSync(copied, "utf8")).toBe(readFileSync(record, "utf8"));
+  });
+
+  test("a command's output is not kept with the review's record", () => {
+    const record = reviewRecord("c2");
+    const events = writeEvents("harvest-455-c2.events", [
+      reviewStarted,
+      commandStarted,
+      commandNote(commandOutput("c2")),
+      reviewNote(record),
+      done,
+    ]);
+    const ownLogs = join(root, "logs-455-c2");
+    const r = cli("harvest", events, ownLogs, "--prefix", "r1-bug-one");
+    expect(r.code).toBe(0);
+    expect(readdirSync(ownLogs)).toEqual([`r1-bug-one-claude-task-01-${basename(record)}`]);
+  });
+
+  test("a review whose own task names no file still fails", () => {
+    const events = writeEvents("harvest-455-c3a.events", [
+      reviewStarted,
+      commandStarted,
+      commandNote(commandOutput("c3a")),
+      reviewNote(""),
+      done,
+    ]);
+    const r = cli("harvest", events, join(root, "logs-455-c3a"), "--prefix", "r1-bug-one");
+    expect(r.code).toBe(1);
+    expect(r.err.includes("names no output file")).toBe(true);
+  });
+
+  test("a review whose own record is missing still fails", () => {
+    const events = writeEvents("harvest-455-c3b.events", [
+      reviewStarted,
+      commandStarted,
+      commandNote(commandOutput("c3b")),
+      reviewNote(join(taskHome, "absent-455-c3b.txt")),
+      done,
+    ]);
+    const r = cli("harvest", events, join(root, "logs-455-c3b"), "--prefix", "r1-bug-one");
+    expect(r.code).toBe(1);
+    expect(r.err.includes("missing")).toBe(true);
+  });
+
+  test("a stream with tasks but no review task fails instead of keeping a command's output", () => {
+    const events = writeEvents("harvest-455-c3c.events", [
+      commandStarted,
+      commandNote(commandOutput("c3c")),
+      done,
+    ]);
+    const r = cli("harvest", events, join(root, "logs-455-c3c"), "--prefix", "r1-bug-one");
+    expect(r.code).toBe(1);
+    expect(r.err.includes("no task_notification names the review task")).toBe(true);
+  });
+});
+
 describe("degrade", () => {
   test("a lane whose task file is missing ends DEGRADED with no findings JSON", () => {
     const degradeEvents = writeEvents("degrade.events", [
