@@ -147,7 +147,8 @@ global config:
   something needs them or a run lands (default none). On yes, they write
   `~/.postmaster/telegram.env` themselves with the bot token and their chat, since a secret
   never passes through a conversation; where the machine limits network hosts, they allow
-  `api.telegram.org`; confirm with `scripts/run notify test`.
+  `api.telegram.org`; confirm with `scripts/run notify test`, naming the repo for a
+  project's own messages.
 - **Where projects live.** `~/Code` is one convention, not a rule. Global step only:
   the project step refuses it, since it always comes from the global config.
 - **Who says the merge word.** A person, or the postmaster itself (`ship.merge_authority`).

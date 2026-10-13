@@ -5,12 +5,12 @@
 // message, so no model's words and no record's text leave the machine.
 //
 //   run notify scan <runs-root>      one look's messages; silent unless a send newly fails
-//   run notify test                  confirm setup with a test message to the user's chat
+//   run notify test [repo]           confirm setup with a test message to the user's chat
 //   run notify clerk <repo> <ticket> the booking clerk's one message, when its draft is ready
 //
 // A scan messages a run's waiting marker on its appearance (the ship card when
-// .card-ready sits beside it), each usage-limit wall once by its actions.jsonl
-// index, and each shipped stage line once the same way. An appearance is the
+// .card-ready sits beside it), each unruled usage-limit wall once by its
+// actions.jsonl index, and each shipped stage line once the same way. An appearance is the
 // marker's file identity plus a hash of its words, so a remove-and-rewrite
 // sends anew; only the hash is ever recorded, never the words. What was
 // messaged is the run's own notify lines; what predates messages is the run's
@@ -59,6 +59,8 @@ import { runRepo } from "./runs-watch.ts";
 import { isSurveyWall, readWalls, type Wall } from "./walls.ts";
 
 const SEND_TIMEOUT_MS = 10_000;
+const TRACKER_TIMEOUT_MS = 5_000;
+const TITLE_BUDGET_MS = 10_000;
 const MESSAGE_CAP = 4096;
 const DEFAULT_ORIGIN = "https://api.telegram.org";
 const DEFAULT_ENV_FILE = "~/.postmaster/telegram.env";
@@ -494,6 +496,9 @@ function collectEvents(
   const events: NotifyEvent[] = [];
   const live = walls.filter((w) => !isSurveyWall(w));
   for (const w of live) {
+    // A ruled wall is no longer needed: its question was answered in the
+    // session, so it sends nothing, however many looks failed before.
+    if (w.ruled) continue;
     if (told("wall", String(w.index)) || state.toldWalls.includes(w.index)) continue;
     events.push({
       run: runName,
@@ -581,7 +586,9 @@ function listRuns(root: string): string[] {
 function trackerKindOf(repo: string): string | null {
   // Capped: a hung tracker lookup degrades the message to the number alone,
   // never the look.
-  const r = run(beside(import.meta, "run"), ["tracker-kind", repo], { timeout: 15_000 });
+  const r = run(beside(import.meta, "run"), ["tracker-kind", repo], {
+    timeout: TRACKER_TIMEOUT_MS,
+  });
   if (r.code !== 0) return null;
   return r.out.trim();
 }
@@ -591,7 +598,9 @@ function trackerKindOf(repo: string): string | null {
 function ticketTitle(repo: string, kind: string, ticket: string): string | null {
   if (kind === "other") return null;
   const base = kind === "plane" ? [] : [repo];
-  const r = run(beside(import.meta, "run"), [kind, ...base, "read", ticket], { timeout: 15_000 });
+  const r = run(beside(import.meta, "run"), [kind, ...base, "read", ticket], {
+    timeout: TRACKER_TIMEOUT_MS,
+  });
   if (r.code !== 0) return null;
   const title = parseTicketRead(r.out).title;
   return title === "" ? null : title;
@@ -676,14 +685,21 @@ export async function scanRoot(root: string): Promise<void> {
       (a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0),
   );
   const titles = new Map<string, string | null>();
+  const budgetStart = Date.now();
   for (const ev of events) {
     const repo = runRepo(ev.dispatch);
     let title: string | null = null;
     if (repo !== null && ev.lookup !== null) {
       const key = JSON.stringify([repo, ev.lookup]);
       if (!titles.has(key)) {
-        const kind = trackerKindOf(repo);
-        titles.set(key, kind === null ? null : ticketTitle(repo, kind, ev.lookup));
+        // One budget for the look's titles: past it the rest degrade to the
+        // number alone, so a hung tracker delays the look by seconds, never
+        // minutes, however many tickets came up.
+        if (Date.now() - budgetStart > TITLE_BUDGET_MS) titles.set(key, null);
+        else {
+          const kind = trackerKindOf(repo);
+          titles.set(key, kind === null ? null : ticketTitle(repo, kind, ev.lookup));
+        }
       }
       title = titles.get(key) ?? null;
     }
@@ -779,18 +795,37 @@ async function clerkCmd(repo: string, ticketArg: string): Promise<number> {
   return 0;
 }
 
-async function testCmd(): Promise<number> {
-  const path = expandUser(globalConfigPath());
-  const global = tryTomlFile(path);
-  const raw = global?.notify;
-  if (!isRecord(raw) || raw.channel !== "telegram") {
-    console.error(
-      `notify: messages are off (no [notify] table with channel = "telegram" in ${path})`,
-    );
-    return 1;
+async function testCmd(repo?: string): Promise<number> {
+  let raw: unknown;
+  if (repo === undefined) {
+    const path = expandUser(globalConfigPath());
+    raw = tryTomlFile(path)?.notify;
+    if (!isRecord(raw) || raw.channel !== "telegram") {
+      console.error(
+        `notify: messages are off (no [notify] table with channel = "telegram" in ${path})`,
+      );
+      return 1;
+    }
+  } else {
+    const resolved = effectiveConfigForProject(repo);
+    if (resolved.notice !== null) console.error(resolved.notice);
+    if (resolved.config === null || resolved.error !== null) {
+      console.error(
+        `notify: cannot resolve the settings for ${repo}: ${resolved.error ?? "no config"}`,
+      );
+      return 1;
+    }
+    raw = resolved.config.notify;
+    if (!isRecord(raw) || raw.channel !== "telegram") {
+      console.error(
+        `notify: messages are off for ${repo} (no [notify] table with channel = "telegram" in its effective config)`,
+      );
+      return 1;
+    }
   }
+  const table = raw as Record<string, unknown>;
   const envFile =
-    typeof raw.env_file === "string" && raw.env_file !== "" ? raw.env_file : DEFAULT_ENV_FILE;
+    typeof table.env_file === "string" && table.env_file !== "" ? table.env_file : DEFAULT_ENV_FILE;
   const env = readEnvFile(envFile);
   if (!env.ok) {
     console.error(`notify: ${env.refusal}`);
@@ -834,9 +869,10 @@ async function main(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv;
   if (cmd === "scan" && rest.length === 1 && rest[0]) return scanCmd(rest[0]);
   if (cmd === "test" && rest.length === 0) return testCmd();
+  if (cmd === "test" && rest.length === 1 && rest[0]) return testCmd(rest[0]);
   if (cmd === "clerk" && rest.length === 2 && rest[0] && rest[1]) return clerkCmd(rest[0], rest[1]);
   if (cmd === "--help" || cmd === "-h") printHelp();
-  console.error("usage: run notify scan <runs-root> | test | clerk <repo> <ticket>");
+  console.error("usage: run notify scan <runs-root> | test [repo] | clerk <repo> <ticket>");
   return 1;
 }
 

@@ -1004,6 +1004,11 @@ if (MSG === "telegram") {
       "  write that file yourself, then confirm with scripts/run notify test; " +
         "where this machine limits network hosts, allow api.telegram.org first",
     );
+  } else {
+    console.log(
+      `  write that file yourself, then confirm with scripts/run notify test ${PROJECT_ROOT}; ` +
+        "where this machine limits network hosts, allow api.telegram.org first",
+    );
   }
 }
 

@@ -19,7 +19,8 @@ it. A person's project settings may switch messages off for that project alone.
   the user's messages. Things that came up together go in one message, a line
   each; no reminders, and no message for anything else (D2).
 - **The booking clerk**, once per ticket, when its draft is first ready.
-- **The test message**, `notify test`, which confirms setup.
+- **The test message**, `notify test` (`test <repo>` for a project's own
+  messages), which confirms setup.
 
 A message holds only what came up, the project's name, the ticket's number and
 title, where to answer when one is needed (the postmaster's session for a run,
