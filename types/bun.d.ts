@@ -319,6 +319,8 @@ declare module "node:fs" {
     mode: number;
     uid: number;
     gid: number;
+    dev: number;
+    ino: number;
   };
   export function lstatSync(path: string): {
     isFile(): boolean;
