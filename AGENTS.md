@@ -221,8 +221,9 @@ A runbook says what an agent must do. The wiki says what the project knows, what
 how sure it is and what would change it. Do not restate one in the other.
 
 **Read the index before decomposing a stream into tickets**, and the concepts that stream
-touches. **Lanes do not read the wiki**, for the reason `wiki/schema.md` gives: a lane that
-has read the project's findings about lanes is no longer an independent measurement of them.
+touches. **A lane may read the wiki** where it helps its work, and a run used as evidence for a
+claim records whether its lanes read the page that makes it (`wiki/schema.md`): a lane that has
+read a page's claim is no longer an independent measurement of it.
 
 ## Vocabulary
 
