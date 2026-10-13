@@ -274,12 +274,14 @@ whole system.
 
 The scripts run on Bun 1.4.2 or newer: `scripts/run <name> [args]` is the one entry for every
 tool script; it execs Bun with `--no-env-file` and the tool's own `bunfig.toml`, so a script run
-inside a target project never loads that project's `.env` or Bun config. Runtime imports are
-Bun's built-ins and Node's standard modules only, except the vendored parser
-(`scripts/lib/vendor/babel-parser.js`, @babel/parser 7.x, the one dependency #268 added with
-the user's word); `typescript`, `@biomejs/biome` and `oxlint`
-are the development dependencies, and `bun run check` is the type check, Oxlint, the Biome
-format check, the tests beside every script, the runbook reference check and the wiki lint.
+inside a target project never loads that project's `.env` or Bun config. A library from
+the ticket's `## Libraries` list is welcome, used at run time or only by the checks, once the
+user has said yes to adding it. A library used at run time is copied into the repository at a
+fixed version, the way `scripts/lib/vendor/` holds @babel/parser: one version with its licence
+and the registry's checksum, written by a refresh script that applies the approval, the week-old
+age and Socket's scan. A library the checks alone use installs under the same approval,
+and `bun run check` is the type check, Oxlint, the Biome format check, the
+tests beside every script, the runbook reference check and the wiki lint.
 
 ### Where a setting comes from
 
