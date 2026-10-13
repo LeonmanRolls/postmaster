@@ -1,12 +1,26 @@
 ---
 title: Log
 type: schema
-updated: 2026-10-11
+updated: 2026-10-13
 ---
 
 # Log
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
+
+## [2026-10-13] update | the review-rounds page against the loop as it stands on main
+
+Issue #400. Main had moved 302 commits since the page was written. Read the loop's decision script
+and runbook at the commits that changed its rule, found that the runs ran under three rules, not one
+(a cap of three rounds with a loop until clean before 29 September, a scripted decision with the cap
+from then, a rise rule with no cap from 9 October), and mapped each run to its rule from the commit
+it was pinned to. Replayed the rise rule over the runs, split group A at 29 September, and added
+round 1 as a warning, all in `raw/trials/2026-10-11-review-rounds/results/loop-rule.md` with their
+controls. Changed [the review-rounds page](concepts/review-rounds.md): a third of the rounds are in
+the 13 earliest runs; the clerk's two-part ticket's apparent saving is much smaller against the
+one-part tickets from 29 September on; a sentence about the cap of three rounds that was wrong is
+corrected; and the loop's rule, the rise replay and what main now records are added. No rule,
+runbook, template or gate changed. No standing changed.
 
 ## [2026-10-11] query | why runs take so many review rounds, and what planning could cut
 
