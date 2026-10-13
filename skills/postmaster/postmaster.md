@@ -779,13 +779,14 @@ every project and does not change that project's gate.
      pull-request URL and merge instructions in `.waiting-on-user`; the user merges it in
      the project's review surface and says so, and that word is the answer step 3 waits on.
      A draft pull request instead gets its URL and the question asking the user to look at
-     it, and waits for their word; when it comes, log it with `<tool>/scripts/run log-action
-     <dispatch> postmaster note <the pull-request URL>
+     it, and waits for their word; on a word approving the mark, log it with
+     `<tool>/scripts/run log-action <dispatch> postmaster note <the pull-request URL>
      mark-ready <the user's words>`, then mark the draft ready with
      `<tool>/scripts/run landing mark-ready --repo <repo> --pr <pull-request-url>`, and on
      `ready` ask `pull-request-checks` again — nothing the draft's checks said is carried
      over — following the `pass`, `none`, `pending` and `fail:` branches again from the new
-     answer; only a `pass` after the mark writes the merge instructions. On `none`, ask once
+     answer; only a `pass` after the mark writes the merge instructions. On any other
+     answer keep waiting. On `none`, ask once
      more after a minute's wait, since GitHub creates the checks seconds after the pull
      request opens and the first ask can land before they exist; move on only if the second
      ask still says `none` — a second `none` reads as a `pass` for what is written —, and
