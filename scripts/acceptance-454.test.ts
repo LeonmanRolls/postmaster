@@ -6,7 +6,7 @@
 // answer while this loop runs. C6, a fixture run from this branch scoring
 // clean, needs a dispatched run and stays out.
 import { describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ROOT, RUN } from "./acceptance-323.ts";
 import {
@@ -26,6 +26,7 @@ import {
   procEnviron,
   processIsLive,
   removeSandbox,
+  ruleWalls,
   sendBodies,
   shipRun,
   sweepSandbox,
@@ -93,6 +94,24 @@ describe("C1: one message per thing that came up", () => {
       expectCode(r2, 3);
       expect(r2.out).toContain("USER");
       expect(sendBodies(sb).length).toBe(1);
+    } finally {
+      removeSandbox(sb);
+    }
+  });
+
+  test("a wall ruled while the watcher is stopped sends nothing on resume", async () => {
+    const sb = makeNotifySandbox();
+    try {
+      const d = makeRun(sb, "1");
+      await look(sb);
+      expect(sendBodies(sb).length).toBe(0);
+      addWall(sb, d, "luna", "none", "PROVIDER-UTTERANCE-1");
+      tellWalls(sb, d, "luna");
+      ruleWalls(sb, d, "luna");
+      const r = await look(sb);
+      expectCode(r, 3);
+      expect(sendBodies(sb).length).toBe(0);
+      expect(existsSync(join(sb.runs, "postmaster", ".notify-failed"))).toBe(false);
     } finally {
       removeSandbox(sb);
     }
@@ -627,6 +646,27 @@ describe("C5: setup asks and the test message confirms", () => {
     const sb = makeNotifySandbox();
     try {
       const r = await notifyTest(sb);
+      expectCode(r, 0);
+      const bodies = sendBodies(sb);
+      expect(bodies.length).toBe(1);
+      expect(bodies[0]!.text).toContain("test message");
+    } finally {
+      removeSandbox(sb);
+    }
+  });
+
+  test("the test-message command confirms a project's own messages", async () => {
+    const sb = makeNotifySandbox({ messages: false });
+    try {
+      mkdirSync(join(sb.repo, ".postmaster"), { recursive: true });
+      writeFileSync(
+        join(sb.repo, ".postmaster", "settings.toml"),
+        `[notify]\nchannel = "telegram"\nenv_file = "${sb.tokenFile}"\n`,
+      );
+      const off = await notifyTest(sb);
+      expect(off.code).not.toBe(0);
+      expect(sendBodies(sb).length).toBe(0);
+      const r = await notifyTest(sb, sb.repo);
       expectCode(r, 0);
       const bodies = sendBodies(sb);
       expect(bodies.length).toBe(1);

@@ -222,6 +222,11 @@ export function tellWalls(sb: NotifySandbox, dispatch: string, lane: string): vo
   expectCode(r, 0);
 }
 
+export function ruleWalls(sb: NotifySandbox, dispatch: string, lane: string): void {
+  const r = run(RUN, ["walls", "rule", dispatch, lane, "go-on"], { env: sb.env });
+  expectCode(r, 0);
+}
+
 export function shipRun(sb: NotifySandbox, dispatch: string): void {
   const r = run(RUN, ["stage", dispatch, "shipped", "postmaster"], { env: sb.env });
   expectCode(r, 0);
@@ -291,9 +296,9 @@ export function look(
   return runAsync(RUN, ["runs-watch", "--timeout", "0", sb.runs], { ...sb.env, ...extraEnv });
 }
 
-/** The test-message command against the sandbox config. */
-export function notifyTest(sb: NotifySandbox): Promise<RunResult> {
-  return runAsync(RUN, ["notify", "test"], sb.env);
+/** The test-message command against the sandbox config, or a repo's own. */
+export function notifyTest(sb: NotifySandbox, repo?: string): Promise<RunResult> {
+  return runAsync(RUN, repo === undefined ? ["notify", "test"] : ["notify", "test", repo], sb.env);
 }
 
 /** The clerk's message command for a ticket in the sandbox repo. */
