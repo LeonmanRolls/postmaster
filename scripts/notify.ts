@@ -669,7 +669,7 @@ export async function scanRoot(root: string): Promise<void> {
     const repo = runRepo(ev.dispatch);
     let title: string | null = null;
     if (repo !== null && ev.number !== null) {
-      const key = `${repo} ${ev.number}`;
+      const key = JSON.stringify([repo, ev.number]);
       if (!titles.has(key)) {
         const kind = trackerKindOf(repo);
         titles.set(key, kind === null ? null : ticketTitle(repo, kind, ev.number));
