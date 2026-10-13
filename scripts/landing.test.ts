@@ -2785,7 +2785,13 @@ describe("mark ready", () => {
 
   function markReady(
     label: string,
-    opts: { readyExit?: number; readyErr?: string; view?: string; viewExit?: number } = {},
+    opts: {
+      readyExit?: number;
+      readyErr?: string;
+      view?: string;
+      viewLast?: string;
+      viewExit?: number;
+    } = {},
     wantCode = 0,
   ): { output: string; code: number; err: string; calls: string[] } {
     const repo = join(tmp, `mark-ready-${label}`);
@@ -2801,7 +2807,7 @@ describe("mark ready", () => {
         'echo "$*" >> "$GH_CALLS"',
         'case "$2" in',
         '  ready) printf \'%s\' "$GH_READY_ERR" >&2; exit "$GH_READY_EXIT" ;;',
-        '  view) printf \'%s\' "$GH_VIEW_OUT"; exit "$GH_VIEW_EXIT" ;;',
+        '  view) if [ -f "$GH_VIEW_SEEN" ]; then printf \'%s\' "$GH_VIEW_LAST"; else : > "$GH_VIEW_SEEN"; printf \'%s\' "$GH_VIEW_OUT"; fi; exit "$GH_VIEW_EXIT" ;;',
         '  *) echo "unexpected gh call: $*" >&2; exit 2 ;;',
         "esac",
         "",
@@ -2815,7 +2821,9 @@ describe("mark ready", () => {
         GH_CALLS: join(tmp, `mark-ready-${label}.calls`),
         GH_READY_EXIT: String(opts.readyExit ?? 0),
         GH_READY_ERR: opts.readyErr ?? "",
-        GH_VIEW_OUT: opts.view ?? '{"isDraft":false}\n',
+        GH_VIEW_OUT: opts.view ?? '{"isDraft":true}\n',
+        GH_VIEW_LAST: opts.viewLast ?? opts.view ?? '{"isDraft":true}\n',
+        GH_VIEW_SEEN: join(tmp, `mark-ready-${label}.seen`),
         GH_VIEW_EXIT: String(opts.viewExit ?? 0),
       },
     });
@@ -2832,16 +2840,26 @@ describe("mark ready", () => {
   }
 
   test("marks ready and reads the state back", () => {
-    const r = markReady("ok");
+    const r = markReady("ok", { view: '{"isDraft":true}\n', viewLast: '{"isDraft":false}\n' });
     expect(r.output).toBe("ready");
-    expect(r.calls).toEqual([`pr ready ${pr}`, `pr view ${pr} --json isDraft`]);
+    expect(r.calls).toEqual([
+      `pr view ${pr} --json isDraft`,
+      `pr ready ${pr}`,
+      `pr view ${pr} --json isDraft`,
+    ]);
   });
 
-  test("a failed mark is a fault, with no state read", () => {
+  test("an already-ready pull request prints ready without marking", () => {
+    const r = markReady("already", { view: '{"isDraft":false}\n' });
+    expect(r.output).toBe("ready");
+    expect(r.calls).toEqual([`pr view ${pr} --json isDraft`]);
+  });
+
+  test("a failed mark is a fault", () => {
     const r = markReady("fail", { readyExit: 1, readyErr: "GraphQL: something broke\n" }, 1);
     expect(r.output).toBe("");
     expect(r.err).toContain("cannot mark pull request ready");
-    expect(r.calls).toEqual([`pr ready ${pr}`]);
+    expect(r.calls).toEqual([`pr view ${pr} --json isDraft`, `pr ready ${pr}`]);
   });
 
   test("a pull request still a draft after the mark is a fault", () => {

@@ -43,7 +43,7 @@
 //       carrying the provider's first line; a failed ready create is never refused.
 //   run landing mark-ready --repo <repo> --pr <pull-request>
 //       mark the pull request ready for review and read its draft state back. Prints
-//       `ready`.
+//       `ready`; an already-ready pull request prints `ready` without marking.
 //   run landing results <dispatch> <synthesis-wt>
 //       every recorded check's result at the worktree's HEAD, one `name: result` line each,
 //       as the cards carry them. This is the one place the vocabulary mapping lives:
@@ -991,14 +991,7 @@ function openPr(o: string[]): number {
   return 0;
 }
 
-function markReady(o: string[]): number {
-  if (o.length !== 4 || o[0] !== "--repo" || o[2] !== "--pr" || o[1] === "" || o[3] === "") {
-    usage(MARK_READY_USAGE);
-  }
-  const repo = o[1]!;
-  const pr = o[3]!;
-  const marked = run("gh", ["pr", "ready", pr], { cwd: repo });
-  if (marked.code !== 0) die(`cannot mark pull request ready: ${pyTrim(marked.err || marked.out)}`);
+function readIsDraft(repo: string, pr: string): boolean {
   const view = run("gh", ["pr", "view", pr, "--json", "isDraft"], { cwd: repo });
   if (view.code !== 0) die(`cannot read pull request state: ${pyTrim(view.err || view.out)}`);
   let state: unknown;
@@ -1014,7 +1007,25 @@ function markReady(o: string[]): number {
   if (typeof isDraft !== "boolean") {
     die(`cannot read pull request state: GitHub returned malformed JSON`);
   }
-  if (isDraft) die(`pull request is still a draft after gh pr ready: ${pr}`);
+  return isDraft;
+}
+
+function markReady(o: string[]): number {
+  if (o.length !== 4 || o[0] !== "--repo" || o[2] !== "--pr" || o[1] === "" || o[3] === "") {
+    usage(MARK_READY_USAGE);
+  }
+  const repo = o[1]!;
+  const pr = o[3]!;
+  // The user may have marked ready on the pull request's page while the
+  // draft waited for their word; the end state already holds, so the mark
+  // is skipped rather than faulted.
+  if (!readIsDraft(repo, pr)) {
+    console.log("ready");
+    return 0;
+  }
+  const marked = run("gh", ["pr", "ready", pr], { cwd: repo });
+  if (marked.code !== 0) die(`cannot mark pull request ready: ${pyTrim(marked.err || marked.out)}`);
+  if (readIsDraft(repo, pr)) die(`pull request is still a draft after gh pr ready: ${pr}`);
   console.log("ready");
   return 0;
 }
