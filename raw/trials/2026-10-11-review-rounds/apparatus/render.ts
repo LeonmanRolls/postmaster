@@ -1346,19 +1346,18 @@ export function loopRuleMarkdown(
         "Round 1 serious, median",
         "Serious in all, median",
       ],
-      [...afterScript.map(([label, rs]): [string, readonly RunInput[]] => [label, rs])].flatMap(
-        ([label, rs]) =>
-          criteriaRows(rs as readonly RunInput[]).map((c) => [
-            label as string,
-            c.band,
-            String(c.runs),
-            String(c.rounds),
-            num(c.mean, 2),
-            num(c.median, 1),
-            String(c.long),
-            num(c.roundOneMedian, 1),
-            num(c.seriousMedian, 1),
-          ]),
+      afterScript.flatMap(([label, rs]) =>
+        criteriaRows(rs).map((c) => [
+          label,
+          c.band,
+          String(c.runs),
+          String(c.rounds),
+          num(c.mean, 2),
+          num(c.median, 1),
+          String(c.long),
+          num(c.roundOneMedian, 1),
+          num(c.seriousMedian, 1),
+        ]),
       ),
     ),
     "",
