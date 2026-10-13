@@ -402,7 +402,12 @@ describe("clean verdicts fail loudly", () => {
 describe("harvest", () => {
   test("Claude task_notification transcript is copied into run logs", () => {
     const harvestEvents = writeEvents("harvest.events", [
-      { type: "system", subtype: "task_notification", output_file: external },
+      {
+        type: "system",
+        subtype: "task_notification",
+        summary: "/code-review",
+        output_file: external,
+      },
     ]);
     const r = cli("harvest", harvestEvents, logs, "--prefix", "r1-bug-one");
     const copied = join(logs, `r1-bug-one-claude-task-01-${basename(external)}`);
@@ -413,8 +418,18 @@ describe("harvest", () => {
 
   test("a missing task file fails before anything is copied", () => {
     const partial = writeEvents("harvest-partial.events", [
-      { type: "system", subtype: "task_notification", output_file: external },
-      { type: "system", subtype: "task_notification", output_file: join(taskHome, "absent.txt") },
+      {
+        type: "system",
+        subtype: "task_notification",
+        summary: "/code-review",
+        output_file: external,
+      },
+      {
+        type: "system",
+        subtype: "task_notification",
+        summary: "/code-review",
+        output_file: join(taskHome, "absent.txt"),
+      },
     ]);
     const partialLogs = join(root, "logs-partial");
     const r = cli("harvest", partial, partialLogs, "--prefix", "partial");
@@ -425,7 +440,12 @@ describe("harvest", () => {
 
   test("an identical re-harvest is a no-op", () => {
     const one = writeEvents("harvest-one.events", [
-      { type: "system", subtype: "task_notification", output_file: external },
+      {
+        type: "system",
+        subtype: "task_notification",
+        summary: "/code-review",
+        output_file: external,
+      },
     ]);
     const retryLogs = join(root, "logs-retry");
     const first = cli("harvest", one, retryLogs, "--prefix", "retry");
@@ -437,7 +457,12 @@ describe("harvest", () => {
 
   test("a re-harvest over different content still refuses", () => {
     const one = writeEvents("harvest-one.events", [
-      { type: "system", subtype: "task_notification", output_file: external },
+      {
+        type: "system",
+        subtype: "task_notification",
+        summary: "/code-review",
+        output_file: external,
+      },
     ]);
     const retryLogs = join(root, "logs-retry");
     cli("harvest", one, retryLogs, "--prefix", "retry");
@@ -454,7 +479,12 @@ describe("harvest", () => {
     const localOutput = join(taskDir, "task-out.txt");
     writeFileSync(localOutput, "per-user temp output\n");
     const events = writeEvents("harvest-tmpdir.events", [
-      { type: "system", subtype: "task_notification", output_file: localOutput },
+      {
+        type: "system",
+        subtype: "task_notification",
+        summary: "/code-review",
+        output_file: localOutput,
+      },
     ]);
     const tmpLogs = join(root, "logs-tmpdir");
     const r = run(SELF, ["review-findings", "harvest", events, tmpLogs, "--prefix", "tmpdir"], {
@@ -470,7 +500,7 @@ describe("harvest", () => {
     const loose = join(elsewhere, "loose.txt");
     writeFileSync(loose, "loose\n");
     const events = writeEvents("harvest-loose.events", [
-      { type: "system", subtype: "task_notification", output_file: loose },
+      { type: "system", subtype: "task_notification", summary: "/code-review", output_file: loose },
     ]);
     const looseLogs = join(root, "logs-loose");
     const r = run(SELF, ["review-findings", "harvest", events, looseLogs, "--prefix", "loose"], {
@@ -484,22 +514,27 @@ describe("harvest", () => {
   const negatives: Array<[string, unknown, string]> = [
     [
       "a task_notification without an output file fails",
-      { type: "system", subtype: "task_notification" },
+      { type: "system", subtype: "task_notification", summary: "/code-review" },
       "names no output file",
     ],
     [
       "a task_notification with an empty output file fails",
-      { type: "system", subtype: "task_notification", output_file: "" },
+      { type: "system", subtype: "task_notification", summary: "/code-review", output_file: "" },
       "names no output file",
     ],
     [
       "a task_notification with a non-text output file fails",
-      { type: "system", subtype: "task_notification", output_file: 7 },
+      { type: "system", subtype: "task_notification", summary: "/code-review", output_file: 7 },
       "not text",
     ],
     [
       "a task_notification naming a missing file fails",
-      { type: "system", subtype: "task_notification", output_file: join(taskHome, "absent.txt") },
+      {
+        type: "system",
+        subtype: "task_notification",
+        summary: "/code-review",
+        output_file: join(taskHome, "absent.txt"),
+      },
       "missing",
     ],
   ];
@@ -513,6 +548,7 @@ describe("harvest", () => {
           ? {
               type: "system",
               subtype: "task_notification",
+              summary: "/code-review",
               output_file: join(taskHome, "absent.txt"),
             }
           : notification;
@@ -529,7 +565,12 @@ describe("harvest", () => {
     const tree = join(root, "task-tree");
     mkdirSync(tree, { recursive: true });
     const outsideEvents = writeEvents("harvest-outside.events", [
-      { type: "system", subtype: "task_notification", output_file: outside },
+      {
+        type: "system",
+        subtype: "task_notification",
+        summary: "/code-review",
+        output_file: outside,
+      },
     ]);
     let threw: unknown = null;
     try {
@@ -547,7 +588,7 @@ describe("harvest", () => {
     const tree = join(root, "task-tree");
     mkdirSync(tree, { recursive: true });
     const innerEvents = writeEvents("harvest-inner.events", [
-      { type: "system", subtype: "task_notification", output_file: inner },
+      { type: "system", subtype: "task_notification", summary: "/code-review", output_file: inner },
     ]);
     let threw: unknown = null;
     try {
@@ -567,10 +608,134 @@ describe("harvest", () => {
   });
 });
 
+describe("a review that ran commands of its own", () => {
+  const reviewId = "task-review-455";
+  const commandId = "task-command-455";
+  const reviewStarted = {
+    type: "system",
+    subtype: "task_started",
+    task_id: reviewId,
+    task_type: "local_agent",
+    description: "/code-review",
+  };
+  const commandStarted = {
+    type: "system",
+    subtype: "task_started",
+    task_id: commandId,
+    parent_task_id: reviewId,
+    task_type: "local_bash",
+    owned_by_subagent: true,
+    description: "Run the project's tests",
+  };
+  const done = { type: "result", subtype: "success", result: "[]" };
+  const reviewNote = (output_file: unknown) => ({
+    type: "system",
+    subtype: "task_notification",
+    task_id: reviewId,
+    summary: "/code-review",
+    output_file,
+  });
+  const commandNote = (output_file: unknown) => ({
+    type: "system",
+    subtype: "task_notification",
+    task_id: commandId,
+    summary: "Run the project's tests",
+    output_file,
+  });
+  const reviewRecord = (name: string): string => {
+    const record = join(taskHome, `review-record-455-${name}.jsonl`);
+    writeFileSync(
+      record,
+      `${JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Read", input: { file_path: "src/page.js" } }] } })}\n`,
+    );
+    return record;
+  };
+  const commandOutput = (name: string): string => {
+    const output = join(taskHome, `command-output-455-${name}.txt`);
+    writeFileSync(output, "TAP output of the test run\n");
+    return output;
+  };
+
+  test("a review whose command names no file is collected from its own task", () => {
+    const record = reviewRecord("c1");
+    const events = writeEvents("harvest-455-c1.events", [
+      reviewStarted,
+      commandStarted,
+      commandNote(""),
+      reviewNote(record),
+      done,
+    ]);
+    const ownLogs = join(root, "logs-455-c1");
+    const r = cli("harvest", events, ownLogs, "--prefix", "r1-bug-one");
+    const copied = join(ownLogs, `r1-bug-one-claude-task-01-${basename(record)}`);
+    expect(r.code).toBe(0);
+    expect(pyTrim(r.out)).toBe(copied);
+    expect(readdirSync(ownLogs)).toEqual([basename(copied)]);
+    expect(readFileSync(copied, "utf8")).toBe(readFileSync(record, "utf8"));
+  });
+
+  test("a command's output is not kept with the review's record", () => {
+    const record = reviewRecord("c2");
+    const events = writeEvents("harvest-455-c2.events", [
+      reviewStarted,
+      commandStarted,
+      commandNote(commandOutput("c2")),
+      reviewNote(record),
+      done,
+    ]);
+    const ownLogs = join(root, "logs-455-c2");
+    const r = cli("harvest", events, ownLogs, "--prefix", "r1-bug-one");
+    expect(r.code).toBe(0);
+    expect(readdirSync(ownLogs)).toEqual([`r1-bug-one-claude-task-01-${basename(record)}`]);
+  });
+
+  test("a review whose own task names no file still fails", () => {
+    const events = writeEvents("harvest-455-c3a.events", [
+      reviewStarted,
+      commandStarted,
+      commandNote(commandOutput("c3a")),
+      reviewNote(""),
+      done,
+    ]);
+    const r = cli("harvest", events, join(root, "logs-455-c3a"), "--prefix", "r1-bug-one");
+    expect(r.code).toBe(1);
+    expect(r.err.includes("names no output file")).toBe(true);
+  });
+
+  test("a review whose own record is missing still fails", () => {
+    const events = writeEvents("harvest-455-c3b.events", [
+      reviewStarted,
+      commandStarted,
+      commandNote(commandOutput("c3b")),
+      reviewNote(join(taskHome, "absent-455-c3b.txt")),
+      done,
+    ]);
+    const r = cli("harvest", events, join(root, "logs-455-c3b"), "--prefix", "r1-bug-one");
+    expect(r.code).toBe(1);
+    expect(r.err.includes("missing")).toBe(true);
+  });
+
+  test("a stream with tasks but no review task fails instead of keeping a command's output", () => {
+    const events = writeEvents("harvest-455-c3c.events", [
+      commandStarted,
+      commandNote(commandOutput("c3c")),
+      done,
+    ]);
+    const r = cli("harvest", events, join(root, "logs-455-c3c"), "--prefix", "r1-bug-one");
+    expect(r.code).toBe(1);
+    expect(r.err.includes("no task_notification names the review task")).toBe(true);
+  });
+});
+
 describe("degrade", () => {
   test("a lane whose task file is missing ends DEGRADED with no findings JSON", () => {
     const degradeEvents = writeEvents("degrade.events", [
-      { type: "system", subtype: "task_notification", output_file: join(taskHome, "absent.txt") },
+      {
+        type: "system",
+        subtype: "task_notification",
+        summary: "/code-review",
+        output_file: join(taskHome, "absent.txt"),
+      },
       { type: "result", subtype: "success", result: "[]" },
     ]);
     const degradeHarvest = cli(
@@ -600,7 +765,12 @@ describe("degrade", () => {
 
   test("the same stream still normalizes, so skipping it is what keeps the verdict uncounted", () => {
     const degradeEvents = writeEvents("degrade.events", [
-      { type: "system", subtype: "task_notification", output_file: join(taskHome, "absent.txt") },
+      {
+        type: "system",
+        subtype: "task_notification",
+        summary: "/code-review",
+        output_file: join(taskHome, "absent.txt"),
+      },
       { type: "result", subtype: "success", result: "[]" },
     ]);
     const skipped = cli(
@@ -617,7 +787,12 @@ describe("degrade", () => {
 
   test("the same stream with the file present harvests and normalizes to its finding", () => {
     const presentEvents = writeEvents("degrade-present.events", [
-      { type: "system", subtype: "task_notification", output_file: external },
+      {
+        type: "system",
+        subtype: "task_notification",
+        summary: "/code-review",
+        output_file: external,
+      },
       { type: "result", subtype: "success", result: claudeResult },
     ]);
     const presentHarvest = cli(
@@ -1485,8 +1660,18 @@ describe("harvest conflicts", () => {
     mkdirSync(clashLogs, { recursive: true });
     writeFileSync(join(clashLogs, `clash-claude-task-02-${basename(secondTask)}`), "changed\n");
     const clash = writeEvents("harvest-clash.events", [
-      { type: "system", subtype: "task_notification", output_file: external },
-      { type: "system", subtype: "task_notification", output_file: secondTask },
+      {
+        type: "system",
+        subtype: "task_notification",
+        summary: "/code-review",
+        output_file: external,
+      },
+      {
+        type: "system",
+        subtype: "task_notification",
+        summary: "/code-review",
+        output_file: secondTask,
+      },
     ]);
     const r = cli("harvest", clash, clashLogs, "--prefix", "clash");
     expect(r.code).toBe(1);
@@ -1509,6 +1694,7 @@ describe("harvest conflicts", () => {
       {
         type: "system",
         subtype: "task_notification",
+        summary: "/code-review",
         output_file: join(realRoot, "linked-task-output.txt"),
       },
     ]);
@@ -1526,7 +1712,7 @@ describe("harvest conflicts", () => {
     const named = join(tree, "session", "tasks", "task-1.output");
     symlinkSync(join(sessions, "agent-1.jsonl"), named);
     const events = writeEvents("harvest-session-link.events", [
-      { type: "system", subtype: "task_notification", output_file: named },
+      { type: "system", subtype: "task_notification", summary: "/code-review", output_file: named },
     ]);
     const got = harvest(
       events,
@@ -1546,7 +1732,7 @@ describe("harvest conflicts", () => {
     const named = join(tree, "session", "tasks", "task-2.output");
     symlinkSync(join(root, "elsewhere-file.txt"), named);
     const events = writeEvents("harvest-elsewhere-link.events", [
-      { type: "system", subtype: "task_notification", output_file: named },
+      { type: "system", subtype: "task_notification", summary: "/code-review", output_file: named },
     ]);
     let threw: unknown = null;
     try {
@@ -1574,6 +1760,7 @@ describe("harvest conflicts", () => {
       {
         type: "system",
         subtype: "task_notification",
+        summary: "/code-review",
         output_file: join(sessions, "agent-3.jsonl"),
       },
     ]);
@@ -1601,6 +1788,7 @@ describe("harvest conflicts", () => {
       {
         type: "system",
         subtype: "task_notification",
+        summary: "/code-review",
         output_file: join(realRoot, "linked-task-output.txt"),
       },
     ]);
