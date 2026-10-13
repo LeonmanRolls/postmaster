@@ -742,6 +742,8 @@ export interface ChangeFile {
   oldPath: string | null;
   status: "added" | "removed" | "renamed" | "modified";
   binary: boolean;
+  /** A submodule pointer, whose Subproject lines are commits, not content. */
+  submodule: boolean;
   /** [oldMode, newMode] when the mode changed. */
   modeChange: [string, string] | null;
   /** Added head line numbers, and removed base line numbers. */
@@ -889,6 +891,7 @@ export function parseChangeDiff(text: string): Map<string, ChangeFile> {
         oldPath: null,
         status: "modified",
         binary: false,
+        submodule: false,
         modeChange: null,
         added: new Set(),
         removedOld: new Set(),
@@ -896,9 +899,17 @@ export function parseChangeDiff(text: string): Map<string, ChangeFile> {
       };
       files.set(b, cur);
     } else if (line.startsWith("new file mode")) {
-      if (cur) cur.status = "added";
+      if (cur) {
+        cur.status = "added";
+        if (line.endsWith("160000")) cur.submodule = true;
+      }
     } else if (line.startsWith("deleted file mode")) {
-      if (cur) cur.status = "removed";
+      if (cur) {
+        cur.status = "removed";
+        if (line.endsWith("160000")) cur.submodule = true;
+      }
+    } else if (line.startsWith("index ") && line.endsWith(" 160000")) {
+      if (cur) cur.submodule = true;
     } else if (line.startsWith("old mode ")) {
       oldMode = line.slice("old mode ".length).trim();
     } else if (line.startsWith("new mode ")) {
@@ -951,13 +962,13 @@ export function parseChangeDiff(text: string): Map<string, ChangeFile> {
       // they start with: content starting with -- or ++ is content, never
       // a header, and the counters move for every line.
       inHunk = true;
-    } else if (cur && inHunk && line.startsWith("-")) {
+    } else if (cur && inHunk && !cur.submodule && line.startsWith("-")) {
       const list = cur.dels.get(anchor) ?? [];
       list.push({ old: oldNo, text: line.slice(1) });
       cur.dels.set(anchor, list);
       cur.removedOld.add(oldNo);
       oldNo += 1;
-    } else if (cur && inHunk && line.startsWith("+")) {
+    } else if (cur && inHunk && !cur.submodule && line.startsWith("+")) {
       cur.added.add(newNo);
       newNo += 1;
     }
@@ -1044,6 +1055,7 @@ export function filesNeedingNames(files: Map<string, ChangeFile>): ChangeFile[] 
     (f) =>
       f.oldPath !== null ||
       f.binary ||
+      f.submodule ||
       f.modeChange !== null ||
       ((f.status === "added" || f.status === "removed") &&
         f.added.size === 0 &&
@@ -1703,7 +1715,7 @@ export interface Picture {
 
 export interface FileNameEntry {
   file: string;
-  what: "renamed" | "binary" | "mode" | "empty-added" | "empty-removed";
+  what: "renamed" | "binary" | "submodule" | "mode" | "empty-added" | "empty-removed";
   gpath: string;
   gwhat: string;
   fnote: string;
@@ -1760,6 +1772,23 @@ export function fileNameEntry(
   baseBytes: number | null,
   headBytes: number | null,
 ): FileNameEntry {
+  if (f.submodule) {
+    const words =
+      f.status === "added"
+        ? "submodule added"
+        : f.status === "removed"
+          ? "submodule removed"
+          : "submodule changed";
+    // ASCII: the sentence starts from a constructed English word's first letter.
+    const sentence = `${words[0]?.toUpperCase() ?? ""}${words.slice(1)}.`;
+    return {
+      file: f.path,
+      what: "submodule",
+      gpath: f.path,
+      gwhat: words,
+      fnote: sentence,
+    };
+  }
   if (f.binary) {
     const words =
       f.status === "added" && headBytes !== null
@@ -2753,6 +2782,11 @@ export function build(o: BuildOptions): string {
       if (cf?.binary) {
         throw new Error(
           `scene ${sc.id}: ${sc.file} is a binary file, and binary files are named in the closing list`,
+        );
+      }
+      if (cf?.submodule) {
+        throw new Error(
+          `scene ${sc.id}: ${sc.file} is a submodule, and submodules are named in the closing list`,
         );
       }
       if (sc.kind === "head") {

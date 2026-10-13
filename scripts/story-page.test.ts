@@ -1132,6 +1132,48 @@ describe("a change from its diff", () => {
     expect(second?.oldPath).toBe("cafe2.txt");
   });
 
+  test("submodule pointers read as named files, never as lines", () => {
+    const files = parseChangeDiff(
+      [
+        "diff --git a/sub b/sub",
+        "index 9df8634..b106876 160000",
+        "--- a/sub",
+        "+++ b/sub",
+        "@@ -1 +1 @@",
+        "-Subproject commit 9df8634ad9732b86a9d2c74d9c587cbcfce2d500",
+        "+Subproject commit b10687689f08d60a131d02ac7c71cc8b085e27bf",
+        "diff --git a/newsub b/newsub",
+        "new file mode 160000",
+        "index 0000000..b106876",
+        "--- /dev/null",
+        "+++ b/newsub",
+        "@@ -0,0 +1 @@",
+        "+Subproject commit b10687689f08d60a131d02ac7c71cc8b085e27bf",
+      ].join("\n"),
+    );
+    const sub = files.get("sub");
+    expect(sub?.submodule).toBe(true);
+    expect(sub?.added.size).toBe(0);
+    expect(sub?.removedOld.size).toBe(0);
+    expect(changedKeys(files)).toEqual([]);
+    expect(
+      filesNeedingNames(files)
+        .map((f) => f.path)
+        .sort(),
+    ).toEqual(["newsub", "sub"]);
+    expect(fileNameEntry(sub as ChangeFile, null, null)).toEqual({
+      file: "sub",
+      what: "submodule",
+      gpath: "sub",
+      gwhat: "submodule changed",
+      fnote: "Submodule changed.",
+    });
+    const added = files.get("newsub");
+    expect(added?.submodule).toBe(true);
+    expect(added?.status).toBe("added");
+    expect(fileNameEntry(added as ChangeFile, null, null).gwhat).toBe("submodule added");
+  });
+
   test("removed lines scrub like file text, keys untouched", () => {
     const files = parseChangeDiff(
       [
@@ -1189,6 +1231,7 @@ describe("a change from its diff", () => {
       oldPath: null,
       status: "added",
       binary: false,
+      submodule: false,
       modeChange: null,
       added: new Set(),
       removedOld: new Set(),
@@ -1254,6 +1297,7 @@ describe("a change from its diff", () => {
       oldPath: null,
       status: "added",
       binary: false,
+      submodule: false,
       modeChange: null,
       added: new Set(),
       removedOld: new Set(),
@@ -1295,6 +1339,7 @@ describe("a change's rows", () => {
     oldPath: null,
     status: "modified",
     binary: false,
+    submodule: false,
     modeChange: null,
     added: new Set([2]),
     removedOld: new Set([2]),
