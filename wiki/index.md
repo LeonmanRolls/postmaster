@@ -171,8 +171,9 @@ Why the design is shaped as it is.
   smaller tickets' median (68 net). No stop signal tried predicts a clean next round above about
   half; the rise rule in force since 9 October, replayed, marks 16 of the 61 runs, which took a
   median 7 rounds against 3. From
-  [#400](https://github.com/brindlewick/postmaster/issues/400); nothing was changed, and six
-  changes are proposed.
+  [#400](https://github.com/brindlewick/postmaster/issues/400); nothing was changed, and eight
+  changes are proposed, among them a cap of three criteria, which removes no rounds in total, and a
+  narrow check of each fix, which is untested.
 - [Each project defines how a change to it is verified](concepts/verification.md): **claimed**.
   A project declares its checks or gets defaults by discovery; every workhorse runs them before
   it reports, and the coachman runs them again on each branch and on the synthesis.

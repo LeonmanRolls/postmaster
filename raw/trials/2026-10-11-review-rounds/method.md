@@ -198,8 +198,10 @@ the runs counted are the 61 and the rounds the 260.
 
 **The date split and round 1 as a warning.** `rise.ts` splits group A at the first boundary and
 counts the runs with five or more serious findings in round 1. `render.ts` prints both, with the
-comparisons of the preparation table, into `results/loop-rule.md`. Controls: the two parts of A add
-to the whole (34 runs, 169 rounds), and the whole equals the A row of `features.md`, as B does.
+comparisons of the preparation table, into `results/loop-rule.md`. It also bands the runs from the
+script on by their criteria. Controls: the two parts of A add to the whole (34 runs, 169 rounds),
+and the whole equals the A row of `features.md`, as B does; the criteria bands add to the 48 runs
+and 171 rounds from the script, the 18 and 74 of the later set, and the 66 and 245 of both.
 
 **What this does not do.** The replay is after the fact. In the 61 runs no ruling was made because
 of a rise: the older rules ran to the cap of three and stopped for a ruling there, where 3 of the

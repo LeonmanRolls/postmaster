@@ -72,6 +72,24 @@ A run is pinned at dispatch to a postmaster commit and runs the loop that commit
 | serious findings per criterion | 0.8 (mean 1.4) | 0.3 (mean 0.8) | 0.101 |
 | serious findings per 1,000 lines changed | 5.2 (mean 9.0) | 1.3 (mean 3.1) | 0.010 |
 
+## Rounds by acceptance criteria, from the script on
+
+The 13 runs before the script are left out, as they differ in more than the count. The later set is added because its job here is to check the criteria count.
+
+| Set | Criteria | Runs | Rounds | Rounds, mean | Rounds, median | Runs of 6 or more | Round 1 serious, median | Serious in all, median |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| The 48 runs from the script | 1 to 3 | 8 | 14 | 1.75 | 2.0 | 0 | 0.5 | 1.0 |
+| The 48 runs from the script | 4 to 5 | 18 | 67 | 3.72 | 3.0 | 2 | 3.0 | 4.5 |
+| The 48 runs from the script | 6 to 8 | 10 | 38 | 3.80 | 3.0 | 2 | 2.5 | 3.0 |
+| The 48 runs from the script | 9 or more | 12 | 52 | 4.33 | 3.5 | 3 | 4.0 | 8.0 |
+| The later set | 4 to 5 | 13 | 38 | 2.92 | 3.0 | 1 | 2.0 | 3.0 |
+| The later set | 6 to 8 | 4 | 21 | 5.25 | 5.5 | 2 | 5.0 | 11.0 |
+| The later set | 9 or more | 1 | 15 | 15.00 | 15.0 | 1 | 5.0 | 51.0 |
+| Both, 66 runs | 1 to 3 | 8 | 14 | 1.75 | 2.0 | 0 | 0.5 | 1.0 |
+| Both, 66 runs | 4 to 5 | 31 | 105 | 3.39 | 3.0 | 3 | 3.0 | 4.0 |
+| Both, 66 runs | 6 to 8 | 14 | 59 | 4.21 | 4.0 | 4 | 3.0 | 5.0 |
+| Both, 66 runs | 9 or more | 13 | 67 | 5.15 | 4.0 | 4 | 4.0 | 9.0 |
+
 ## Round 1 as a warning: five or more serious findings in round 1
 
 | Set | Runs | Rounds | Runs flagged | Rounds in them | Runs of 6 or more | Of them, flagged | Rounds, median, flagged | Rounds, median, not flagged |

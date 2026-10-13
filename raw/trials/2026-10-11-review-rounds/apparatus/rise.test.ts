@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { RunInput } from "./analysis.ts";
 import {
   byRule,
+  criteriaRows,
   firstRise,
   groupRows,
   type LoopRule,
@@ -180,5 +181,51 @@ describe("groupRows", () => {
     expect(b?.perThousandLinesMedian).toBeCloseTo(1, 5);
     const c = rows.find((r) => r.label === "C");
     expect(Number.isNaN(c?.perThousandLinesMedian ?? 0)).toBe(true);
+  });
+});
+
+describe("criteriaRows", () => {
+  const base: Omit<RunInput, "run" | "rounds" | "best" | "criteria"> = {
+    mode: "synthesis",
+    shape: "one-part",
+    lines: [],
+    decisions: null,
+    checks: null,
+    notes: null,
+    chars: null,
+    changeLines: null,
+    changeFiles: null,
+    fixLines: null,
+    dispatchedAt: null,
+  };
+  const mk = (run: string, best: number[], criteria: number | null): RunInput => ({
+    ...base,
+    run,
+    rounds: best.length,
+    best,
+    criteria,
+  });
+  const inputs = [
+    mk("1", [1, 0], 3),
+    mk("2", [0], 2),
+    mk("3", [3, 2, 0], 4),
+    mk("4", [5, 4, 3, 2, 1, 0], 7),
+    mk("5", [2, 0], null),
+  ];
+  test("bands the runs by criteria and leaves out a run with none known", () => {
+    const rows = criteriaRows(inputs);
+    expect(rows.map((r) => r.band)).toEqual(["1 to 3", "4 to 5", "6 to 8"]);
+    expect(rows.reduce((a, r) => a + r.runs, 0)).toBe(4);
+  });
+  test("counts rounds, the mean, the long runs and the serious findings", () => {
+    const low = criteriaRows(inputs).find((r) => r.band === "1 to 3");
+    expect(low?.runs).toBe(2);
+    expect(low?.rounds).toBe(3);
+    expect(low?.mean).toBe(1.5);
+    expect(low?.long).toBe(0);
+    expect(low?.seriousMedian).toBe(0.5);
+    const high = criteriaRows(inputs).find((r) => r.band === "6 to 8");
+    expect(high?.long).toBe(1);
+    expect(high?.roundOneMedian).toBe(5);
   });
 });

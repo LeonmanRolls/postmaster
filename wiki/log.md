@@ -20,8 +20,10 @@ controls. Changed [the review-rounds page](concepts/review-rounds.md): a third o
 the 13 earliest runs; the clerk's two-part ticket's apparent saving is much smaller against the
 one-part tickets made under the script of 29 September; a sentence about the cap of three rounds
 that was wrong is corrected; a run with no traceable change commit is no longer counted as a change
-of no lines; and the loop's rule, the rise replay and what main now records are added. No rule,
-runbook, template or gate changed. No standing changed.
+of no lines; and the loop's rule, the rise replay and what main now records are added. Two
+proposals are added at the user's word: a cap of three criteria, which by the records removes no
+rounds in total, and a narrow check of each fix, which is untested. No rule, runbook, template or
+gate changed. No standing changed.
 
 ## [2026-10-11] query | why runs take so many review rounds, and what planning could cut
 

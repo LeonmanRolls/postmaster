@@ -27,6 +27,7 @@ import { agreement, type Combined, combine, KINDS, type Mark, parseMarks } from 
 import { type Item, itemsOf } from "./packets.ts";
 import {
   byRule,
+  criteriaRows,
   groupRows,
   LOOP_RULES,
   type LoopRule,
@@ -1261,6 +1262,13 @@ export function loopRuleMarkdown(
     );
   }
   const first = sets[0]?.[1] ?? [];
+  const fromScript = first.filter((r) => ruleOfRun.get(r.run) !== "until-clean");
+  const laterSet = sets[1]?.[1] ?? [];
+  const afterScript: Array<[string, readonly RunInput[]]> = [
+    [`The ${fromScript.length} runs from the script`, fromScript],
+    ["The later set", laterSet],
+    [`Both, ${fromScript.length + laterSet.length} runs`, [...fromScript, ...laterSet]],
+  ];
   const groups = [...new Set(first.map((r) => eraOf(r)))].sort();
   out.push(
     `## Group against rule, ${sets[0]?.[0] ?? ""}`,
@@ -1322,6 +1330,38 @@ export function loopRuleMarkdown(
       "one-part ticket from the script",
       "two-part ticket, single thread",
     ),
+    "## Rounds by acceptance criteria, from the script on",
+    "",
+    "The 13 runs before the script are left out, as they differ in more than the count. The later set is added because its job here is to check the criteria count.",
+    "",
+    table(
+      [
+        "Set",
+        "Criteria",
+        "Runs",
+        "Rounds",
+        "Rounds, mean",
+        "Rounds, median",
+        "Runs of 6 or more",
+        "Round 1 serious, median",
+        "Serious in all, median",
+      ],
+      [...afterScript.map(([label, rs]): [string, readonly RunInput[]] => [label, rs])].flatMap(
+        ([label, rs]) =>
+          criteriaRows(rs as readonly RunInput[]).map((c) => [
+            label as string,
+            c.band,
+            String(c.runs),
+            String(c.rounds),
+            num(c.mean, 2),
+            num(c.median, 1),
+            String(c.long),
+            num(c.roundOneMedian, 1),
+            num(c.seriousMedian, 1),
+          ]),
+      ),
+    ),
+    "",
     "## Round 1 as a warning: five or more serious findings in round 1",
     "",
     table(

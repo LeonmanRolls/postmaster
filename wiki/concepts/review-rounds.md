@@ -201,7 +201,12 @@ yes and the other does not: it confirms 22 of the 26 and 1 of the 24, and sides 
 with more than five criteria took a median 4 rounds against 3, and 9 of 32 took six or more
 against 3 of 29. In the later set 5 runs with more than five took a median 6 and 13 with five or
 fewer took 3 [@trials/2026-10-11-review-rounds/results/features.md]. That is the cut the
-five-criteria rule of 2026-10-10 makes, and the records fit it.
+five-criteria rule of 2026-10-10 makes, and the records fit it. From the script on, the step in
+serious findings is between three criteria and four. The 8 runs with three or fewer took a mean
+1.75 rounds and a median 1 serious finding, and none went to six rounds. The 31 with four or five
+took 3.4 and a median 4, and 3 went to six or more; the 14 with six to eight took 4.2, and 4
+went to six or more; the 13 with nine or more took 5.2, and 4 did
+[@trials/2026-10-11-review-rounds/results/loop-rule.md]. Only 8 runs sit at three or fewer.
 
 **How the ticket was prepared.** Set against all the one-part tickets, the two-part ticket carried a
 median four times the change (the means are 1.2 times, and not distinguishable) and had a fifth of
@@ -354,6 +359,8 @@ about nine of ten runs. None tried here does.
 ## Changes the planning stage could make
 
 These are proposals. Nothing in the template, the clerk's instructions or a runbook was edited.
+Two rows are of the loop and not of planning: keeping the loop to the change, and the narrow check
+of each fix.
 *Rounds removed* are of the 260 rounds of the 61 runs, in two ways. *Strict* counts a round only
 where every serious finding left in the run's last rounds is one the change would have removed.
 *Fitted* takes 0.18 of a round for each serious finding removed, with the findings that followed
@@ -364,16 +371,20 @@ larger.
 | --- | --- | --- | --- |
 | Settle before dispatch what a step does when it fails, is interrupted or is edited after sign-off, and which of two copies, orders or records wins | 26 findings both readers say the ticket left open, in 15 runs | 1 and 5 (28 findings with what followed); if either reader counts, 4 and 12 (67) | 0.43 points per ticket, 1 in a median ticket that has any, 4 at most; each a question to the user at sign-off |
 | Keep a ticket to five criteria and split above it (in force since 2026-10-10) | rho 0.43 with rounds; 9 of 32 runs with more than five took six or more against 3 of 29; later set 3 of 5 against 1 of 13 | up to 76 rounds above the median of the smaller tickets, an upper bound, since a slice has a first round and a confirming round of its own | an umbrella and slices, each with its own rounds, gate and card, and a slice the user checks |
+| Lower the cap from five criteria to three | From the script on, 8 runs at three or fewer criteria took a mean 1.75 rounds and none went to six; 31 at four or five took 3.4 | None in total by these numbers: two slices of three or fewer cost about 3.5 rounds, against 3.4 for a ticket of four or five. Each run would be shorter | 58 of the 66 runs since the script had more than three criteria and would split; more umbrellas, gates and cards; rests on 8 runs |
 | Name the pairs that must agree, a producer and its reader, a preview and the real action, a document and its code, and write a check for each | 27 findings of kind contract that both readers give, in 11 runs | 3 and 5 (28 findings) | one check per pair, written by the clerk; the template already says to name the cases that must agree where two implementations of one decision must |
 | For a rule that must hold at every place, list the places at the base as a verified fact | 11 findings of kind site, in 7 runs | 0 and 2 (12 findings) | a census per such ticket |
 | Keep the loop to the change: a serious finding in lines older than the run is filed and not fixed in the loop | 18 findings, 5%, in 10 runs | 4 and 3 (19 findings) | a list for the user; a rule of the loop more than of planning |
+| A narrow check of each fix before the next full round: the lane that raised a finding re-reads only the lines the fix changed and says whether the finding is closed and whether the fix made a new defect | 162 of the 382 later findings, 42%, are in lines a fix wrote, 113 of them in the last round's fix; no run has tried it | Up to 19 and 29 (162 findings) if it caught every defect a fix makes; the catch rate is unknown | One short launch per fix; it touches the coachman runbook and the review-round script, which are on the contract's file list, so a fixture run; a replay of the 113 would measure the catch rate |
 | Record at sign-off and in the loop what the list above needs | the rows of the previous section | none by itself; it lets a later count tell whether the others worked | a few fields and a script |
 
 **What they add to.** The first, third and fourth rows overlap. Counted once, with the open points
 from both readers they come to 5 rounds strict and 12 fitted of the 260, 5%, and with the open
 points from at least one reader 8 and 17, 7%. With the findings outside the change added, which a
 ticket does not settle, 7 and 14, or 10 and 20 [@trials/2026-10-11-review-rounds/results/marks.md].
-No one cause is large, and rounds follow the count of serious findings in total. That count is
+The rows on the cap of three and on the fix check are not in that count: the first removes none
+in total, and the second is a bound on a pool and not a measure. No one cause is large, and rounds
+follow the count of serious findings in total. That count is
 lower per changed line in both groups with the clerk's two-part ticket than in the one-part
 tickets from the script (2.0 and 1.3 against 5.2, p 0.010 each), and by about half or more per
 criterion (0.4 and 0.3 against 0.8, p 0.12 and 0.10). In total it is lower in C (a median 1.0

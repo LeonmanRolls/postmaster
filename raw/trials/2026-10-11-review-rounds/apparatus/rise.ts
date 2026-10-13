@@ -1,6 +1,6 @@
 // The rule the review loop ran under, and what the rule in force would have done with a run's
 // serious findings per round (see ../method.md). Pure: it takes counts and returns decisions.
-import { eraOf, type RunInput } from "./analysis.ts";
+import { CRITERIA_BANDS, criteriaBand, eraOf, type RunInput } from "./analysis.ts";
 import { mean, median, sum } from "./stats.ts";
 
 export type LoopRule = "until-clean" | "scripted-cap" | "rise";
@@ -192,4 +192,36 @@ export function groupRows(
       ),
     };
   });
+}
+
+export type CriteriaRow = {
+  band: string;
+  runs: number;
+  rounds: number;
+  mean: number;
+  median: number;
+  /** runs that went to six rounds or more */
+  long: number;
+  roundOneMedian: number;
+  seriousMedian: number;
+};
+
+/** The runs by how many acceptance criteria their ticket carried, with their rounds. */
+export function criteriaRows(inputs: readonly RunInput[]): CriteriaRow[] {
+  const out: CriteriaRow[] = [];
+  for (const band of CRITERIA_BANDS) {
+    const rs = inputs.filter((r) => criteriaBand(r) === band);
+    if (rs.length === 0) continue;
+    out.push({
+      band,
+      runs: rs.length,
+      rounds: sum(rs.map((r) => r.rounds)),
+      mean: mean(rs.map((r) => r.rounds)),
+      median: median(rs.map((r) => r.rounds)),
+      long: rs.filter((r) => r.rounds >= 6).length,
+      roundOneMedian: median(rs.map((r) => r.best[0] ?? 0)),
+      seriousMedian: median(rs.map((r) => sum(r.best))),
+    });
+  }
+  return out;
 }
