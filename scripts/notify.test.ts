@@ -95,9 +95,13 @@ describe("parseNotifyDetail", () => {
 
 describe("runTicket", () => {
   test("the leading number, or the name itself", () => {
-    expect(runTicket("454")).toEqual({ display: "#454", number: "454" });
-    expect(runTicket("454-b")).toEqual({ display: "#454", number: "454" });
-    expect(runTicket("scratch")).toEqual({ display: "scratch", number: null });
+    expect(runTicket("454")).toEqual({ display: "#454", lookup: "454" });
+    expect(runTicket("454-b")).toEqual({ display: "#454", lookup: "454" });
+    expect(runTicket("scratch")).toEqual({ display: "scratch", lookup: null });
+  });
+  test("a plane work item id looks up whole", () => {
+    expect(runTicket("PM-12")).toEqual({ display: "PM-12", lookup: "PM-12" });
+    expect(runTicket("PM-12-x")).toEqual({ display: "PM-12-x", lookup: null });
   });
 });
 

@@ -164,11 +164,16 @@ export function parseNotifyDetail(detail: string): {
   return { kind, ref, text };
 }
 
-/** A run directory's ticket: the leading number, or the name itself. */
-export function runTicket(runName: string): { display: string; number: string | null } {
+/** A run directory's ticket: the display form and the adapter lookup id. A
+ * numeric-led name (github, local) looks up by its leading number; a Plane
+ * work item id (IDENT-n) looks up whole; anything else carries the name
+ * alone. */
+export function runTicket(runName: string): { display: string; lookup: string | null } {
   const m = /^([0-9]+)/u.exec(runName);
-  if (!m) return { display: runName, number: null };
-  return { display: `#${m[1]}`, number: m[1]! };
+  if (m) return { display: `#${m[1]}`, lookup: m[1]! };
+  if (/^[A-Za-z][A-Za-z0-9]*-[0-9]+$/u.test(runName))
+    return { display: runName, lookup: runName };
+  return { display: runName, lookup: null };
 }
 
 function isLoopbackHost(host: string): boolean {
@@ -442,7 +447,7 @@ interface NotifyEvent {
   kind: NotifyKind;
   ref: string;
   target: string;
-  number: string | null;
+  lookup: string | null;
   lane: string;
   reset: string;
   line: string;
@@ -496,7 +501,7 @@ function collectEvents(
       kind: "wall",
       ref: String(w.index),
       target: ticket.display,
-      number: ticket.number,
+      lookup: ticket.lookup,
       lane: w.lane,
       reset: w.reset,
       line: "",
@@ -511,7 +516,7 @@ function collectEvents(
       kind: "landed",
       ref: String(r.index),
       target: ticket.display,
-      number: ticket.number,
+      lookup: ticket.lookup,
       lane: "",
       reset: "",
       line: "",
@@ -542,7 +547,7 @@ function collectEvents(
           kind,
           ref: ident,
           target: ticket.display,
-          number: ticket.number,
+          lookup: ticket.lookup,
           lane: "",
           reset: "",
           line: "",
@@ -674,11 +679,11 @@ export async function scanRoot(root: string): Promise<void> {
   for (const ev of events) {
     const repo = runRepo(ev.dispatch);
     let title: string | null = null;
-    if (repo !== null && ev.number !== null) {
-      const key = JSON.stringify([repo, ev.number]);
+    if (repo !== null && ev.lookup !== null) {
+      const key = JSON.stringify([repo, ev.lookup]);
       if (!titles.has(key)) {
         const kind = trackerKindOf(repo);
-        titles.set(key, kind === null ? null : ticketTitle(repo, kind, ev.number));
+        titles.set(key, kind === null ? null : ticketTitle(repo, kind, ev.lookup));
       }
       title = titles.get(key) ?? null;
     }
