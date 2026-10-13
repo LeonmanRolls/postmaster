@@ -1484,6 +1484,13 @@ describe("a change's criteria", () => {
 \`\`\`
 `;
     expect(parseCriteria(fenced)).toEqual([{ n: 1, words: "First thing." }]);
+    const tab = String.fromCharCode(9);
+    const eol = String.fromCharCode(10);
+    const tabbed = ["## Acceptance criteria", "", "1. First.", `2.${tab}Second.`].join(eol);
+    expect(parseCriteria(tabbed)).toEqual([
+      { n: 1, words: "First." },
+      { n: 2, words: "Second." },
+    ]);
   });
 
   test("every criterion needs its section quoting its words", () => {

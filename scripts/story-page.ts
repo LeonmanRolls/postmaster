@@ -683,8 +683,9 @@ export function parseCriteria(body: string): Criterion[] {
       continue;
     }
     if (!inCriteria) continue;
-    // ASCII: criterion numbers are ASCII digits, which \d matches exactly.
-    const item = /^(\d+)\. (.*)$/u.exec(line);
+    // ASCII: criterion numbers are ASCII digits, and the gate allows a space
+    // or tab after the number, which the match mirrors.
+    const item = /^(\d+)\.[ \t]+(.*)$/u.exec(line);
     if (item) {
       flush();
       current = { n: Number(item[1]), words: [item[2] ?? ""] };
