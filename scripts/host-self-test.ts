@@ -2031,9 +2031,13 @@ export async function runControls(): Promise<number> {
     const procStart = (pid: string): string => processStart(Number(pid)) ?? "";
     const startedSeconds = (pid: string) => {
       const start = procStart(pid);
-      return /^[0-9]+$/u.test(start)
-        ? bootSeconds + Number(start) / ticks
-        : Date.parse(start) / 1000;
+      if (/^[0-9]+$/u.test(start)) return bootSeconds + Number(start) / ticks;
+      // ps writes lstart in the machine's zone, which `bun test` does not share (it moves this
+      // process to UTC without exporting TZ), so ask for UTC text and read it as UTC.
+      const utc = exec("ps", ["-o", "lstart=", "-p", pid], {
+        env: { ...process.env, LC_ALL: "C", TZ: "UTC" },
+      }).out.trim();
+      return Date.parse(`${utc} UTC`) / 1000;
     };
     const record = (pid: string) => join(launchDir, pid);
     const stale = spawn("sleep", ["60"], { detached: true, stdio: "ignore" });

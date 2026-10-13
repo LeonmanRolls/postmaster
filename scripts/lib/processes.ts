@@ -421,7 +421,13 @@ async function snapshotPs(): Promise<ProcessSnapshot[]> {
     const child = Bun.spawn(["ps", "-A", "-o", "pid=,ppid=,stat=,lstart=,args="], {
       stdout: "pipe",
       stderr: "ignore",
-      env: { ...process.env, LC_ALL: "C" },
+      // ps writes lstart in its own zone and parseLstart reads it in this process's. `bun test`
+      // moves this process to UTC without exporting TZ, so name the zone ps must write in.
+      env: {
+        ...process.env,
+        LC_ALL: "C",
+        TZ: process.env.TZ ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+      },
     });
     // Drain before waiting: a full process table exceeds the pipe buffer,
     // and awaiting the exit first would deadlock the listing.
