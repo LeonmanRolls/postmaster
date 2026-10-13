@@ -49,7 +49,7 @@ export type RiseRun = { run: string; rounds: number; best: readonly number[] };
 export type RiseReplay = {
   runs: number;
   rounds: number;
-  /** runs with at least one round that logged more than the round before */
+  /** runs with a round that logged more than the round before, while the rule would still be running */
   rose: number;
   neverRose: number;
   /** the round of each rising run's first rise, ascending */

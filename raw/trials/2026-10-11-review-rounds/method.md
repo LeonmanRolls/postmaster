@@ -201,7 +201,10 @@ counts the runs with five or more serious findings in round 1. `render.ts` print
 comparisons of the preparation table, into `results/loop-rule.md`. Controls: the two parts of A add
 to the whole (34 runs, 169 rounds), and the whole equals the A row of `features.md`, as B does.
 
-**What this does not do.** The replay is after the fact, and no ruling was made at those rises.
+**What this does not do.** The replay is after the fact. In the 61 runs no ruling was made because
+of a rise: the older rules ran to the cap of three and stopped for a ruling there, where 3 of the
+16 first rose, and 9 more rose in rounds past it. In the later set 5 of the 6 that rose ran under
+the rule, so a ruling was due at each.
 The date split moves together with the ticket, the flow and the reviewers. A run is on the side its
 pinned commit says, not its date, so a run dispatched in the hours before a merge can be on the
 earlier side. The facts about the loop come from the decision script (`scripts/review-decide.sh`

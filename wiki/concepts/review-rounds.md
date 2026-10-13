@@ -398,9 +398,10 @@ the records cannot say.
   against 2.5 in the 42 under the next rule. Date, ticket, flow and rule moved together, so the
   records cannot say which of them made the rounds fewer.
 - **The replay of the rule in force** is after the fact. In the 61 runs none of the rising runs
-  ran under the rule, so no ruling was made at those rises and one might have changed what
-  followed. In the later set 5 of the 6 that rose ran under it, so a ruling was due at each, and
-  what followed is what it led to.
+  ran under the rule, so no ruling was made because of a rise. The cap of three forced one at the
+  end of round 3, where 3 of the 16 first rose, and 9 more rose later, in rounds that had gone on
+  by a ruling; what followed is what the older rules and those rulings led to. In the later set 5
+  of the 6 that rose ran under the rule, so a ruling was due at each.
 - **The stop signals** are tried after the fact. A transition exists only where the loop ran
   another round, because the round before held a serious finding, or round 1 applied a fix, or the
   user ruled so. The later set is two days of runs, 17 single thread, and was not used to choose a

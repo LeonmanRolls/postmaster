@@ -83,7 +83,7 @@ A run is pinned at dispatch to a postmaster commit and runs the loop that commit
 
 ## The rule in force, replayed over each run's serious findings per round
 
-A round that logged more serious findings than the round before is a rise. Under the rule in force a rise stops the loop for a ruling, an equal or lower count goes on and a round with none ends it. What followed a rise in these runs is what the rule then in force led to.
+A round that logged more serious findings than the round before is a rise, counted only where the rule would still have been running: a round after the first with none ends the loop, so a later rise is not one the rule reaches. Under the rule in force a rise stops the loop for a ruling, an equal or lower count goes on and a round with none ends it. What followed a rise in these runs is what the rule then in force led to.
 
 | Set | Runs | Rose | First rise at round 2 | at round 3 | at round 4 | at round 5 or later | Rounds, median, rose | Rounds, median, never rose | Runs of 6 or more | Of them, rose | Rounds after a first rise | All rounds |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
