@@ -1444,10 +1444,13 @@ describe("new: a fresh repo outside every other, with its ticket in its own stor
     expect(isSymlink).toBe(true);
   }, 30000);
   test("it commits as this checkout does", () => {
+    // The checkout's identity as the fresh repo saw it: freshNew made it under this HOME, so a
+    // checkout whose identity is in the person's global git config shows none here.
+    const home = { HOME: join(tmp, "home") };
     const destEmail = run("git", ["-C", dest, "config", "--local", "user.email"]).out.trim();
-    const toolEmail = run("git", ["-C", TOOL, "config", "user.email"]).out.trim();
+    const toolEmail = run("git", ["-C", TOOL, "config", "user.email"], { env: home }).out.trim();
     const destName = run("git", ["-C", dest, "config", "--local", "user.name"]).out.trim();
-    const toolName = run("git", ["-C", TOOL, "config", "user.name"]).out.trim();
+    const toolName = run("git", ["-C", TOOL, "config", "user.name"], { env: home }).out.trim();
     expect(destEmail).toBe(toolEmail);
     expect(destName).toBe(toolName);
   }, 30000);
