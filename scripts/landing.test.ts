@@ -2521,6 +2521,9 @@ describe("open pull requests", () => {
     createExit?: number;
     createErr?: string;
     body?: string | null;
+    bodyPath?: string;
+    bodyArg?: string;
+    cwd?: string;
     extra?: string[];
     wantCode?: number;
   }
@@ -2543,7 +2546,7 @@ describe("open pull requests", () => {
             );
       writeFileSync(join(dispatch, "run.json"), raw);
     }
-    const body = join(tmp, `open-pr-${label}.md`);
+    const body = opts.bodyPath ?? join(tmp, `open-pr-${label}.md`);
     if (opts.body !== null) writeFileSync(body, opts.body ?? "card and checks\n");
     const bin = join(tmp, `open-pr-bin-${label}`);
     mkdirSync(bin, { recursive: true });
@@ -2582,10 +2585,11 @@ describe("open pull requests", () => {
         "--title",
         "504, drafts",
         "--body-file",
-        body,
+        opts.bodyArg ?? body,
         ...(opts.extra ?? []),
       ],
       {
+        cwd: opts.cwd,
         env: {
           ...process.env,
           PATH: `${bin}:${process.env.PATH ?? ""}`,
@@ -2725,6 +2729,19 @@ describe("open pull requests", () => {
     const r = openPr("nobody", { body: null, wantCode: 1 });
     expect(r.err).toContain("--body-file cannot be read");
     expect(r.calls).toHaveLength(0);
+  });
+
+  test("a relative body file resolves against the repo, not the caller cwd", () => {
+    const elsewhere = join(tmp, "open-pr-relbody-cwd");
+    mkdirSync(elsewhere, { recursive: true });
+    const r = openPr("relbody", {
+      bodyPath: join(tmp, "open-pr-relbody", "rel.md"),
+      bodyArg: "rel.md",
+      cwd: elsewhere,
+    });
+    expect(r.output).toBe(`opened ${pr} ready`);
+    const create = r.calls.find((l) => l.startsWith("pr create ")) ?? "";
+    expect(create).toContain(`--body-file ${join(tmp, "open-pr-relbody", "rel.md")}`);
   });
 
   test("a missing run.json is a fault", () => {

@@ -140,7 +140,7 @@
 //   exit 3  switch-offs, card-write: `no reason`
 //   exit 4  switch-offs, libraries, card-write: `refused`
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { isAbsolute, join, relative, sep } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { tryJsonFile } from "./lib/data.ts";
 import { physical, scriptsDir } from "./lib/paths.ts";
 import { inspectLibraries } from "./lib/library-landing.ts";
@@ -922,8 +922,12 @@ function openPr(o: string[]): number {
   const title = o[9]!;
   const bodyFile = o[11]!;
   const forceReady = o.length === 13;
+  // gh runs with the repo as its cwd, so a relative body resolves against
+  // the repo for both the readability check and the create: checked one
+  // place and read another, it would misreport as refused on a draft run.
+  const absBody = resolve(repo, bodyFile);
   try {
-    readFileSync(bodyFile, "utf8");
+    readFileSync(absBody, "utf8");
   } catch {
     die(`--body-file cannot be read: ${bodyFile}`);
   }
@@ -966,7 +970,7 @@ function openPr(o: string[]): number {
       "--title",
       title,
       "--body-file",
-      bodyFile,
+      absBody,
       ...(draft ? ["--draft"] : []),
     ],
     { cwd: repo },
