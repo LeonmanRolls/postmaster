@@ -36,7 +36,7 @@ import { run } from "./lib/proc.ts";
 export const USAGE = [
   "usage: story-page.ts build <repo> <story-dir> <out-dir> [--ticket-body <file>] [--picture-adapter <exe>] [--keep-picture]",
   "       story-page.ts pick-step --viewport <WxH> --boxes <json>",
-  "       story-page.ts check <out-dir> --ticket-body <file>",
+  "       story-page.ts check <out-dir> --ticket-body <file> [--repo <repo>]",
 ].join("\n");
 
 // ---------- pure core: the reading line ----------
@@ -150,6 +150,22 @@ export interface MdScene {
   to: number;
 }
 
+export interface HeadScene {
+  id: string;
+  kind: "head";
+  file: string;
+  from: number;
+  to: number;
+}
+
+export interface BaseScene {
+  id: string;
+  kind: "base";
+  file: string;
+  from: number;
+  to: number;
+}
+
 export interface ImageScene {
   id: string;
   kind: "image";
@@ -162,7 +178,15 @@ export interface ImageScene {
   subtitle?: string;
 }
 
-export type Scene = RefScene | DocScene | DiagramScene | LeftScene | MdScene | ImageScene;
+export type Scene =
+  | RefScene
+  | DocScene
+  | DiagramScene
+  | LeftScene
+  | MdScene
+  | ImageScene
+  | HeadScene
+  | BaseScene;
 
 export interface Step {
   id: string;
@@ -183,11 +207,19 @@ export interface Story {
   mode?: string;
   repoUrl: string;
   ticket: number;
-  at: string;
+  /** A ticket story's commit; a change story names base and head instead. */
+  at?: string;
+  base?: string;
+  head?: string;
   status?: string;
   sections: { id: string; label: string; title: string }[];
   scenes: Scene[];
   steps: Step[];
+}
+
+/** Whether the story tells a change (base and head) rather than a ticket (at). */
+export function isChangeStory(story: Story): boolean {
+  return story.at === undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -231,6 +263,25 @@ export function parseStory(text: string): Story {
   const mode = optStr(value, "mode");
   if (mode !== undefined && mode !== "ticket")
     throw new Error(`mode "${mode}" is not a ticket story`);
+  const atRef = optStr(value, "at");
+  const baseRef = optStr(value, "base");
+  const headRef = optStr(value, "head");
+  if (atRef === undefined && baseRef === undefined && headRef === undefined) {
+    throw new Error("story: no at");
+  }
+  const change = atRef === undefined;
+  if (!change && baseRef !== undefined) {
+    throw new Error(
+      `story: "base" is a change story's; ticket stories name their commit with "at"`,
+    );
+  }
+  if (!change && headRef !== undefined) {
+    throw new Error(
+      `story: "head" is a change story's; ticket stories name their commit with "at"`,
+    );
+  }
+  if (change && baseRef === undefined) throw new Error("story: no base");
+  if (change && headRef === undefined) throw new Error("story: no head");
   const scenes = arr("story", value, "scenes").map((raw, i): Scene => {
     const where = `scene ${i}`;
     if (!isRecord(raw)) throw new Error(`${where} names no scene`);
@@ -238,6 +289,25 @@ export function parseStory(text: string): Story {
     const at = `scene ${id}`;
     const kind = str(where, raw, "kind");
     if (kind === "ref" || kind === "md") {
+      if (change) {
+        throw new Error(
+          `${at}: kind "${kind}" is a ticket story's; change stories show code with kind "head"`,
+        );
+      }
+      return {
+        id,
+        kind,
+        file: str(at, raw, "file"),
+        from: num(at, raw, "from"),
+        to: num(at, raw, "to"),
+      };
+    }
+    if (kind === "head" || kind === "base") {
+      if (!change) {
+        throw new Error(
+          `${at}: kind "${kind}" is a change story's; ticket stories show code with kind "ref"`,
+        );
+      }
       return {
         id,
         kind,
@@ -299,11 +369,6 @@ export function parseStory(text: string): Story {
         if (v !== undefined) scene[field] = v;
       }
       return scene;
-    }
-    if (kind === "head" || kind === "base") {
-      throw new Error(
-        `${at}: kind "${kind}" is a change story's; ticket stories show code with kind "ref"`,
-      );
     }
     throw new Error(`${at}: kind "${kind}" is no scene`);
   });
@@ -373,7 +438,6 @@ export function parseStory(text: string): Story {
   const story: Story = {
     repoUrl: str("story", value, "repoUrl"),
     ticket: num("story", value, "ticket"),
-    at: str("story", value, "at"),
     sections: arr("story", value, "sections").map((raw, i) => {
       const where = `section ${i}`;
       if (!isRecord(raw)) throw new Error(`${where} names no section`);
@@ -386,6 +450,9 @@ export function parseStory(text: string): Story {
     scenes,
     steps,
   };
+  if (atRef !== undefined) story.at = atRef;
+  if (baseRef !== undefined) story.base = baseRef;
+  if (headRef !== undefined) story.head = headRef;
   const title = optStr(value, "title");
   if (title !== undefined) story.title = title;
   if (mode !== undefined) story.mode = mode;
@@ -419,7 +486,9 @@ export function scrubStory(story: Story): { story: Story; removed: number } {
         title: clean(s.title),
       })),
       scenes: story.scenes.map((sc) => {
-        if (sc.kind === "ref" || sc.kind === "md") return sc;
+        if (sc.kind === "ref" || sc.kind === "md" || sc.kind === "head" || sc.kind === "base") {
+          return sc;
+        }
         if (sc.kind === "diagram") {
           return { ...sc, label: clean(sc.label), chip: clean(sc.chip), caption: opt(sc.caption) };
         }
@@ -446,7 +515,10 @@ export function scrubStory(story: Story): { story: Story; removed: number } {
 export function checkDrawings(story: Story): void {
   const kinds = new Map(story.scenes.map((s) => [s.id, s.kind]));
   const titles = new Map(story.sections.map((s) => [s.id, s.title]));
-  const isCode = (id: string): boolean => kinds.get(id) === "ref" || kinds.get(id) === "md";
+  const isCode = (id: string): boolean => {
+    const kind = kinds.get(id);
+    return kind === "ref" || kind === "md" || kind === "head" || kind === "base";
+  };
   const isDraw = (id: string): boolean => kinds.get(id) === "diagram";
   for (const section of story.sections.map((s) => s.id)) {
     const steps = story.steps.filter((s) => s.section === section);
@@ -571,6 +643,292 @@ export function computeGaps(cited: string[], shown: Set<string>): Gap[] {
     else gaps.push(g);
   }
   return gaps;
+}
+
+// ---------- pure core: a change's criteria ----------
+
+export interface Criterion {
+  n: number;
+  words: string;
+}
+
+/**
+ * The ticket's criteria: every numbered item under its `## Acceptance
+ * criteria` heading, up to the next `## ` heading, the fixture line among
+ * them when there is one. A wrapped item's lines join with spaces.
+ */
+export function parseCriteria(body: string): Criterion[] {
+  const out: Criterion[] = [];
+  let current: { n: number; words: string[] } | null = null;
+  let inCriteria = false;
+  const flush = (): void => {
+    if (current) out.push({ n: current.n, words: current.words.join(" ").trim() });
+    current = null;
+  };
+  for (const raw of body.replace(/\r/gu, "").split("\n")) {
+    const line = raw.trimEnd();
+    if (line.startsWith("## ")) {
+      flush();
+      inCriteria = line.trim() === "## Acceptance criteria";
+      continue;
+    }
+    if (!inCriteria) continue;
+    // ASCII: criterion numbers are ASCII digits, which \d matches exactly.
+    const item = /^(\d+)\. (.*)$/u.exec(line);
+    if (item) {
+      flush();
+      current = { n: Number(item[1]), words: [item[2] ?? ""] };
+    } else if (current && line.trim() !== "") {
+      current.words.push(line.trim());
+    }
+  }
+  flush();
+  return out;
+}
+
+/**
+ * Every criterion needs its section: a step of kind `criterion` on the
+ * ticket's own doc scene quoting the criterion's words, as in a ticket's
+ * story. The first one without is refused, naming it.
+ */
+export function checkCriterionSections(story: Story, body: string): void {
+  const criteria = parseCriteria(body);
+  if (criteria.length === 0) return;
+  const ticketScene = story.scenes.find(
+    (s) => s.kind === "doc" && s.from === "issue" && s.number === story.ticket,
+  )?.id;
+  for (const c of criteria) {
+    const covered = story.steps.some(
+      (s) =>
+        s.kind === "criterion" &&
+        s.scene === ticketScene &&
+        (s.find ?? []).some((f) => f !== "" && c.words.includes(f)),
+    );
+    if (!covered) throw new Error(`criterion ${c.n} has no section: "${c.words}"`);
+  }
+}
+
+// ---------- pure core: a change from its diff ----------
+
+export interface RemovedLine {
+  old: number;
+  text: string;
+}
+
+export interface ChangeFile {
+  /** The path after the change; a removed file's path. */
+  path: string;
+  /** The path before the change, when renamed. */
+  oldPath: string | null;
+  status: "added" | "removed" | "renamed" | "modified";
+  binary: boolean;
+  /** [oldMode, newMode] when the mode changed. */
+  modeChange: [string, string] | null;
+  /** Added head line numbers, and removed base line numbers. */
+  added: Set<number>;
+  removedOld: Set<number>;
+  /** Removed lines by the head line they sit before. */
+  dels: Map<number, RemovedLine[]>;
+}
+
+/** A quoted diff path unquoted, its a/ or b/ prefix off. */
+function gitPath(text: string, prefix: string): string {
+  let p = text;
+  if (p.startsWith('"') && p.endsWith('"') && p.length >= 2) p = p.slice(1, -1);
+  if (prefix !== "" && p.startsWith(prefix)) p = p.slice(prefix.length);
+  return p;
+}
+
+/**
+ * The change between the merge base and the head, from one
+ * `git diff -U0 -M` with explicit prefixes: hunks for the changed lines,
+ * and, where there are no lines to read, the rename, binary and mode-change
+ * headers. A removed file's path comes from its `---` line, since its `+++`
+ * is /dev/null; a pure rename or a mode-only change has neither and keeps
+ * the `diff --git` paths.
+ */
+export function parseChangeDiff(text: string): Map<string, ChangeFile> {
+  const files = new Map<string, ChangeFile>();
+  let cur: ChangeFile | null = null;
+  let minus = "";
+  let oldMode = "";
+  let newMode = "";
+  let oldNo = 0;
+  let newNo = 0;
+  let anchor = 0;
+  const finish = (): void => {
+    if (cur && oldMode !== "" && newMode !== "" && oldMode !== newMode) {
+      cur.modeChange = [oldMode, newMode];
+    }
+    cur = null;
+    minus = "";
+    oldMode = "";
+    newMode = "";
+  };
+  for (const line of text.split("\n")) {
+    if (line.startsWith("diff --git ")) {
+      finish();
+      const rest = line.slice("diff --git ".length);
+      // ASCII: the two paths split on an ASCII space, quoted when holding one.
+      let b = "";
+      if (rest.startsWith('"')) {
+        // ASCII: quoted paths and their C escapes are ASCII.
+        const m = /^"((?:[^"\\]|\\.)*)" "((?:[^"\\]|\\.)*)"$/u.exec(rest);
+        if (!m) throw new Error(`bad diff --git line: ${line}`);
+        b = gitPath(m[2] ?? "", "b/");
+      } else {
+        const parts = rest.split(" ");
+        if (parts.length !== 2) throw new Error(`bad diff --git line: ${line}`);
+        b = gitPath(parts[1] ?? "", "b/");
+      }
+      cur = {
+        path: b,
+        oldPath: null,
+        status: "modified",
+        binary: false,
+        modeChange: null,
+        added: new Set(),
+        removedOld: new Set(),
+        dels: new Map(),
+      };
+      files.set(b, cur);
+    } else if (line.startsWith("new file mode")) {
+      if (cur) cur.status = "added";
+    } else if (line.startsWith("deleted file mode")) {
+      if (cur) cur.status = "removed";
+    } else if (line.startsWith("old mode ")) {
+      oldMode = line.slice("old mode ".length).trim();
+    } else if (line.startsWith("new mode ")) {
+      newMode = line.slice("new mode ".length).trim();
+    } else if (line.startsWith("rename from ")) {
+      if (cur) {
+        cur.oldPath = gitPath(line.slice("rename from ".length), "");
+        cur.status = "renamed";
+      }
+    } else if (line.startsWith("rename to ")) {
+      if (cur) {
+        const to = gitPath(line.slice("rename to ".length), "");
+        files.delete(cur.path);
+        cur.path = to;
+        cur.status = "renamed";
+        files.set(to, cur);
+      }
+    } else if (line.startsWith("--- ")) {
+      minus = line.slice(4);
+    } else if (line.startsWith("+++ ")) {
+      const p = line.slice(4);
+      if (!cur) continue;
+      if (p === "/dev/null") {
+        if (minus !== "" && minus !== "/dev/null") {
+          const path = gitPath(minus, "a/");
+          files.delete(cur.path);
+          cur.path = path;
+          files.set(path, cur);
+        }
+        cur.status = "removed";
+      } else {
+        const path = gitPath(p, "b/");
+        files.delete(cur.path);
+        cur.path = path;
+        files.set(path, cur);
+      }
+    } else if (line.startsWith("Binary files ")) {
+      if (cur) cur.binary = true;
+    } else if (line.startsWith("@@ ") && cur) {
+      // ASCII: hunk headers are ASCII digits and markers, which \d matches exactly.
+      const m = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/u.exec(line);
+      if (!m) throw new Error(`bad hunk header: ${line}`);
+      oldNo = Number(m[1]);
+      newNo = Number(m[3]);
+      const newCount = m[4] === undefined ? 1 : Number(m[4]);
+      // With no context, a hunk's removed lines sit before its first added line, or, when it
+      // adds none, after new line c.
+      anchor = newCount === 0 ? newNo + 1 : newNo;
+    } else if (cur && line.startsWith("-") && !line.startsWith("---")) {
+      const list = cur.dels.get(anchor) ?? [];
+      list.push({ old: oldNo, text: line.slice(1) });
+      cur.dels.set(anchor, list);
+      cur.removedOld.add(oldNo);
+      oldNo += 1;
+    } else if (cur && line.startsWith("+") && !line.startsWith("+++")) {
+      cur.added.add(newNo);
+      newNo += 1;
+    }
+  }
+  finish();
+  return files;
+}
+
+/** Every changed line's key: `path:+N` added, `path:-M` removed. */
+export function changedKeys(files: Map<string, ChangeFile>): string[] {
+  const keys: string[] = [];
+  for (const fd of files.values()) {
+    for (const n of [...fd.added].sort((a, b) => a - b)) keys.push(`${fd.path}:+${n}`);
+    for (const n of [...fd.removedOld].sort((a, b) => a - b)) keys.push(`${fd.path}:-${n}`);
+  }
+  return keys;
+}
+
+export interface ChangeGap {
+  file: string;
+  side: "+" | "-";
+  from: number;
+  to: number;
+}
+
+/** Changed lines on no step, folded into per-file per-side ranges. */
+export function computeChangeGaps(changed: string[], shown: Set<string>): ChangeGap[] {
+  const gaps: ChangeGap[] = [];
+  for (const k of changed) {
+    if (shown.has(k)) continue;
+    // ASCII: change keys are paths with a + or - side and ASCII digits.
+    const m = /^(.*):([+-])(\d+)$/u.exec(k);
+    if (!m) throw new Error(`bad change key: ${k}`);
+    const g: ChangeGap = {
+      file: m[1] ?? "",
+      side: (m[2] ?? "+") as "+" | "-",
+      from: Number(m[3]),
+      to: Number(m[3]),
+    };
+    const last = gaps.at(-1);
+    if (last && last.file === g.file && last.side === g.side && last.to + 1 === g.from) {
+      last.to = g.from;
+    } else gaps.push(g);
+  }
+  return gaps;
+}
+
+/**
+ * Files the closing list must name: a rename, a binary, a mode change, or an
+ * add or remove with no lines to show. A step whose head or base scene shows
+ * the file names it instead.
+ */
+export function filesNeedingNames(files: Map<string, ChangeFile>): ChangeFile[] {
+  return [...files.values()].filter(
+    (f) =>
+      f.oldPath !== null ||
+      f.binary ||
+      f.modeChange !== null ||
+      ((f.status === "added" || f.status === "removed") &&
+        f.added.size === 0 &&
+        f.removedOld.size === 0),
+  );
+}
+
+/** Whether a head or base scene on a step shows the file. */
+export function fileShownOnStep(
+  file: ChangeFile,
+  scenes: Map<string, Scene>,
+  steps: Step[],
+): boolean {
+  const used = new Set(steps.map((s) => s.scene));
+  for (const sc of scenes.values()) {
+    if (!used.has(sc.id)) continue;
+    if (sc.kind !== "head" && sc.kind !== "base") continue;
+    if (sc.file === file.path) return true;
+    if (file.oldPath !== null && sc.file === file.oldPath) return true;
+  }
+  return false;
 }
 
 // ---------- pure core: text ----------
@@ -901,7 +1259,115 @@ export function gapRows(gap: Gap, lines: string[]): Row[] {
   return rows;
 }
 
+export interface ChangeRow {
+  type: "add" | "del" | "ctx" | "was";
+  n: number | null;
+  text: string;
+  key: string | null;
+}
+
+/**
+ * A head scene's rows: the file at the head with each removed line in place
+ * before the line that took its place. Added and removed rows carry the
+ * change's keys; context rows carry none.
+ */
+export function headRows(
+  file: string,
+  from: number,
+  to: number,
+  lines: string[],
+  change: ChangeFile | undefined,
+): ChangeRow[] {
+  const rows: ChangeRow[] = [];
+  const last = Math.min(to, lines.length);
+  const pushDels = (at: number): void => {
+    for (const d of change?.dels.get(at) ?? []) {
+      rows.push({ type: "del", n: null, text: d.text, key: `${file}:-${d.old}` });
+    }
+  };
+  for (let n = from; n <= last; n++) {
+    pushDels(n);
+    const add = change?.added.has(n) ?? false;
+    rows.push({
+      type: add ? "add" : "ctx",
+      n,
+      text: lines[n - 1] ?? "",
+      key: add ? `${file}:+${n}` : null,
+    });
+  }
+  pushDels(last + 1);
+  return rows;
+}
+
+/**
+ * A base scene's rows: the file at the merge base, removed lines marked as
+ * what was there before.
+ */
+export function baseRows(
+  file: string,
+  from: number,
+  to: number,
+  lines: string[],
+  change: ChangeFile | undefined,
+): ChangeRow[] {
+  const rows: ChangeRow[] = [];
+  for (let n = from; n <= Math.min(to, lines.length); n++) {
+    const was = change?.removedOld.has(n) ?? false;
+    rows.push({
+      type: was ? "was" : "ctx",
+      n,
+      text: lines[n - 1] ?? "",
+      key: was ? `${file}:-${n}` : null,
+    });
+  }
+  return rows;
+}
+
+/** A closing-list change range's rows: added from the head, removed as kept. */
+export function changeGapRows(
+  gap: ChangeGap,
+  headLines: string[],
+  change: ChangeFile | undefined,
+): ChangeRow[] {
+  const rows: ChangeRow[] = [];
+  if (gap.side === "+") {
+    for (let n = gap.from; n <= Math.min(gap.to, headLines.length); n++) {
+      rows.push({ type: "add", n, text: headLines[n - 1] ?? "", key: `${gap.file}:+${n}` });
+    }
+    return rows;
+  }
+  for (const list of change?.dels.values() ?? []) {
+    for (const d of list) {
+      if (d.old >= gap.from && d.old <= gap.to) {
+        rows.push({ type: "del", n: null, text: d.text, key: `${gap.file}:-${d.old}` });
+      }
+    }
+  }
+  return rows;
+}
+
+/** What happened to the file, for a head scene's chip. */
+export function headChip(change: ChangeFile | undefined): string {
+  if (!change) return "unchanged";
+  const base =
+    change.status === "added"
+      ? "new file"
+      : change.status === "removed"
+        ? "removed"
+        : change.status === "renamed"
+          ? `renamed from ${change.oldPath ?? ""}`
+          : change.status === "modified" && (change.added.size > 0 || change.removedOld.size > 0)
+            ? "changed"
+            : "unchanged";
+  if (!change.modeChange) return base;
+  const modes = `mode ${change.modeChange[0]} became ${change.modeChange[1]}`;
+  return base === "unchanged" ? modes : `${base}, ${modes}`;
+}
+
 const inRanges = (n: number, ranges: Range[]): boolean => ranges.some(([a, b]) => n >= a && n <= b);
+
+const inRangesOpt = (n: number | null, ranges: Range[]): boolean =>
+  n !== null && ranges.some(([a, b]) => n >= a && n <= b);
 
 export interface StepDatum {
   i: number;
@@ -919,6 +1385,14 @@ export interface StepDatum {
 }
 
 /** Every step with what it lights, refused where it lights nothing. */
+/** A change file by the path a scene names, old or new. */
+export function changeForFile(
+  files: Map<string, ChangeFile>,
+  file: string,
+): ChangeFile | undefined {
+  return files.get(file) ?? [...files.values()].find((f) => f.oldPath === file);
+}
+
 export function buildSteps(
   story: Story,
   scenes: Map<string, Scene>,
@@ -926,13 +1400,20 @@ export function buildSteps(
   mds: Map<string, { html: string; spans: Range[] }>,
   rowsOf: Map<string, Row[]>,
   atShort: string,
+  changeRowsOf: Map<string, ChangeRow[]> = new Map(),
+  changes: Map<string, ChangeFile> = new Map(),
 ): StepDatum[] {
   const sectionIds = story.sections.map((s) => s.id);
   return story.steps.map((s, i) => {
     const sc = scenes.get(s.scene);
     if (!sc) throw new Error(`step ${s.id}: no scene ${s.scene}`);
     if (!sectionIds.includes(s.section)) throw new Error(`step ${s.id}: no section ${s.section}`);
-    const kind: StepDatum["kind"] = sc.kind === "ref" ? "code" : sc.kind === "md" ? "doc" : sc.kind;
+    const kind: StepDatum["kind"] =
+      sc.kind === "ref" || sc.kind === "head" || sc.kind === "base"
+        ? "code"
+        : sc.kind === "md"
+          ? "doc"
+          : sc.kind;
     const base = { i, id: s.id, scene: sc.id, section: s.section, kind };
     if (sc.kind === "md") {
       const md = mds.get(sc.id);
@@ -980,6 +1461,49 @@ export function buildSteps(
         label: sc.file,
         chip: `as it stands at ${atShort}`,
         lines: `lines ${Math.min(...nums)}–${Math.max(...nums)}`,
+      };
+    }
+    if (sc.kind === "head" || sc.kind === "base") {
+      const rows = changeRowsOf.get(sc.id);
+      if (!rows) throw new Error(`step ${s.id}: no scene ${s.scene}`);
+      const focus = s.focus ?? [];
+      const lit: number[] = [];
+      rows.forEach((r, j) => {
+        if (r.type === "del") {
+          // A removed line is lit with the line that took its place, or else the line before it.
+          const next = rows.slice(j + 1).find((x) => x.type !== "del");
+          const prev = rows
+            .slice(0, j)
+            .reverse()
+            .find((x) => x.type !== "del");
+          if (inRangesOpt(next?.n ?? null, focus) || inRangesOpt(prev?.n ?? null, focus)) {
+            lit.push(j);
+          }
+        } else if (inRangesOpt(r.n, focus)) lit.push(j);
+      });
+      if (!lit.length) throw new Error(`step ${s.id}: its focus lights no row`);
+      const marks = (s.marks ?? []).map((m) => {
+        const row = rows.findIndex((r) => r.n === m.line && r.type !== "del");
+        if (row < 0) throw new Error(`step ${s.id}: mark line ${m.line} is not in ${sc.id}`);
+        for (const t of m.text) {
+          if (!(rows[row]?.text.includes(t) ?? false)) {
+            throw new Error(`step ${s.id}: "${t}" is not on line ${m.line}`);
+          }
+        }
+        return { row, text: m.text };
+      });
+      const nums = rows.flatMap((r) => (r.n === null ? [] : [r.n]));
+      const lines =
+        nums.length > 0
+          ? `lines ${Math.min(...nums)}–${Math.max(...nums)}`
+          : `lines ${sc.from}–${sc.to}`;
+      return {
+        ...base,
+        lit,
+        marks,
+        label: sc.file,
+        chip: sc.kind === "head" ? headChip(changeForFile(changes, sc.file)) : "before the change",
+        lines,
       };
     }
     if (sc.kind === "doc") {
@@ -1039,6 +1563,24 @@ export interface Picture {
   b64: string;
 }
 
+export interface FileNameEntry {
+  file: string;
+  what: "renamed" | "binary" | "mode" | "empty-added" | "empty-removed";
+  gpath: string;
+  gwhat: string;
+  fnote: string;
+}
+
+export interface ChangeParts {
+  branch: string;
+  head: string;
+  mb: string;
+  rowsOf: Map<string, ChangeRow[]>;
+  gaps: ChangeGap[];
+  gapRows: ChangeRow[][];
+  files: FileNameEntry[];
+}
+
 export interface PageParts {
   story: Story;
   atShort: string;
@@ -1057,10 +1599,83 @@ export interface PageParts {
   diagrams: Map<string, DiagramReady>;
   pictures: Map<string, Picture>;
   overlays: Map<string, string>;
+  change?: ChangeParts;
 }
 
 function rowHtml(r: Row, scene: string): string {
   return `<div class="r ctx" data-k="${esc(r.key)}" data-scene="${esc(scene)}"><span class="n">${r.n}</span><span class="sg"> </span><span class="c">${esc(r.text)}</span></div>`;
+}
+
+function changeRowHtml(r: ChangeRow, scene: string): string {
+  const sign = r.type === "add" ? "+" : r.type === "del" ? "−" : " ";
+  const key = r.key === null ? "" : ` data-k="${esc(r.key)}"`;
+  const title = r.type === "was" ? ' title="Removed by this change"' : "";
+  return `<div class="r ${r.type}"${key} data-scene="${esc(scene)}"${title}><span class="n">${r.n ?? ""}</span><span class="sg">${sign}</span><span class="c">${esc(r.text)}</span></div>`;
+}
+
+/**
+ * A touched file with what happened to it, for the closing list. Sizes name
+ * the base and head bytes of a binary; other files carry none.
+ */
+export function fileNameEntry(
+  f: ChangeFile,
+  baseBytes: number | null,
+  headBytes: number | null,
+): FileNameEntry {
+  if (f.binary) {
+    const words =
+      f.status === "added" && headBytes !== null
+        ? `binary file added, ${headBytes} bytes`
+        : f.status === "removed"
+          ? "binary file removed"
+          : baseBytes !== null && headBytes !== null
+            ? `binary file changed, ${baseBytes} bytes became ${headBytes} bytes`
+            : "binary file changed";
+    const rename = f.oldPath === null ? "" : `, renamed from ${f.oldPath}`;
+    const sentence = `${words[0]?.toUpperCase() ?? ""}${words.slice(1)}${rename}.`;
+    return {
+      file: f.path,
+      what: "binary",
+      gpath: f.path,
+      gwhat: `${words}${rename}`,
+      fnote: sentence,
+    };
+  }
+  if (f.oldPath !== null) {
+    return {
+      file: f.path,
+      what: "renamed",
+      gpath: f.path,
+      gwhat: `renamed from ${f.oldPath}`,
+      fnote: `Renamed from ${f.oldPath} to ${f.path}.`,
+    };
+  }
+  if (f.modeChange !== null) {
+    const words = `mode ${f.modeChange[0]} became ${f.modeChange[1]}`;
+    return {
+      file: f.path,
+      what: "mode",
+      gpath: f.path,
+      gwhat: words,
+      fnote: `Mode ${f.modeChange[0]} became ${f.modeChange[1]}.`,
+    };
+  }
+  if (f.status === "added") {
+    return {
+      file: f.path,
+      what: "empty-added",
+      gpath: f.path,
+      gwhat: "empty file added",
+      fnote: "Empty file added.",
+    };
+  }
+  return {
+    file: f.path,
+    what: "empty-removed",
+    gpath: f.path,
+    gwhat: "empty file removed",
+    fnote: "Empty file removed.",
+  };
 }
 
 /** Every block a renderer wrote, tagged with its scene and md source lines. */
@@ -1298,16 +1913,52 @@ function leftHtml(p: PageParts, scene: string): string {
   return `<div class="leftin">${head}${items}</div>`;
 }
 
+/** A change's closing list: changed lines on no step, and the files named. */
+function changeLeftHtml(p: PageParts, scene: string, change: ChangeParts): string {
+  const { gaps, gapRows, files } = change;
+  const { changed, left, shown } = p;
+  const head = `<h2>What the steps leave out</h2><p class="lsum">${shown} of the ${changed} changed lines are on the steps. ${left ? `The other ${left} are here, file by file. Tap one to read it.` : "None is left out."}</p>${files.length ? `<p class="lsum">It also names ${files.length === 1 ? "a file" : `${files.length} files`} no step shows, with what happened to each.</p>` : ""}`;
+  const items = gaps
+    .map((g, gi) => {
+      const rows = gapRows[gi] ?? [];
+      const range = `${g.from}${g.to > g.from ? `–${g.to}` : ""}`;
+      const what =
+        g.side === "+" ? `added lines ${range}` : `removed lines ${range} of the old file`;
+      return `<details class="gap"><summary><span class="gpath">${esc(g.file)}</span><span class="gwhat">${what} · ${rows.length} ${rows.length === 1 ? "line" : "lines"}</span></summary><div class="ex" data-lang="${langOf(g.file)}"><div class="rows">${rows.map((r) => changeRowHtml(r, scene)).join("")}</div></div></details>`;
+    })
+    .join("");
+  const names = files
+    .map(
+      (f) =>
+        `<details class="gap file" data-file="${esc(f.file)}" data-what="${f.what}"><summary><span class="gpath">${esc(f.gpath)}</span><span class="gwhat">${esc(f.gwhat)}</span></summary><p class="fnote">${esc(f.fnote)}</p></details>`,
+    )
+    .join("");
+  return `<div class="leftin">${head}${items}${names}</div>`;
+}
+
+/** A change page's extra style: the closing list's file notes. Nothing else. */
+const CHANGE_STYLE =
+  "<style>\n.fnote { margin: 0; padding: 2px 10px 10px; color: var(--muted); font-size: 13px; }\n</style>";
+
 function scenesHtml(p: PageParts): string {
   const first = p.steps[0]?.scene;
   return p.usedScenes
     .map((sc) => {
       const on = first === sc.id;
-      const cls = sc.kind === "ref" ? "code ex" : sc.kind;
-      const open = `<div class="scene ${cls}${on ? " on" : ""}" data-id="${esc(sc.id)}"${sc.kind === "ref" ? ` data-lang="${langOf(sc.file)}"` : ""}${on ? "" : ' aria-hidden="true"'}>`;
+      const code = sc.kind === "ref" || sc.kind === "head" || sc.kind === "base";
+      const cls = code ? "code ex" : sc.kind;
+      const lang =
+        sc.kind === "ref" || sc.kind === "head" || sc.kind === "base"
+          ? ` data-lang="${langOf(sc.file)}"`
+          : "";
+      const open = `<div class="scene ${cls}${on ? " on" : ""}" data-id="${esc(sc.id)}"${lang}${on ? "" : ' aria-hidden="true"'}>`;
       if (sc.kind === "ref") {
         const rows = p.rowsOf.get(sc.id) ?? [];
         return `${open}<div class="rows">${rows.map((r) => rowHtml(r, sc.id)).join("")}</div></div>`;
+      }
+      if (sc.kind === "head" || sc.kind === "base") {
+        const rows = p.change?.rowsOf.get(sc.id) ?? [];
+        return `${open}<div class="rows">${rows.map((r) => changeRowHtml(r, sc.id)).join("")}</div></div>`;
       }
       if (sc.kind === "doc") {
         const doc = p.docs.get(sc.id);
@@ -1337,6 +1988,9 @@ function scenesHtml(p: PageParts): string {
         if (!dg) throw new Error(`no scene ${sc.id}`);
         return `${open}<div class="diagin"><figure class="dgfig">${dg.svg}${sc.caption ? `<figcaption>${inline(sc.caption)}</figcaption>` : ""}</figure></div></div>`;
       }
+      const change = p.change;
+      if (sc.kind === "leftovers" && change)
+        return `${open}${changeLeftHtml(p, sc.id, change)}</div>`;
       return `${open}${leftHtml(p, sc.id)}</div>`;
     })
     .join("\n");
@@ -1381,7 +2035,10 @@ export function stepsHtml(p: PageParts): string {
       const chap = firstOf.get(s.section) === i ? `<p class="chap">${esc(sec.title)}</p>` : "";
       const num = `<p class="snum">Step ${i + 1} of ${N}</p>`;
       if (s.kind === "title") {
-        return `<article class="step title${i === 0 ? " on" : ""}" id="s${i + 1}" data-i="${i}"><p class="eyebrow">Ticket #${story.ticket} · ${esc(story.status ?? "")}</p><h1 class="plate-h">${inline(s.title)}</h1><p class="txt">${inline(fill(s.text, p.shown, p.changed, p.left))}</p><p class="meta"><a href="${esc(story.repoUrl)}/issues/${story.ticket}">#${story.ticket}, ${inline(ticketTitle)}</a> · ${N} steps, about ${minutes} minutes</p><p class="hint">Scroll to begin.</p></article>`;
+        const version = p.change
+          ? `branch ${esc(p.change.branch)} · ${esc(p.change.head.slice(0, 7))} against ${esc(p.change.mb.slice(0, 7))} · `
+          : "";
+        return `<article class="step title${i === 0 ? " on" : ""}" id="s${i + 1}" data-i="${i}"><p class="eyebrow">Ticket #${story.ticket} · ${esc(story.status ?? "")}</p><h1 class="plate-h">${inline(s.title)}</h1><p class="txt">${inline(fill(s.text, p.shown, p.changed, p.left))}</p><p class="meta"><a href="${esc(story.repoUrl)}/issues/${story.ticket}">#${story.ticket}, ${inline(ticketTitle)}</a> · ${version}${N} steps, about ${minutes} minutes</p><p class="hint">Scroll to begin.</p></article>`;
       }
       return `<article class="step${s.kind === "criterion" ? " crit" : ""}${i === 0 ? " on" : ""}" id="s${i + 1}" data-i="${i}">${chap}${num}<h3>${inline(s.title)}</h3><p class="txt">${inline(fill(s.text, p.shown, p.changed, p.left))}</p></article>`;
     })
@@ -1400,11 +2057,14 @@ export function pageHtml(p: PageParts, diagramCss: string[]): string {
     ...(s.kind === "diagram" ? { states: s.states } : {}),
   }));
   const head = `<div class="stagehead"><span class="slabel" id="slabel">${esc(first.label)}</span><span class="schip" id="schip">${esc(first.chip)}</span><span id="slines">${esc(first.lines)}</span><span class="scount" id="scount">Step 1 of ${N}</span></div>`;
+  const foot = p.change
+    ? `Built from ticket #${story.ticket} as it reads ${p.ticketSource}, and branch ${esc(p.change.branch)} at ${esc(p.change.head)} against ${esc(p.change.mb)}. This page is for reading. Comments and decisions go in your chat with the session.`
+    : `Built from ticket #${story.ticket} as it reads ${p.ticketSource}, and the code as it stands at ${esc(p.atShort)}. This page is for reading. Comments and decisions go in your chat with the session.`;
   return `<title>${esc(story.title ?? `Story of #${story.ticket}`)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=IM+Fell+English:ital@0;1&family=DM+Serif+Display:ital@0;1&family=Red+Hat+Display:wght@600;700&family=Red+Hat+Mono:wght@400;500&family=Red+Hat+Text:wght@400;500;600&display=swap">
-${pageStyle(diagramCss)}
+${pageStyle(diagramCss)}${p.change ? `\n${CHANGE_STYLE}` : ""}
 
 <div class="wrap">
   <section class="scrolly" id="story" aria-label="The change, step by step">
@@ -1419,7 +2079,7 @@ ${scenesHtml(p)}
 ${stepsHtml(p)}
     </div>
   </section>
-  <p class="foot">Built from ticket #${story.ticket} as it reads ${p.ticketSource}, and the code as it stands at ${esc(p.atShort)}. This page is for reading. Comments and decisions go in your chat with the session.</p>
+  <p class="foot">${foot}</p>
 </div>
 
 <script type="application/json" id="story-data">${JSON.stringify({ n: N, steps, scenes }).replace(/</gu, "\\u003c")}</script>
@@ -1630,6 +2290,16 @@ function git(repo: string, args: string[]): string {
   return r.out;
 }
 
+/** A blob's bytes, or null when the path is not there at the revision. */
+function catSize(repo: string, rev: string, path: string): number | null {
+  try {
+    const n = Number(git(repo, ["cat-file", "-s", `${rev}:${path}`]).trim());
+    return Number.isInteger(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
 function gh(repo: string, kind: string, number: number): { title: string; body: string } {
   const r = run("gh", [kind, "view", String(number), "--json", "title,body"], { cwd: repo });
   if (r.code !== 0)
@@ -1724,6 +2394,10 @@ export interface BuildRecord {
   draft: string;
   /** The picture file each image scene wrote, by scene id. */
   pictures: Record<string, string>;
+  /** A change story's branch, head and merge base, resolved at the build. */
+  branch?: string;
+  head?: string;
+  base?: string;
 }
 
 /** The draft as one digest: the title and body in a fixed shape. */
@@ -1746,12 +2420,24 @@ export function parseBuildRecord(text: string): BuildRecord | null {
   for (const v of Object.values(value.pictures)) {
     if (typeof v !== "string" || v === "") return null;
   }
-  return {
+  const record: BuildRecord = {
     version: 1,
     title: value.title,
     draft: value.draft,
     pictures: { ...(value.pictures as Record<string, string>) },
   };
+  const branch = value.branch;
+  const head = value.head;
+  const base = value.base;
+  if (branch !== undefined || head !== undefined || base !== undefined) {
+    if (typeof branch !== "string" || typeof head !== "string" || typeof base !== "string") {
+      return null;
+    }
+    record.branch = branch;
+    record.head = head;
+    record.base = base;
+  }
+  return record;
 }
 
 /**
@@ -1816,9 +2502,21 @@ export function build(o: BuildOptions): string {
   checkDrawings(story);
   const scenes = new Map(story.scenes.map((s) => [s.id, s]));
   const usedScenes = story.scenes.filter((s) => story.steps.some((st) => st.scene === s.id));
+  const change = isChangeStory(story);
 
-  const atSha = git(o.repo, ["rev-parse", story.at]).trim();
+  let atSha = "";
+  let headSha = "";
+  let mbSha = "";
+  let branch = "";
+  if (change) {
+    branch = story.head ?? "";
+    headSha = git(o.repo, ["rev-parse", story.head ?? ""]).trim();
+    mbSha = git(o.repo, ["merge-base", story.base ?? "", story.head ?? ""]).trim();
+  } else {
+    atSha = git(o.repo, ["rev-parse", story.at ?? ""]).trim();
+  }
   const atShort = atSha.slice(0, 7);
+  const headShort = headSha.slice(0, 7);
 
   const fileBody = o.ticketBodyFile ? ticketFileBody(o.ticketBodyFile) : null;
   const ghCache = new Map<string, { title: string; body: string }>();
@@ -1833,18 +2531,18 @@ export function build(o: BuildOptions): string {
     return meta;
   };
 
-  // Code at the base, scrubbed before anything is shown.
+  // Code at a revision, scrubbed before anything is shown.
   let removed = storyRemoved;
   const fileCache = new Map<string, string[]>();
-  const fileLines = (path: string): string[] => {
-    const k = `${atSha}:${path}`;
+  const fileLinesAt = (rev: string, short: string, path: string): string[] => {
+    const k = `${rev}:${path}`;
     let lines = fileCache.get(k);
     if (!lines) {
       let text: string;
       try {
         text = git(o.repo, ["show", k]);
       } catch {
-        throw new Error(`${path} is not in the repository at ${atShort}`);
+        throw new Error(`${path} is not in the repository at ${short}`);
       }
       const clean = scrub(text);
       removed += clean.removed;
@@ -1854,6 +2552,7 @@ export function build(o: BuildOptions): string {
     }
     return lines;
   };
+  const fileLines = (path: string): string[] => fileLinesAt(atSha, atShort, path);
 
   const docs = new Map<string, Doc>();
   for (const sc of usedScenes) {
@@ -1881,29 +2580,144 @@ export function build(o: BuildOptions): string {
     rowsOf.set(sc.id, refRows(sc.file, sc.from, sc.to, fileLines(sc.file)));
   }
   const ownBody = metaOf("issue", story.ticket);
-  const { cited, named } = parseCited(ownBody.body, atSha, repoOf(story.repoUrl));
-  const shown = new Set<string>();
-  for (const rows of rowsOf.values()) for (const r of rows) shown.add(r.key);
-  for (const sc of usedScenes) {
-    if (sc.kind !== "md") continue;
-    const total = fileLines(sc.file).length;
-    for (let n = sc.from; n <= Math.min(sc.to, total); n++) shown.add(`${sc.file}@${n}`);
-  }
-  const gaps = computeGaps(cited, shown);
-  const gapRowsList = gaps.map((g) => gapRows(g, fileLines(g.file)));
-  // Every cited line must be on a step's rows or on the rows the last scene
-  // lists: checked on the rows the page renders, not on the arithmetic above.
-  const listed = new Set<string>();
-  for (const rows of gapRowsList) for (const r of rows) listed.add(r.key);
-  const missing = cited.filter((k) => !shown.has(k) && !listed.has(k));
-  if (missing.length)
-    throw new Error(`cited lines on no step and in no list: ${missing.join(", ")}`);
-  const left = cited.filter((k) => !shown.has(k)).length;
-  if (left && !story.steps.some((s) => scenes.get(s.scene)?.kind === "leftovers")) {
-    throw new Error(`${left} cited lines are on no step, and no step shows the list of them`);
+  // What the story must cover: the ticket's cited lines for a ticket story,
+  // the diff's lines and files for a change.
+  let cited: string[] = [];
+  let named: { path: string; url: string }[] = [];
+  let gaps: Gap[] = [];
+  let gapRowsList: Row[][] = [];
+  let left = 0;
+  let changeParts: ChangeParts | undefined;
+  const changeRowsOf = new Map<string, ChangeRow[]>();
+  let changes = new Map<string, ChangeFile>();
+  if (change) {
+    checkCriterionSections(story, ownBody.body);
+    const diffText = git(o.repo, [
+      "diff",
+      "--no-color",
+      "--no-ext-diff",
+      "--no-textconv",
+      "-U0",
+      "-M",
+      "--src-prefix=a/",
+      "--dst-prefix=b/",
+      mbSha,
+      headSha,
+    ]);
+    changes = parseChangeDiff(diffText);
+    for (const sc of usedScenes) {
+      if (sc.kind !== "head" && sc.kind !== "base") continue;
+      const cf = changeForFile(changes, sc.file);
+      if (cf?.binary) {
+        throw new Error(
+          `scene ${sc.id}: ${sc.file} is a binary file, and binary files are named in the closing list`,
+        );
+      }
+      if (sc.kind === "head") {
+        if (cf?.status === "removed") {
+          throw new Error(
+            `scene ${sc.id}: ${sc.file} was removed by this change; show it with kind "base"`,
+          );
+        }
+        changeRowsOf.set(
+          sc.id,
+          headRows(sc.file, sc.from, sc.to, fileLinesAt(headSha, headShort, sc.file), cf),
+        );
+      } else {
+        if (cf?.status === "added") {
+          throw new Error(
+            `scene ${sc.id}: ${sc.file} was added by this change; show it with kind "head"`,
+          );
+        }
+        changeRowsOf.set(
+          sc.id,
+          baseRows(sc.file, sc.from, sc.to, fileLinesAt(mbSha, mbSha.slice(0, 7), sc.file), cf),
+        );
+      }
+    }
+    cited = changedKeys(changes);
+    const shown = new Set<string>();
+    for (const rows of changeRowsOf.values()) {
+      for (const r of rows) if (r.key !== null) shown.add(r.key);
+    }
+    const changeGaps = computeChangeGaps(cited, shown);
+    const changeGapRowsList = changeGaps.map((g) => {
+      const cf = changes.get(g.file);
+      const head = cf?.status === "removed" ? [] : fileLinesAt(headSha, headShort, g.file);
+      return changeGapRows(g, head, cf);
+    });
+    // Every changed line must be on a step's rows or on the rows the last
+    // scene lists: checked on the rows the page renders, not on the
+    // arithmetic above.
+    const listed = new Set<string>();
+    for (const rows of changeGapRowsList) {
+      for (const r of rows) if (r.key !== null) listed.add(r.key);
+    }
+    const missing = cited.filter((k) => !shown.has(k) && !listed.has(k));
+    if (missing.length)
+      throw new Error(`changed lines on no step and in no list: ${missing.join(", ")}`);
+    left = cited.filter((k) => !shown.has(k)).length;
+    const uncovered = filesNeedingNames(changes).filter(
+      (f) => !fileShownOnStep(f, scenes, story.steps),
+    );
+    const entries: FileNameEntry[] = [];
+    for (const f of uncovered) {
+      const baseBytes =
+        f.binary && f.status !== "added" ? catSize(o.repo, mbSha, f.oldPath ?? f.path) : null;
+      const headBytes =
+        f.binary && f.status !== "removed" ? catSize(o.repo, headSha, f.path) : null;
+      entries.push(fileNameEntry(f, baseBytes, headBytes));
+    }
+    if (
+      (left || uncovered.length) &&
+      !story.steps.some((s) => scenes.get(s.scene)?.kind === "leftovers")
+    ) {
+      const what =
+        left && uncovered.length
+          ? `${left} changed lines and ${uncovered.length} files`
+          : left
+            ? `${left} changed lines`
+            : `${uncovered.length} files`;
+      throw new Error(`${what} are on no step, and no step shows the list of them`);
+    }
+    changeParts = {
+      branch,
+      head: headSha,
+      mb: mbSha,
+      rowsOf: changeRowsOf,
+      gaps: changeGaps,
+      gapRows: changeGapRowsList,
+      files: entries,
+    };
+  } else {
+    const parsed = parseCited(ownBody.body, atSha, repoOf(story.repoUrl));
+    cited = parsed.cited;
+    named = parsed.named;
+    const shown = new Set<string>();
+    for (const rows of rowsOf.values()) for (const r of rows) shown.add(r.key);
+    for (const sc of usedScenes) {
+      if (sc.kind !== "md") continue;
+      const total = fileLines(sc.file).length;
+      for (let n = sc.from; n <= Math.min(sc.to, total); n++) shown.add(`${sc.file}@${n}`);
+    }
+    gaps = computeGaps(cited, shown);
+    gapRowsList = gaps.map((g) => gapRows(g, fileLines(g.file)));
+    // Every cited line must be on a step's rows or on the rows the last scene
+    // lists: checked on the rows the page renders, not on the arithmetic above.
+    const listed = new Set<string>();
+    for (const rows of gapRowsList) for (const r of rows) listed.add(r.key);
+    const missing = cited.filter((k) => !shown.has(k) && !listed.has(k));
+    if (missing.length)
+      throw new Error(`cited lines on no step and in no list: ${missing.join(", ")}`);
+    left = cited.filter((k) => !shown.has(k)).length;
+    if (left && !story.steps.some((s) => scenes.get(s.scene)?.kind === "leftovers")) {
+      throw new Error(`${left} cited lines are on no step, and no step shows the list of them`);
+    }
   }
 
-  const steps = buildSteps(story, scenes, docs, mds, rowsOf, atShort);
+  const steps = change
+    ? buildSteps(story, scenes, docs, mds, rowsOf, headShort, changeRowsOf, changes)
+    : buildSteps(story, scenes, docs, mds, rowsOf, atShort);
 
   const diagrams = new Map<string, DiagramReady>();
   const diagramCss: string[] = [];
@@ -1992,6 +2806,7 @@ export function build(o: BuildOptions): string {
     diagrams,
     pictures,
     overlays,
+    change: changeParts,
   };
   const page = pageHtml(parts, diagramCss);
   const sheet = sheetHtml(parts, diagramCss);
@@ -2014,10 +2829,20 @@ export function build(o: BuildOptions): string {
     draft: draftDigest(ownBody.title, ownBody.body),
     pictures: pictureFiles,
   };
+  if (change) {
+    record.branch = branch;
+    record.head = headSha;
+    record.base = mbSha;
+  }
   writeFileSync(join(o.outDir, BUILD_RECORD), `${JSON.stringify(record)}\n`);
   const bySection = story.sections
     .map((s) => `${s.label} ${story.steps.filter((x) => x.section === s.id).length}`)
     .join(", ");
+  if (change) {
+    const groups = changeParts?.gaps.length ?? 0;
+    const files = changeParts?.files.length ?? 0;
+    return `change story of #${story.ticket} on ${branch}: ${steps.length} steps (${bySection}), ${usedScenes.length} scenes, ${cited.length} changed lines, ${cited.length - left} on steps, ${left} listed (${groups} groups, ${files} files), page ${Buffer.byteLength(page)} bytes, sheet ${Buffer.byteLength(sheet)} bytes, picture ${pictureBytes} bytes, ${removed} address(es) removed`;
+  }
   return `story of #${story.ticket}: ${steps.length} steps (${bySection}), ${usedScenes.length} scenes, ${cited.length} cited lines, ${cited.length - left} on steps, ${left} listed (${gaps.length} groups), page ${Buffer.byteLength(page)} bytes, sheet ${Buffer.byteLength(sheet)} bytes, picture ${pictureBytes} bytes, ${removed} address(es) removed`;
 }
 
@@ -2026,8 +2851,11 @@ function flag(args: string[], name: string): string | undefined {
   return i >= 0 ? args[i + 1] : undefined;
 }
 
-/** Whether the built story was made from the draft as it stands. */
-export function checkCommand(outDir: string, ticketBodyFile: string): number {
+/**
+ * Whether the built story was made from the draft as it stands: for a
+ * change story, also whether the branch still stands at the recorded head.
+ */
+export function checkCommand(outDir: string, ticketBodyFile: string, repo?: string): number {
   const meta = ticketFileBody(ticketBodyFile);
   const recordFile = join(outDir, BUILD_RECORD);
   const recordPresent = existsSync(recordFile);
@@ -2047,12 +2875,22 @@ export function checkCommand(outDir: string, ticketBodyFile: string): number {
     digest: draftDigest(meta.title, meta.body),
     outDir,
   });
-  if (reason === null) {
-    console.log("current: the story was built from this draft");
-    return 0;
+  if (reason !== null) {
+    console.log(`out of date: ${reason}`);
+    return 2;
   }
-  console.log(`out of date: ${reason}`);
-  return 2;
+  if (record?.head !== undefined) {
+    if (repo === undefined) {
+      throw new Error(`a change story's check needs --repo <repo> to resolve ${record.branch}`);
+    }
+    const current = git(repo, ["rev-parse", record.branch ?? ""]).trim();
+    if (current !== record.head) {
+      console.log(`out of date: the branch ${record.branch} moved`);
+      return 2;
+    }
+  }
+  console.log("current: the story was built from this draft");
+  return 0;
 }
 
 export function main(args: string[]): number {
@@ -2086,13 +2924,15 @@ export function main(args: string[]): number {
     }
     if (cmd === "check") {
       let ticketBodyFile: string | undefined;
+      let repo: string | undefined;
       const positional: string[] = [];
       for (let i = 0; i < rest.length; i++) {
         const a = rest[i] ?? "";
-        if (a === "--ticket-body") {
+        if (a === "--ticket-body" || a === "--repo") {
           const v = rest[i + 1];
           if (!v) throw new Error(USAGE);
-          ticketBodyFile = v;
+          if (a === "--ticket-body") ticketBodyFile = v;
+          else repo = v;
           i++;
         } else if (a.startsWith("--")) {
           throw new Error(USAGE);
@@ -2102,7 +2942,7 @@ export function main(args: string[]): number {
       }
       const [outDir] = positional;
       if (!outDir || !ticketBodyFile || positional.length !== 1) throw new Error(USAGE);
-      return checkCommand(outDir, ticketBodyFile);
+      return checkCommand(outDir, ticketBodyFile, repo);
     }
     if (cmd === "pick-step") {
       const viewport = flag(rest, "--viewport");

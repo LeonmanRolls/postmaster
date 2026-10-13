@@ -2,18 +2,32 @@
 // commands themselves run end to end in the #352 oracle, as subprocesses.
 import { describe, expect, test } from "bun:test";
 import {
+  baseRows,
   buildSteps,
+  changeForFile,
+  changeGapRows,
+  changedKeys,
+  checkCriterionSections,
   checkDrawings,
+  computeChangeGaps,
   computeGaps,
   cutDoc,
   draftDigest,
+  fileNameEntry,
+  fileShownOnStep,
+  filesNeedingNames,
   fill,
   gapRows,
+  headChip,
+  headRows,
+  isChangeStory,
   keptPicture,
   mimeOf,
   parseBuildRecord,
   parseBoxes,
+  parseChangeDiff,
   parseCited,
+  parseCriteria,
   parseStory,
   parseViewport,
   pickStep,
@@ -31,7 +45,16 @@ import {
   tagSvg,
   ticketDocId,
 } from "./story-page.ts";
-import type { DiagramScene, Doc, PageParts, Row, Scene, Story } from "./story-page.ts";
+import type {
+  ChangeFile,
+  ChangeRow,
+  DiagramScene,
+  Doc,
+  PageParts,
+  Row,
+  Scene,
+  Story,
+} from "./story-page.ts";
 
 describe("the reading line", () => {
   test("below the panel on a phone, above the middle beside it", () => {
@@ -785,5 +808,489 @@ describe("the build record", () => {
     expect(keptPicture(record, "T", "missing")).toBeNull();
     expect(keptPicture({ ...record, pictures: { hero: "../x.png" } }, "T", "hero")).toBeNull();
     expect(keptPicture({ ...record, pictures: { hero: "d\\x.png" } }, "T", "hero")).toBeNull();
+  });
+});
+
+describe("a change story parses", () => {
+  const change = {
+    repoUrl: "https://github.com/o/r",
+    ticket: 7,
+    base: "main",
+    head: "feature",
+    sections: [{ id: "c1", label: "C1", title: "C1" }],
+    scenes: [
+      { id: "calc", kind: "head", file: "calc.ts", from: 1, to: 4 },
+      { id: "old", kind: "base", file: "calc.ts", from: 1, to: 3 },
+    ],
+    steps: [{ id: "c", section: "c1", scene: "calc", focus: [[1, 1]], title: "t", text: "x" }],
+  };
+
+  test("base and head name the change, and head and base scenes read", () => {
+    const story = parseStory(JSON.stringify(change));
+    expect(isChangeStory(story)).toBe(true);
+    expect(story.at).toBeUndefined();
+    expect(story.base).toBe("main");
+    expect(story.head).toBe("feature");
+    expect(story.scenes.map((s) => [s.id, s.kind])).toEqual([
+      ["calc", "head"],
+      ["old", "base"],
+    ]);
+  });
+
+  test("ticket scenes are refused in a change story, and conversely", () => {
+    const ref = JSON.parse(JSON.stringify(change)) as typeof change;
+    (ref.scenes[0] as unknown as Record<string, unknown>).kind = "ref";
+    expect(() => parseStory(JSON.stringify(ref))).toThrow(
+      'scene calc: kind "ref" is a ticket story\'s; change stories show code with kind "head"',
+    );
+    const md = JSON.parse(JSON.stringify(change)) as typeof change;
+    (md.scenes[0] as unknown as Record<string, unknown>).kind = "md";
+    expect(() => parseStory(JSON.stringify(md))).toThrow('kind "md" is a ticket story\'s');
+    const ticket = { ...change, at: "abc", base: undefined, head: undefined };
+    expect(() => parseStory(JSON.stringify(ticket))).toThrow(
+      'scene calc: kind "head" is a change story\'s; ticket stories show code with kind "ref"',
+    );
+  });
+
+  test("the commit names refuse to mix or go missing", () => {
+    const ticketBase = {
+      repoUrl: change.repoUrl,
+      ticket: 7,
+      at: "abc",
+      base: "main",
+      sections: change.sections,
+      scenes: change.scenes,
+      steps: change.steps,
+    };
+    expect(() => parseStory(JSON.stringify(ticketBase))).toThrow(
+      'story: "base" is a change story\'s; ticket stories name their commit with "at"',
+    );
+    const noBase = { ...change, base: undefined };
+    expect(() => parseStory(JSON.stringify(noBase))).toThrow("story: no base");
+    const noHead = { ...change, head: undefined };
+    expect(() => parseStory(JSON.stringify(noHead))).toThrow("story: no head");
+  });
+
+  test("head and base scenes count as code for the drawing rule", () => {
+    const story = parseStory(JSON.stringify(change));
+    expect(() => checkDrawings(story)).toThrow("shows code with no drawing before it");
+    const drawn = JSON.parse(JSON.stringify(change)) as typeof change;
+    drawn.scenes.unshift({
+      id: "d",
+      kind: "diagram",
+      label: "D",
+      chip: "c",
+      svg: "d.svg",
+      states: ["all"],
+    } as unknown as (typeof change.scenes)[number]);
+    drawn.steps.unshift({
+      id: "d",
+      section: "c1",
+      scene: "d",
+      state: "all",
+      title: "t",
+      text: "x",
+    } as unknown as (typeof change.steps)[number]);
+    expect(() => checkDrawings(parseStory(JSON.stringify(drawn)))).not.toThrow();
+  });
+});
+
+describe("a change from its diff", () => {
+  const DIFF = [
+    "diff --git a/calc.ts b/calc.ts",
+    "index 1111111..2222222 100644",
+    "--- a/calc.ts",
+    "+++ b/calc.ts",
+    "@@ -4,3 +4,3 @@",
+    "-    sum = sum + n;",
+    "-  }",
+    "-  return sum;",
+    "+    sum += n;",
+    "+  } // totals accumulate here",
+    "+  return sum < 0 ? 0 : sum;",
+    "@@ -8,0 +9 @@",
+    "+// totals never go below zero",
+    "diff --git a/added.md b/added.md",
+    "new file mode 100644",
+    "index 0000000..3333333",
+    "--- /dev/null",
+    "+++ b/added.md",
+    "@@ -0,0 +1,2 @@",
+    "+# Added notes",
+    "+",
+    "diff --git a/notes.md b/notes.md",
+    "deleted file mode 100644",
+    "index 4444444..0000000",
+    "--- a/notes.md",
+    "+++ /dev/null",
+    "@@ -1,2 +0,0 @@",
+    "-Old notes.",
+    "\\ No newline at end of file",
+    "-Second.",
+    "diff --git a/old-name.ts b/new-name.ts",
+    "similarity index 100%",
+    "rename from old-name.ts",
+    "rename to new-name.ts",
+    "diff --git a/blob.bin b/blob.bin",
+    "index 5555555..6666666 100644",
+    "Binary files a/blob.bin and b/blob.bin differ",
+    "diff --git a/run.sh b/run.sh",
+    "old mode 100644",
+    "new mode 100755",
+  ].join("\n");
+
+  test("hunks, adds, removes, renames, binaries and modes each read", () => {
+    const files = parseChangeDiff(DIFF);
+    expect([...files.keys()].sort()).toEqual([
+      "added.md",
+      "blob.bin",
+      "calc.ts",
+      "new-name.ts",
+      "notes.md",
+      "run.sh",
+    ]);
+    const calc = files.get("calc.ts");
+    expect(calc?.status).toBe("modified");
+    expect([...(calc?.added ?? [])].sort((a, b) => a - b)).toEqual([4, 5, 6, 9]);
+    expect([...(calc?.removedOld ?? [])].sort((a, b) => a - b)).toEqual([4, 5, 6]);
+    expect(calc?.dels.get(4)?.map((d) => d.old)).toEqual([4, 5, 6]);
+    expect(calc?.dels.get(4)?.[0]?.text).toBe("    sum = sum + n;");
+    expect(files.get("added.md")?.status).toBe("added");
+    expect([...(files.get("added.md")?.added ?? [])]).toEqual([1, 2]);
+    const notes = files.get("notes.md");
+    expect(notes?.status).toBe("removed");
+    expect(notes?.path).toBe("notes.md");
+    expect([...(notes?.removedOld ?? [])]).toEqual([1, 2]);
+    const renamed = files.get("new-name.ts");
+    expect(renamed?.status).toBe("renamed");
+    expect(renamed?.oldPath).toBe("old-name.ts");
+    expect(renamed?.added.size).toBe(0);
+    expect(files.get("blob.bin")?.binary).toBe(true);
+    expect(files.get("run.sh")?.modeChange).toEqual(["100644", "100755"]);
+    expect(files.get("run.sh")?.status).toBe("modified");
+  });
+
+  test("a removed-only hunk anchors after its new line", () => {
+    const files = parseChangeDiff(
+      [
+        "diff --git a/f.ts b/f.ts",
+        "index 1111111..2222222 100644",
+        "--- a/f.ts",
+        "+++ b/f.ts",
+        "@@ -2,2 +2,0 @@",
+        "-gone one",
+        "-gone two",
+      ].join("\n"),
+    );
+    expect(
+      files
+        .get("f.ts")
+        ?.dels.get(3)
+        ?.map((d) => d.text),
+    ).toEqual(["gone one", "gone two"]);
+  });
+
+  test("quoted paths with spaces read", () => {
+    const files = parseChangeDiff(
+      [
+        'diff --git "a/with space.ts" "b/with space.ts"',
+        "index 1111111..2222222 100644",
+        '--- "a/with space.ts"',
+        '+++ "b/with space.ts"',
+        "@@ -1 +1 @@",
+        "-old",
+        "+new",
+      ].join("\n"),
+    );
+    expect(files.get("with space.ts")?.added).toEqual(new Set([1]));
+  });
+
+  test("changed keys, gaps and files needing names follow", () => {
+    const files = parseChangeDiff(DIFF);
+    const keys = changedKeys(files);
+    expect(keys).toHaveLength(11);
+    expect(keys).toContain("calc.ts:+9");
+    expect(keys).toContain("notes.md:-2");
+    const gaps = computeChangeGaps(
+      keys,
+      new Set(["calc.ts:+4", "calc.ts:+5", "calc.ts:+6", "calc.ts:+9"]),
+    );
+    const has = (file: string, side: string, from: number, to: number): boolean =>
+      gaps.some((g) => g.file === file && g.side === side && g.from === from && g.to === to);
+    expect(has("added.md", "+", 1, 2)).toBe(true);
+    expect(has("notes.md", "-", 1, 2)).toBe(true);
+    expect(has("calc.ts", "-", 4, 6)).toBe(true);
+    expect(() => computeChangeGaps(["bogus"], new Set())).toThrow("bad change key");
+    expect(
+      filesNeedingNames(files)
+        .map((f) => f.path)
+        .sort(),
+    ).toEqual(["blob.bin", "new-name.ts", "run.sh"]);
+    const empty: ChangeFile = {
+      path: "e.txt",
+      oldPath: null,
+      status: "added",
+      binary: false,
+      modeChange: null,
+      added: new Set(),
+      removedOld: new Set(),
+      dels: new Map(),
+    };
+    expect(filesNeedingNames(new Map([["e.txt", empty]]))).toHaveLength(1);
+  });
+
+  test("a head or base scene on a step names its file", () => {
+    const files = parseChangeDiff(DIFF);
+    const renamed = files.get("new-name.ts");
+    if (!renamed) throw new Error("no renamed file");
+    const scenes = new Map<string, Scene>([
+      ["calc", { id: "calc", kind: "head", file: "calc.ts", from: 1, to: 4 }],
+      ["old", { id: "old", kind: "base", file: "old-name.ts", from: 1, to: 2 }],
+    ]);
+    const story = {
+      steps: [{ id: "a", section: "c1", scene: "calc", title: "t", text: "x" }],
+    } as unknown as Story;
+    expect(fileShownOnStep(renamed, scenes, story.steps)).toBe(false);
+    const story2 = {
+      steps: [
+        { id: "a", section: "c1", scene: "calc", title: "t", text: "x" },
+        { id: "b", section: "c1", scene: "old", title: "t", text: "x" },
+      ],
+    } as unknown as Story;
+    expect(fileShownOnStep(renamed, scenes, story2.steps)).toBe(true);
+  });
+
+  test("file entries word what happened", () => {
+    const files = parseChangeDiff(DIFF);
+    const at = (path: string): ChangeFile => {
+      const f = files.get(path);
+      if (!f) throw new Error(`no ${path}`);
+      return f;
+    };
+    expect(fileNameEntry(at("new-name.ts"), null, null)).toEqual({
+      file: "new-name.ts",
+      what: "renamed",
+      gpath: "new-name.ts",
+      gwhat: "renamed from old-name.ts",
+      fnote: "Renamed from old-name.ts to new-name.ts.",
+    });
+    expect(fileNameEntry(at("blob.bin"), 12, 28)).toEqual({
+      file: "blob.bin",
+      what: "binary",
+      gpath: "blob.bin",
+      gwhat: "binary file changed, 12 bytes became 28 bytes",
+      fnote: "Binary file changed, 12 bytes became 28 bytes.",
+    });
+    expect(fileNameEntry(at("run.sh"), null, null)).toEqual({
+      file: "run.sh",
+      what: "mode",
+      gpath: "run.sh",
+      gwhat: "mode 100644 became 100755",
+      fnote: "Mode 100644 became 100755.",
+    });
+  });
+
+  test("chips name what happened to the file", () => {
+    const files = parseChangeDiff(DIFF);
+    expect(headChip(undefined)).toBe("unchanged");
+    expect(headChip(files.get("added.md"))).toBe("new file");
+    expect(headChip(files.get("notes.md"))).toBe("removed");
+    expect(headChip(files.get("new-name.ts"))).toBe("renamed from old-name.ts");
+    expect(headChip(files.get("calc.ts"))).toBe("changed");
+    expect(headChip(files.get("run.sh"))).toBe("mode 100644 became 100755");
+    expect(changeForFile(files, "old-name.ts")?.path).toBe("new-name.ts");
+    expect(changeForFile(files, "missing.ts")).toBeUndefined();
+  });
+});
+
+describe("a change's rows", () => {
+  const cf: ChangeFile = {
+    path: "f",
+    oldPath: null,
+    status: "modified",
+    binary: false,
+    modeChange: null,
+    added: new Set([2]),
+    removedOld: new Set([2]),
+    dels: new Map([[2, [{ old: 2, text: "old" }]]]),
+  };
+
+  test("head rows sit removed lines before the line that took their place", () => {
+    expect(headRows("f", 1, 3, ["a", "b", "c"], cf)).toEqual([
+      { type: "ctx", n: 1, text: "a", key: null },
+      { type: "del", n: null, text: "old", key: "f:-2" },
+      { type: "add", n: 2, text: "b", key: "f:+2" },
+      { type: "ctx", n: 3, text: "c", key: null },
+    ]);
+    expect(headRows("f", 1, 3, ["a", "b", "c"], undefined)).toEqual([
+      { type: "ctx", n: 1, text: "a", key: null },
+      { type: "ctx", n: 2, text: "b", key: null },
+      { type: "ctx", n: 3, text: "c", key: null },
+    ]);
+    expect(headRows("f", 1, 9, ["a"], cf)).toEqual([
+      { type: "ctx", n: 1, text: "a", key: null },
+      { type: "del", n: null, text: "old", key: "f:-2" },
+    ]);
+  });
+
+  test("base rows mark what was there before, gaps read both sides", () => {
+    expect(baseRows("f", 1, 3, ["a", "old", "c"], cf)).toEqual([
+      { type: "ctx", n: 1, text: "a", key: null },
+      { type: "was", n: 2, text: "old", key: "f:-2" },
+      { type: "ctx", n: 3, text: "c", key: null },
+    ]);
+    expect(changeGapRows({ file: "f", side: "+", from: 2, to: 3 }, ["a", "b", "c"], cf)).toEqual([
+      { type: "add", n: 2, text: "b", key: "f:+2" },
+      { type: "add", n: 3, text: "c", key: "f:+3" },
+    ]);
+    expect(changeGapRows({ file: "f", side: "-", from: 1, to: 3 }, ["a"], cf)).toEqual([
+      { type: "del", n: null, text: "old", key: "f:-2" },
+    ]);
+    const rows: ChangeRow[] = headRows("f", 1, 1, ["a"], cf);
+    expect(rows).toEqual([
+      { type: "ctx", n: 1, text: "a", key: null },
+      { type: "del", n: null, text: "old", key: "f:-2" },
+    ]);
+  });
+
+  test("head and base steps light the focus and its removed lines", () => {
+    const story = {
+      sections: [{ id: "c1", label: "C1", title: "C1" }],
+      steps: [
+        { id: "h", section: "c1", scene: "calc", focus: [[2, 2]], title: "t", text: "x" },
+        {
+          id: "b",
+          section: "c1",
+          scene: "old",
+          focus: [[2, 2]],
+          title: "t",
+          text: "x",
+          marks: [{ line: 2, text: ["old"] }],
+        },
+      ],
+    } as unknown as Story;
+    const all: [string, Scene][] = [
+      ["calc", { id: "calc", kind: "head", file: "f", from: 1, to: 3 }],
+      ["old", { id: "old", kind: "base", file: "f", from: 1, to: 3 }],
+    ];
+    const changeRowsOf = new Map<string, ChangeRow[]>([
+      ["calc", headRows("f", 1, 3, ["a", "b", "c"], cf)],
+      ["old", baseRows("f", 1, 3, ["a", "old", "c"], cf)],
+    ]);
+    const changes = new Map([["f", cf]]);
+    const data = buildSteps(
+      story,
+      new Map(all),
+      new Map(),
+      new Map(),
+      new Map(),
+      "abc1234",
+      changeRowsOf,
+      changes,
+    );
+    expect(data.map((s) => [s.id, s.kind, s.lit])).toEqual([
+      ["h", "code", [1, 2]],
+      ["b", "code", [1]],
+    ]);
+    expect(data[0]?.chip).toBe("changed");
+    expect(data[1]?.chip).toBe("before the change");
+    expect(data[0]?.lines).toBe("lines 1–3");
+    expect(data[1]?.marks).toEqual([{ row: 1, text: ["old"] }]);
+    const dark = {
+      ...story,
+      steps: [{ id: "h", section: "c1", scene: "calc", focus: [[9, 9]], title: "t", text: "x" }],
+    } as unknown as Story;
+    expect(() =>
+      buildSteps(dark, new Map(all), new Map(), new Map(), new Map(), "a", changeRowsOf, changes),
+    ).toThrow("its focus lights no row");
+  });
+});
+
+describe("a change's criteria", () => {
+  const BODY = [
+    "## Problem",
+    "",
+    "words",
+    "",
+    "## Acceptance criteria",
+    "",
+    "1. First words here.",
+    "2. Second words here.",
+    "   wrapped continuation.",
+    "3. Fixture: the fixture pages cover the rest.",
+    "",
+    "## For the agents",
+    "",
+    "1. Not a criterion.",
+  ].join("\n");
+
+  test("numbered items under the heading, the fixture line among them", () => {
+    expect(parseCriteria(BODY)).toEqual([
+      { n: 1, words: "First words here." },
+      { n: 2, words: "Second words here. wrapped continuation." },
+      { n: 3, words: "Fixture: the fixture pages cover the rest." },
+    ]);
+    expect(parseCriteria("## Problem\n\nno criteria\n")).toEqual([]);
+    expect(parseCriteria("## Acceptance criteria\n\nnothing numbered\n")).toEqual([]);
+  });
+
+  test("every criterion needs its section quoting its words", () => {
+    const story = {
+      ticket: 7,
+      scenes: [{ id: "t", kind: "doc", from: "issue", number: 7, label: "T", chip: "c" }],
+      steps: [
+        { id: "c1", section: "c1", scene: "t", kind: "criterion", find: ["First words"] },
+        { id: "c2", section: "c2", scene: "t", kind: "criterion", find: ["Second words"] },
+        { id: "c3", section: "c3", scene: "t", kind: "criterion", find: ["the rest"] },
+      ],
+    } as unknown as Story;
+    expect(() => checkCriterionSections(story, BODY)).not.toThrow();
+    const missing = {
+      ...story,
+      steps: story.steps.filter((s) => s.id !== "c2"),
+    } as unknown as Story;
+    expect(() => checkCriterionSections(missing, BODY)).toThrow(
+      'criterion 2 has no section: "Second words here. wrapped continuation."',
+    );
+    const other = {
+      ...story,
+      steps: story.steps.map((s) => (s.id === "c2" ? { ...s, scene: "elsewhere" } : s)),
+    } as unknown as Story;
+    expect(() => checkCriterionSections(other, BODY)).toThrow("criterion 2 has no section");
+    const plain = {
+      ...story,
+      steps: story.steps.map((s) => (s.id === "c2" ? { ...s, kind: undefined } : s)),
+    } as unknown as Story;
+    expect(() => checkCriterionSections(plain, BODY)).toThrow("criterion 2 has no section");
+    expect(() => checkCriterionSections(story, "## Problem\n\nno criteria\n")).not.toThrow();
+  });
+});
+
+describe("a change's build record", () => {
+  test("the branch, head and base ride along, or the record is broken", () => {
+    const text = JSON.stringify({
+      version: 1,
+      title: "T",
+      draft: "d",
+      pictures: { hero: "picture.png" },
+      branch: "feature",
+      head: "h".repeat(40),
+      base: "b".repeat(40),
+    });
+    const record = parseBuildRecord(text);
+    expect(record?.branch).toBe("feature");
+    expect(record?.head).toBe("h".repeat(40));
+    expect(record?.base).toBe("b".repeat(40));
+    const partial = JSON.stringify({
+      version: 1,
+      title: "T",
+      draft: "d",
+      pictures: {},
+      branch: "feature",
+    });
+    expect(parseBuildRecord(partial)).toBeNull();
+    const ticket = JSON.stringify({ version: 1, title: "T", draft: "d", pictures: {} });
+    const ticketRecord = parseBuildRecord(ticket);
+    expect(ticketRecord?.head).toBeUndefined();
   });
 });
