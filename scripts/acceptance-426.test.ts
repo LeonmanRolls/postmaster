@@ -233,6 +233,20 @@ test("hit counters ignore loopback strays from unknown clients", () => {
   expect(tarballHits(log)).toEqual(["/tarballs/g-clean-1.0.0.tgz"]);
 });
 
+test("hit counters attribute the bun-run npm user agent to the run", () => {
+  // `bun run` starts every child with npm_config_user_agent set, and npm
+  // honors it as its own User-Agent: lowercase bun, not npm. The counters
+  // must still read those downloads as the run's.
+  const ua = "bun/1.4.2 npm/? node/v26.3.0 linux x64";
+  const log: LoggedRequest[] = [
+    { method: "GET", path: "/g-dep", ua },
+    { method: "GET", path: "/tarballs/g-dep-1.0.0.tgz", ua },
+    { method: "GET", path: "/", ua: "Go-http-client/1.1" },
+  ];
+  expect(packumentHits(log)).toEqual(["/g-dep"]);
+  expect(tarballHits(log)).toEqual(["/tarballs/g-dep-1.0.0.tgz"]);
+});
+
 beforeAll(async () => {
   tmp = scratchDir("acceptance-426-");
   tarballs = join(tmp, "tarballs");
@@ -305,6 +319,34 @@ describe("C1: the ticket list plus the recorded yes", () => {
       },
     );
   }
+  test.skipIf(!avail.npm)(
+    "npm: a bun-run user agent in the environment does not hide the downloads",
+    async () => {
+      const dispatch = mkDispatch(
+        tmp,
+        "c1-ua-npm",
+        ["- g-dep@1.0.0 vetted: brings g-trans"],
+        [yes("g-dep@1.0.0")],
+      );
+      const project = mkProject(tmp, "c1-ua-npm-p");
+      // The recorded gate runs under `bun run`, which injects this for every
+      // child; the test carries it itself so a plain `bun test` covers the
+      // gate's shape too. Restored after, so no later test inherits it.
+      const saved = process.env.npm_config_user_agent;
+      process.env.npm_config_user_agent = "bun/1.4.2 npm/? node/v26.3.0 linux x64";
+      try {
+        drain();
+        const r = await guarded(registry, dispatch, project, "npm", ["add", "g-dep@1.0.0"]);
+        expect(r.code).toBe(0);
+        expect(installedVersion(project, "g-dep")).toBe("1.0.0");
+        expect(installedVersion(project, "g-trans")).toBe("1.0.0");
+        expect(tarballHits(registry.log).length).toBeGreaterThan(0);
+      } finally {
+        if (saved === undefined) delete process.env.npm_config_user_agent;
+        else process.env.npm_config_user_agent = saved;
+      }
+    },
+  );
   test.skipIf(!avail.npm)("npm: a bare spec resolves to the listed latest", async () => {
     const dispatch = mkDispatch(
       tmp,

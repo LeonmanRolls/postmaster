@@ -127,11 +127,15 @@ export interface LoggedRequest {
 /** User agents the hit counters attribute to the run: the guard's own
  * (GUARD_AGENT in install-guard.ts) and the four managers it drives.
  * Loopback is shared with whatever else probes the machine, so a request
- * from any other client is stray noise, never a download the run made. */
-const KNOWN_DOWNLOADERS = ["postmaster-install-guard", "npm/", "pnpm/", "yarn/", "Bun/"];
+ * from any other client is stray noise, never a download the run made.
+ * Matched case-insensitively: `bun run` starts npm with a lowercase
+ * `bun/...` user agent, and the attribution must not depend on how the
+ * harness was started. */
+const KNOWN_DOWNLOADERS = ["postmaster-install-guard", "npm/", "pnpm/", "yarn/", "bun/"];
 
 function ownHit(r: LoggedRequest): boolean {
-  return KNOWN_DOWNLOADERS.some((prefix) => r.ua.startsWith(prefix));
+  const ua = r.ua.toLowerCase(); // LOWER: user agents are ASCII; the fold catches every ASCII spelling
+  return KNOWN_DOWNLOADERS.some((prefix) => ua.startsWith(prefix));
 }
 
 export interface Registry {
@@ -358,7 +362,8 @@ export async function runAsync(
  * Socket seams in the environment. A missing shim (the base) fails like any
  * missing command, exit 127, which no oracle case accepts. Each dispatch gets
  * a fresh HOME, so no manager cache survives from an earlier run to swallow
- * the downloads the log assertions count. */
+ * the downloads the log assertions count, and no npm_config_user_agent, so a
+ * harness-injected agent never stands in for the manager's own. */
 export function guarded(
   registry: Registry,
   dispatch: string,
@@ -377,24 +382,29 @@ export function guarded(
   mkdirSync(markerDir, { recursive: true });
   const home = join(dispatch, "home");
   mkdirSync(home, { recursive: true });
-  return runAsync(join(bin, prog), args, {
-    cwd: project,
-    env: {
-      ...(process.env as Record<string, string>),
-      PATH: `${bin}:${DEV_BIN}:${process.env.PATH ?? ""}`,
-      HOME: home,
-      XDG_DATA_HOME: join(home, ".local", "share"),
-      XDG_CACHE_HOME: join(home, ".cache"),
-      XDG_CONFIG_HOME: join(home, ".config"),
-      POSTMASTER_DISPATCH: dispatch,
-      POSTMASTER_TOOL: ROOT,
-      POSTMASTER_GUARD_LANE: "testlane",
-      POSTMASTER_GUARD_REGISTRY: registry.url,
-      POSTMASTER_GUARD_SOCKET_API: registry.socketUrl,
-      GUARD_MARKER_DIR: markerDir,
-      ...opts.env,
-    },
-  });
+  const childEnv: Record<string, string | undefined> = {
+    ...(process.env as Record<string, string>),
+    PATH: `${bin}:${DEV_BIN}:${process.env.PATH ?? ""}`,
+    HOME: home,
+    XDG_DATA_HOME: join(home, ".local", "share"),
+    XDG_CACHE_HOME: join(home, ".cache"),
+    XDG_CONFIG_HOME: join(home, ".config"),
+    POSTMASTER_DISPATCH: dispatch,
+    POSTMASTER_TOOL: ROOT,
+    POSTMASTER_GUARD_LANE: "testlane",
+    POSTMASTER_GUARD_REGISTRY: registry.url,
+    POSTMASTER_GUARD_SOCKET_API: registry.socketUrl,
+    GUARD_MARKER_DIR: markerDir,
+    ...opts.env,
+  };
+  // `bun run` (and `npm run`) inject npm_config_user_agent for every child,
+  // and npm honors it as its own User-Agent: under the gate the run's
+  // downloads would arrive under the harness's agent instead of the
+  // manager's. Strip it, both cases, so the managers send their own and the
+  // log attribution does not depend on how the harness was started.
+  delete childEnv.npm_config_user_agent;
+  delete childEnv.NPM_CONFIG_USER_AGENT;
+  return runAsync(join(bin, prog), args, { cwd: project, env: childEnv });
 }
 
 /** The installed version of a package, or null when it is not installed.
