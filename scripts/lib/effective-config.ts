@@ -452,6 +452,31 @@ const nameList = (value: unknown, where: string, allowEmpty = false): string[] =
   return names;
 };
 
+/**
+ * A list of globs naming files by shape, relative to the project's root: forward slashes,
+ * no negation, nothing above the root, and at least one character that is not a wildcard,
+ * so one stray entry cannot name the whole tree. A repeat is dropped, and an empty list
+ * is allowed, since the person's file may use it to clear what the shared file lists.
+ */
+const globList = (value: unknown, where: string): string[] => {
+  if (!Array.isArray(value)) fail(`${where} must be a list of glob patterns`);
+  const globs: string[] = [];
+  value.forEach((item: unknown, i: number) => {
+    if (typeof item !== "string" || pyTrim(item) === "" || RX_CONTROL.test(item)) {
+      fail(`${where}[${i}] must be a non-empty glob pattern without control characters`);
+    }
+    const glob = pyTrim(item);
+    if (glob.startsWith("!")) fail(`${where}[${i}] is a negation, which is not supported: ${glob}`);
+    if (glob.startsWith("/") || glob.split("/").includes("..")) {
+      fail(`${where}[${i}] must stay inside the project: ${glob}`);
+    }
+    if (glob.includes("\\")) fail(`${where}[${i}] must use forward slashes: ${glob}`);
+    if (!/[^*?/]/u.test(glob)) fail(`${where}[${i}] names no file in particular: ${glob}`);
+    if (!globs.includes(glob)) globs.push(glob);
+  });
+  return globs;
+};
+
 const CHECK_KEYS = ["command", "shows", "use", "score", "threshold", "timeout"];
 const CHECK_USES = ["cli-examples", "browser-suite", "web-journey", "library-tests"];
 
@@ -561,7 +586,7 @@ export const validateCommon = (data: Rec, label: string, local: boolean): Rec =>
   if (unknown.length > 0) fail(`${label} has unsupported table or key: ${unknown[0]}`);
   const project = asTable(Object.hasOwn(data, "project") ? data.project : {}, `${label}.project`);
   const unknownProject = Object.keys(project)
-    .filter((k) => k !== "default_turnpikes" && k !== "risk_surfaces")
+    .filter((k) => k !== "default_turnpikes" && k !== "risk_surfaces" && k !== "generated_files")
     .sort(cmpPoints);
   if (unknownProject.length > 0) fail(`${label}.project has unsupported key: ${unknownProject[0]}`);
   if (Object.hasOwn(project, "default_turnpikes")) {
@@ -586,6 +611,9 @@ export const validateCommon = (data: Rec, label: string, local: boolean): Rec =>
     } else {
       fail(`${label}.project.risk_surfaces must be non-empty text or a list of non-empty strings`);
     }
+  }
+  if (Object.hasOwn(project, "generated_files")) {
+    project.generated_files = globList(project.generated_files, `${label}.project.generated_files`);
   }
   const tracker = asTable(Object.hasOwn(data, "tracker") ? data.tracker : {}, `${label}.tracker`);
   if (!local) {
@@ -968,6 +996,16 @@ const mergedProfile = (shared: Rec, local: Rec, hasShared: boolean, hasLocal: bo
     }
     if (!Object.hasOwn(project, field)) sources[`project.${field}`] = "discovery";
   }
+  // generated_files has no discovered default: it appears only where a file names it, so a
+  // project that names none leaves the facts and sources exactly as they were.
+  if (Object.hasOwn(sharedProject, "generated_files")) {
+    project.generated_files = sharedProject.generated_files;
+    sources["project.generated_files"] = "shared";
+  }
+  if (Object.hasOwn(localProject, "generated_files")) {
+    project.generated_files = localProject.generated_files;
+    sources["project.generated_files"] = "local";
+  }
   const sharedTracker = asTable(Object.hasOwn(shared, "tracker") ? shared.tracker : {}, "tracker");
   const localTracker = asTable(Object.hasOwn(local, "tracker") ? local.tracker : {}, "tracker");
   if (Object.hasOwn(sharedTracker, "binding")) {
@@ -1263,6 +1301,16 @@ export const inspect = (repo: string, opts?: { storePath?: string }): Rec => {
   profile.local_file = hasLocal ? ".postmaster/settings.toml" : null;
   profile.local_acceptance = acceptance;
   return profile;
+};
+
+/**
+ * The globs a project names in `project.generated_files` for files a tool writes and the
+ * project commits, or none. A person's file replaces the shared list whole, and a tracked
+ * settings file that waits for acceptance reads as absent, as everywhere else.
+ */
+export const generatedFilesOf = (repo: string, opts?: { storePath?: string }): string[] => {
+  const list = asTable(inspect(repo, opts).project, "project").generated_files;
+  return Array.isArray(list) ? list.filter((glob): glob is string => typeof glob === "string") : [];
 };
 
 // --- writes ----------------------------------------------------------------------------------------

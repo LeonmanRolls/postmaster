@@ -2,7 +2,12 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { run } from "./proc.ts";
-import { packageSettingsDiffer, parseSwitchOff, scanComments } from "./switch-offs.ts";
+import {
+  generatedMatcher,
+  packageSettingsDiffer,
+  parseSwitchOff,
+  scanComments,
+} from "./switch-offs.ts";
 
 const SELF = join(import.meta.dir, "../run");
 const CLEAN_GIT_ENV = {
@@ -1798,5 +1803,118 @@ describe("switch-off landing instructions", () => {
     expect(postmaster).toContain("The merge authority never approves these entries");
     expect(postmaster).toContain("before it opens a\n   pull request or merges");
     expect(postmaster).toContain("with the refused\n   entry as the exact discrepancy");
+  });
+});
+
+describe("generatedMatcher", () => {
+  test("matches the listed globs at any depth and nothing else", () => {
+    const match = generatedMatcher(["**/*.gen.ts", "docs/api/**"]);
+    expect(match("routeTree.gen.ts")).toBe(true);
+    expect(match("apps/web/src/routeTree.gen.ts")).toBe(true);
+    expect(match("docs/api/v1/schema.ts")).toBe(true);
+    expect(match("apps/web/src/routeTree.ts")).toBe(false);
+    expect(match("apps/web/src/routeTree.gen.tsx")).toBe(false);
+    expect(match("docs/other/schema.ts")).toBe(false);
+  });
+
+  test("an empty list matches nothing", () => {
+    expect(generatedMatcher([])("apps/web/src/routeTree.gen.ts")).toBe(false);
+  });
+});
+
+describe("generated files named by the project", () => {
+  const HEADER = "/* eslint-disable */\n\n// @ts-nocheck\n\n";
+  const GENERATED = "apps/web/src/routeTree.gen.ts";
+  const SKIP_GEN = '[project]\ngenerated_files = ["**/*.gen.ts"]\n';
+
+  // main holds a generated file with the generator's bare header and the ticket
+  // regenerates it, which is what a run that adds a route does. The settings go in
+  // the working tree after the last commit, as they sit in the project's checkout.
+  function regenerated(name: string, shared: string | null, local: string | null = null): void {
+    freshRepo(name);
+    git(repo, "checkout", "-q", "main");
+    write(GENERATED, `${HEADER}export const routes = ["a"];\n`);
+    commit("generated file on main");
+    git(repo, "checkout", "-q", "-B", "ticket", "main");
+    write(GENERATED, `${HEADER}export const routes = ["a", "b"];\n`);
+    commit("regenerate");
+    if (shared !== null) write(".postmaster/project.toml", shared);
+    if (local !== null) write(".postmaster/settings.toml", local);
+  }
+
+  test("without a setting the regenerated header is listed with no reason (control)", () => {
+    regenerated("generated-control", null);
+    const result = check();
+    expect(result.code).toBe(3);
+    expect(result.out.startsWith("no reason\n## Switch-offs\n\n")).toBe(true);
+    expect(result.out).toContain(`${GENERATED}:1 eslint-disable`);
+    expect(result.out).toContain(`${GENERATED}:3 ts-nocheck`);
+  });
+
+  test("a project that names the file as generated is not asked about its header", () => {
+    regenerated("generated-skip", SKIP_GEN);
+    const result = check();
+    expect(result.code).toBe(0);
+    expect(result.out.startsWith("clear\n## Switch-offs\n\nnone")).toBe(true);
+    expect(result.out).toContain(`skipped generated file ${GENERATED}`);
+  });
+
+  test("a hand-written file beside a skipped generated file is still listed", () => {
+    regenerated("generated-beside", SKIP_GEN);
+    write("apps/web/src/hand.ts", "// @ts-ignore -- known mismatch\nconst x: string = 1;\n");
+    commit("add a hand-written switch-off");
+    const result = check();
+    expect(result.code).toBe(2);
+    expect(result.out).toContain("apps/web/src/hand.ts:1 ts-ignore");
+    expect(result.out).not.toContain(`${GENERATED}:1`);
+  });
+
+  test("a hand-written file with a similar name is not skipped (control)", () => {
+    regenerated("generated-similar", SKIP_GEN);
+    write("apps/web/src/routeTree.ts", "// @ts-nocheck\nexport const routes = [];\n");
+    commit("add a similarly named file");
+    const result = check();
+    expect(result.code).toBe(3);
+    expect(result.out).toContain("apps/web/src/routeTree.ts:1 ts-nocheck");
+    expect(result.out).not.toContain(`${GENERATED}:1`);
+  });
+
+  test("a generated file the ticket adds is skipped too", () => {
+    regenerated("generated-added", SKIP_GEN);
+    write("apps/web/src/other.gen.ts", `${HEADER}export const other = 1;\n`);
+    commit("add another generated file");
+    const result = check();
+    expect(result.code).toBe(0);
+    expect(result.out).toContain("skipped generated file apps/web/src/other.gen.ts");
+  });
+
+  test("a settings file under a generated path is skipped and one elsewhere is listed", () => {
+    regenerated("generated-settings", '[project]\ngenerated_files = ["gen/**"]\n');
+    write("gen/tsconfig.json", '{"compilerOptions":{"strict":false}}\n');
+    write("other/tsconfig.json", '{"compilerOptions":{"strict":false}}\n');
+    commit("add two settings files");
+    const result = check();
+    expect(result.out).toContain("settings other/tsconfig.json");
+    expect(result.out).not.toContain("settings gen/tsconfig.json");
+    expect(result.out).toContain("skipped generated file gen/tsconfig.json");
+  });
+
+  test("the person's settings file works and replaces the shared list whole", () => {
+    regenerated("generated-local", '[project]\ngenerated_files = ["docs/**"]\n', SKIP_GEN);
+    const skipped = check();
+    expect(skipped.code).toBe(0);
+    expect(skipped.out).toContain(`skipped generated file ${GENERATED}`);
+    write(".postmaster/settings.toml", "[project]\ngenerated_files = []\n");
+    write(".postmaster/project.toml", SKIP_GEN);
+    const cleared = check();
+    expect(cleared.code).toBe(3);
+    expect(cleared.out).toContain(`${GENERATED}:1 eslint-disable`);
+  });
+
+  test("an invalid setting fails the check instead of reading as none", () => {
+    regenerated("generated-invalid", '[project]\ngenerated_files = "**/*.gen.ts"\n');
+    const result = check();
+    expect(result.code).toBe(1);
+    expect(result.out).toContain("generated_files");
   });
 });

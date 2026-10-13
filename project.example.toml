@@ -19,6 +19,15 @@
 # defaults. None of these sets a floor of turnpikes: a ticket names the turnpikes its run
 # passes through, and this file only says what `default` means for this project.
 #
+# `generated_files` lists globs, relative to the project's root, of files a tool writes and the
+# project commits, such as a router's generated route tree. The switch-off check
+# (scripts/run landing switch-offs) does not list a run's regeneration of such a file as the run's
+# own switch-off: the generator, not the run, owns the comments in it, and a reason written there is
+# overwritten at the next regeneration. Each file skipped is named on stderr. Keep the list to files
+# the project's tools generate, since a file listed here is not checked for switch-offs at all. A
+# pattern is a glob with forward slashes, inside the project, with no negation and more than
+# wildcards. The person's settings.toml may name it too and replaces the shared list whole.
+#
 # The checks say how a change to the project is shown to work. A project that declares none gets
 # defaults (scripts/run verify): the gate, always, and by what discovery finds, a command-line
 # app's ticket examples run through its command, a web app's browser suite and a walk of the
@@ -30,6 +39,7 @@
 #
 # [project]
 # default_turnpikes = ["style", "bug", "security"]
+# generated_files = ["**/*.gen.ts"]
 # risk_surfaces = "Processes, network bindings, credentials and data stores the security lens should inspect."
 #
 # [tracker]
