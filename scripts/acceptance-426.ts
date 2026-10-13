@@ -121,6 +121,17 @@ export interface SocketAlert {
 export interface LoggedRequest {
   method: string;
   path: string;
+  ua: string;
+}
+
+/** User agents the hit counters attribute to the run: the guard's own
+ * (GUARD_AGENT in install-guard.ts) and the four managers it drives.
+ * Loopback is shared with whatever else probes the machine, so a request
+ * from any other client is stray noise, never a download the run made. */
+const KNOWN_DOWNLOADERS = ["postmaster-install-guard", "npm/", "pnpm/", "yarn/", "Bun/"];
+
+function ownHit(r: LoggedRequest): boolean {
+  return KNOWN_DOWNLOADERS.some((prefix) => r.ua.startsWith(prefix));
 }
 
 export interface Registry {
@@ -145,7 +156,7 @@ export function startRegistry(tarballDir: string): Registry {
     port: 0,
     fetch(req) {
       const u = new URL(req.url);
-      log.push({ method: req.method, path: u.pathname });
+      log.push({ method: req.method, path: u.pathname, ua: req.headers.get("user-agent") ?? "" });
       if (req.method === "GET" && u.pathname.startsWith("/tarballs/")) {
         const file = join(tarballDir, u.pathname.slice("/tarballs/".length));
         if (!existsSync(file)) return new Response("no such tarball", { status: 404 });
@@ -217,14 +228,17 @@ export function startRegistry(tarballDir: string): Registry {
 }
 
 export function tarballHits(log: LoggedRequest[]): string[] {
-  return log.filter((r) => r.path.startsWith("/tarballs/")).map((r) => r.path);
+  return log.filter((r) => ownHit(r) && r.path.startsWith("/tarballs/")).map((r) => r.path);
 }
 
 export function packumentHits(log: LoggedRequest[]): string[] {
   return log
     .filter(
       (r) =>
-        r.method === "GET" && !r.path.startsWith("/tarballs/") && !r.path.startsWith("/socket/"),
+        ownHit(r) &&
+        r.method === "GET" &&
+        !r.path.startsWith("/tarballs/") &&
+        !r.path.startsWith("/socket/"),
     )
     .map((r) => r.path);
 }

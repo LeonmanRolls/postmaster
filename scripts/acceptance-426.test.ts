@@ -41,6 +41,7 @@ import {
   startRegistry,
   tarballHits,
   type Guarded,
+  type LoggedRequest,
   type Pm,
   type Registry,
   type RegistryVersion,
@@ -219,6 +220,18 @@ function fromSnapshot(pm: Pm, which: "plain" | "scripts", name: string): string 
 function drain(): void {
   registry.log.splice(0);
 }
+
+test("hit counters ignore loopback strays from unknown clients", () => {
+  const log: LoggedRequest[] = [
+    { method: "GET", path: "/g-clean", ua: "npm/11.19.0 node/v24.21.0 linux x64" },
+    { method: "GET", path: "/", ua: "Go-http-client/1.1" },
+    { method: "GET", path: "/g-clean", ua: "" },
+    { method: "GET", path: "/tarballs/g-clean-1.0.0.tgz", ua: "Bun/1.4.2" },
+    { method: "GET", path: "/tarballs/x.tgz", ua: "stray/9" },
+  ];
+  expect(packumentHits(log)).toEqual(["/g-clean"]);
+  expect(tarballHits(log)).toEqual(["/tarballs/g-clean-1.0.0.tgz"]);
+});
 
 beforeAll(async () => {
   tmp = scratchDir("acceptance-426-");

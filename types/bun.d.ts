@@ -809,6 +809,7 @@ declare class Response {
 interface ServeRequest {
   readonly method: string;
   readonly url: string;
+  readonly headers: { get(name: string): string | null };
   text(): Promise<string>;
 }
 declare const crypto: {
