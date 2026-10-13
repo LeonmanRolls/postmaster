@@ -45,7 +45,7 @@ afterEach(() => {
 });
 
 function picture(args: string[], path: string): { code: number; out: string; err: string } {
-  const r = run("bun", [script, ...args], {
+  const r = run(process.execPath, [script, ...args], {
     cwd: dir,
     env: {
       PATH: path,
@@ -130,9 +130,10 @@ describe("story-picture", () => {
     stub("codex", CODEX_STUB);
     stub("convert", CONVERT_STUB);
     const out = join(dir, "sub", "pic.jpg");
+    // PATH is the stubs alone: a real ImageMagick 7 `magick` outranks the stub `convert`.
     const r = picture(
       ["--prompt", join(dir, "prompt.txt"), "--style", join(dir, "style.jpg"), "--out", out],
-      `${bin}:${process.env.PATH ?? ""}`,
+      bin,
     );
     expect(r.err).toBe("");
     expect(r.code).toBe(0);
