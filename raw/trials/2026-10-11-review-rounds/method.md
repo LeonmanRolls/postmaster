@@ -182,17 +182,19 @@ stood. Three did.
 
 **The rule of a run.** A run is pinned at dispatch to a postmaster commit, which its `run.json`
 records, and runs the loop that commit carries. Two changes are the boundaries. The first made the
-decision a script with a cap of three rounds (`46f02902`, in main by the merge of 29 September
-06:16 UTC, ticket #80). The second made the loop go on until a round finds more serious defects
-than the one before, with no cap (`c07793e6`, in main by the merge of 9 October 09:19 UTC, ticket
+decision a script with a cap of three rounds (`46f02902`, in main by the merge of pull request
+#139 on 29 September at 05:33 UTC, ticket #80). The second made the loop go on until a round finds more serious defects
+than the one before, with no cap (`c07793e6`, in main by the merge of pull request #385 on 9 October at 09:19 UTC, ticket
 #316). `loop-rule.ts` asks git whether each pinned commit has each change among its ancestors.
 Controls: each boundary holds itself and its parent does not; the three rules add to the 61 runs
 and 260 rounds, and to the 18 runs and 74 rounds of the later set.
 
 **The replay.** `rise.ts` reads a run's serious findings per round and finds the first round, from
-2, that logged more than the round before. That is where the rule in force would have stopped the
-loop for a ruling. Controls: `[3, 5]` rises at round 2 and `[5, 3, 0]` and `[4, 4, 0]` do not; the
-runs counted are the 61 and the rounds the 260.
+2, that logged more than the round before, where the rule would still have been running: a round
+after the first with none ends the loop, so a later rise is not one it reaches (#258 logged 4, 0, 1
+and would have ended at round 2). That is where the rule in force would have stopped the loop for
+a ruling. Controls: `[3, 5]` rises at round 2 and `[5, 3, 0]`, `[4, 4, 0]` and `[4, 0, 1]` do not;
+the runs counted are the 61 and the rounds the 260.
 
 **The date split and round 1 as a warning.** `rise.ts` splits group A at the first boundary and
 counts the runs with five or more serious findings in round 1. `render.ts` prints both, with the
@@ -200,8 +202,11 @@ comparisons of the preparation table, into `results/loop-rule.md`. Controls: the
 to the whole (34 runs, 169 rounds), and the whole equals the A row of `features.md`, as B does.
 
 **What this does not do.** The replay is after the fact, and no ruling was made at those rises.
-The date split moves together with the ticket, the flow and the reviewers. The facts about the
-loop come from `scripts/review-decide.ts` and the coachman runbook at the commits named.
+The date split moves together with the ticket, the flow and the reviewers. A run is on the side its
+pinned commit says, not its date, so a run dispatched in the hours before a merge can be on the
+earlier side. The facts about the loop come from the decision script (`scripts/review-decide.sh`
+at the first commit, `scripts/review-decide.ts` at the second) and the coachman runbook at the
+commits named.
 
 ## The readers
 
@@ -238,9 +243,13 @@ not computed: **ticket open**, **disagrees** and **kind**, defined in [rule.md](
 ## Limits
 
 - **61 runs, one repository, one flow that changed under them.** The groups A, B and C differ in
-  date, in reviewer lanes (luna and mimo, then luna and haiku, with opus and then sonnet on
-  security), in whether the cap of three rounds stood, and in who prepared the ticket. A
-  difference between them is not a measure of one change.
+  date, in reviewer lanes (luna and mimo in all of B, in 17 of A's 21 runs from the script and in 6
+  of C's 15; luna and haiku in 9 of C, with sonnet on security in 3 of them) and in who prepared
+  the ticket. The cap of three rounds stood for all of A and B and for 9 of C's 15, and group A is
+  two periods by the script. A difference between them is not a measure of one change.
+- **A size that is not known is left out and not counted as nothing.** The change commits of
+  #135 could not be traced, so it has no lines or files in the tables, as against the 0 the first
+  tables had.
 - **The finding lines are the coachman's verified list.** They say what the loop acted on and not
   what the reviewers wrote, and they are a floor where a run logged a round elsewhere. Five runs
   are filled from their own cards. Another run could be low where no record says so.

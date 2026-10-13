@@ -13,6 +13,7 @@ import {
   CHANGE_BANDS,
   CRITERIA_BANDS,
   changeBand,
+  changeSize,
   correlations,
   criteriaBand,
   eraOf,
@@ -69,7 +70,7 @@ export function inputsOf(rows: readonly RunRow[], traced: Traced): RunInput[] {
   const metaOf = new Map(traced.runs.map((m) => [m.run, m]));
   return rows.map((r) => {
     const meta = metaOf.get(r.run);
-    const change = (meta?.commits ?? []).filter((c) => c.phase === "change" && !c.onMain);
+    const size = changeSize(meta?.commits ?? []);
     const fix = (meta?.commits ?? []).filter((c) => c.phase.startsWith("fix") && !c.onMain);
     return {
       run: r.run,
@@ -83,8 +84,8 @@ export function inputsOf(rows: readonly RunRow[], traced: Traced): RunInput[] {
       checks: r.ticket ? r.ticket.checks : null,
       notes: r.ticket ? r.ticket.notes : null,
       chars: r.ticket?.chars ?? null,
-      changeLines: meta ? sum(change.map((c) => c.added + c.deleted)) : null,
-      changeFiles: meta ? new Set(change.flatMap((c) => c.paths)).size : null,
+      changeLines: size ? size.lines : null,
+      changeFiles: size ? size.files : null,
       fixLines: meta ? sum(fix.map((c) => c.added + c.deleted)) : null,
       dispatchedAt: r.dispatchedAt,
     };
@@ -1274,7 +1275,7 @@ export function loopRuleMarkdown(
       ]),
     ),
     "",
-    "## Group A split at 29 September, against B and C",
+    "## Group A split at the script of 29 September, against B and C",
     "",
     table(
       [
@@ -1306,19 +1307,19 @@ export function loopRuleMarkdown(
     preparationMarkdown(
       first.filter((r) => eraOf(r).startsWith("A") && ruleOfRun.get(r.run) !== "until-clean"),
       first.filter((r) => eraOf(r).startsWith("B")),
-      "one-part ticket from 29 September",
+      "one-part ticket from the script",
       "two-part ticket",
     ),
     preparationMarkdown(
       first.filter((r) => eraOf(r).startsWith("A") && ruleOfRun.get(r.run) === "until-clean"),
       first.filter((r) => eraOf(r).startsWith("A") && ruleOfRun.get(r.run) !== "until-clean"),
-      "one-part ticket before 29 September",
-      "one-part ticket from 29 September",
+      "one-part ticket before the script",
+      "one-part ticket from the script",
     ),
     preparationMarkdown(
       first.filter((r) => eraOf(r).startsWith("A") && ruleOfRun.get(r.run) !== "until-clean"),
       first.filter((r) => eraOf(r).startsWith("C")),
-      "one-part ticket from 29 September",
+      "one-part ticket from the script",
       "two-part ticket, single thread",
     ),
     "## Round 1 as a warning: five or more serious findings in round 1",
@@ -1338,11 +1339,11 @@ export function loopRuleMarkdown(
       [
         ...sets.map(([label, inputs]): [string, readonly RunInput[]] => [label, inputs]),
         [
-          "The 61 runs, before 29 September",
+          "The 61 runs, before the script",
           first.filter((r) => ruleOfRun.get(r.run) === "until-clean"),
         ],
         [
-          "The 61 runs, from 29 September",
+          "The 61 runs, from the script",
           first.filter((r) => ruleOfRun.get(r.run) !== "until-clean"),
         ],
       ].map(([label, inputs]) => {

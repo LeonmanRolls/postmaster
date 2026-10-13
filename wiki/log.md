@@ -18,8 +18,9 @@ it was pinned to. Replayed the rise rule over the runs, split group A at 29 Sept
 round 1 as a warning, all in `raw/trials/2026-10-11-review-rounds/results/loop-rule.md` with their
 controls. Changed [the review-rounds page](concepts/review-rounds.md): a third of the rounds are in
 the 13 earliest runs; the clerk's two-part ticket's apparent saving is much smaller against the
-one-part tickets from 29 September on; a sentence about the cap of three rounds that was wrong is
-corrected; and the loop's rule, the rise replay and what main now records are added. No rule,
+one-part tickets made under the script of 29 September; a sentence about the cap of three rounds
+that was wrong is corrected; a run with no traceable change commit is no longer counted as a change
+of no lines; and the loop's rule, the rise replay and what main now records are added. No rule,
 runbook, template or gate changed. No standing changed.
 
 ## [2026-10-11] query | why runs take so many review rounds, and what planning could cut

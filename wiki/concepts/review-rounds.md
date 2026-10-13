@@ -8,8 +8,9 @@ updated: 2026-10-13
 
 # Why runs take the review rounds they do, and what the planning stage could cut
 
-**The question.** A run's review leg goes on in rounds until a round finds nothing serious, and
-since 9 October a round that finds more than the one before stops it for a ruling.
+**The question.** A run's review leg goes on in rounds. Round 2 follows a round 1 that applied a
+fix, and after that a round with no serious finding ends the loop; since 9 October a round that
+finds more than the one before stops it for a ruling.
 [The review loop](review-loop.md) expected two or three. [The lane audit](several-lanes.md)
 read 18 runs, found a median of 4 and could not say why, since a ticket's size sets its first round
 and its rounds together. [#400, Research: why do runs take so many review rounds, and what could the
@@ -21,42 +22,40 @@ so that a loop could stop on its own, and what a loop would have to record to ap
 
 **Claim.** The rounds are a long tail. The median run took 3, 21 of the 61 took two or fewer, and
 the 12 runs of six or more, a fifth of the runs, hold 44% of the 260 rounds. A third of the rounds,
-89, are in the 13 runs pinned to a commit from before 29 September, under an earlier rule of the
-loop, and their first review found a median 8 serious findings against 2.5 in the 42 runs under the
-next rule. A run's rounds follow
-how many serious findings its first review makes (rank correlation 0.83), and across the 61 runs a
-ticket's criteria and the size of its change go with the rounds through that count. In the 15
-single-thread runs alone the lines changed keep a correlation of 0.64 with rounds when that count
-is held. Of the later findings that
-could be placed in the history, 44% were in the change when round 1 reviewed it and no round had
-named them, 48% are in lines an earlier round's fix wrote, and 5% are outside the change. By two
-readers' marks the ticket left a point open for 8% to 20% of the 309 marked later findings, most
-often a state or an input case: what a step does when it fails or is edited, or what an option
-means. No one cause a ticket could settle (open points, pairs that must agree, sites) accounts
-for more than about a twentieth of the rounds, and the three together, counted once, for 5% to 7%. At the five-criteria cut, the 32 runs
-with more criteria took 76 rounds above the median of the smaller tickets, counting only the runs
-above it (68 net), an upper bound. The booking clerk's two-part tickets carried a median four times the
-change of the one-part tickets. Against the one-part tickets from 29 September on they had the
+89, are in the 13 runs pinned to a commit from before the loop's script of 29 September, whose
+first review found a median 8 serious findings against 2.5 in the 42 runs under the next rule. A
+run's rounds follow how many serious findings its first review makes (rank correlation 0.83), and
+across the 61 runs a ticket's criteria and the size of its change go with the rounds through that
+count. In the 15 single-thread runs alone the lines changed keep a correlation of 0.64 with rounds
+when that count is held. Of the later findings that could be placed in the history, 44% were in the
+change when round 1 reviewed it and no round had named them, 48% are in lines an earlier round's
+fix wrote, and 5% are outside the change. By two readers' marks the ticket left a point open for
+8% to 20% of the 309 marked later findings, most often a state or an input case: what a step does
+when it fails or is edited, or what an option means. No one cause a ticket could settle (open
+points, pairs that must agree, sites) accounts for more than about a twentieth of the rounds, and
+the three together, counted once, for 5% to 7%. At the five-criteria cut, the 32 runs with more
+criteria took 76 rounds above the median of the smaller tickets, counting only the runs above it
+(68 net), an upper bound. The booking clerk's two-part tickets carried a median four times the
+change of the one-part tickets. Against the one-part tickets made under the script they had the
 same median 3 rounds, two fifths of the serious findings per changed line (a fifth of those of all
-the one-part tickets) and about half per criterion, which is not clearly different (p 0.12). A
-loop cannot yet tell from what it
-records that its next round would be clean: the best single signal reached about half, and a round
-of five or more serious findings was followed by a clean one in 1 of 51 cases in the 61 runs and
-in none of 9 in the later set. The rule in force since 9 October stops a loop for a ruling when a
-round finds more serious defects than the one before. Replayed over the 61 runs it stops 17 of
-them, which took a median 6 rounds against 3 for the other 44 and include 9 of the 12 runs of six
-or more.
+the one-part tickets) and about half per criterion, which is not clearly different (p 0.12). A loop
+cannot yet tell from what it records that its next round would be clean: the best single signal
+reached about half, and a round of five or more serious findings was followed by a clean one in 1
+of 51 cases in the 61 runs and in none of 9 in the later set. The rule in force since 9 October
+stops a loop for a ruling when a round finds more serious defects than the one before. Replayed
+over the 61 runs it stops 16 of them, which took a median 7 rounds against 3 for the other 45 and
+include 9 of the 12 runs of six or more.
 
-**Standing: mixed.** The counts are of this fleet's own records, with controls, and agree on finding
-lines with the lane audit's table for 17 of its 18 runs and with the 21-run count's for 17 of 21,
-the differences being named in the record: that part is **supported**. The later set read the same way agrees on
-the criteria count and on how weak the stop signals are, and differs on some single signals.
-The loop's own rule changed on 29 September and on 9 October, and the association between a
-ticket's preparation and its findings shrinks once the runs before 29 September are set apart.
-What the planning stage could remove is **claimed**. The association
-between a ticket's preparation and its findings is confounded with date, reviewers and the run's
-mode, the marks are two models' readings with the defect known, and the rounds a change would have
-removed are bounds, not experiments. The runs were not made to test any change.
+**Standing: mixed.** The counts are of this fleet's own records, with controls, and agree on
+finding lines with the lane audit's table for 17 of its 18 runs and with the 21-run count's for 17
+of 21, the differences being named in the record: that part is **supported**. The later set read
+the same way agrees on the criteria count and on how weak the stop signals are, and differs on
+some single signals. The loop's own rule changed on 29 September and on 9 October, and the
+association between a ticket's preparation and its findings shrinks once the 13 runs before the
+script are set apart. What the planning stage could remove is **claimed**. The association between
+a ticket's preparation and its findings is confounded with date, reviewers and the run's mode, the
+marks are two models' readings with the defect known, and the rounds a change would have removed
+are bounds, not experiments. The runs were not made to test any change.
 [@trials/2026-10-11-review-rounds/method.md]
 
 ## What was counted
@@ -72,12 +71,15 @@ count and not to choose among them [@trials/2026-10-11-review-rounds/method.md].
   94 findings in five runs are filled from the run's own card, and they cannot be traced one by one.
 - **A round** is the highest round any launch, harvest or finding line, or any review file, names.
 - **The loop's rule** is the one in the commit a run was pinned to at dispatch, and it changed
-  twice. Before 29 September a loop went on until a round found nothing, with a cap of three
-  rounds (13 of the 61 runs). From 29 September another round followed only a round with a
-  verified P1 or P2, and a fourth round needed a ruling (ticket #80; 42 of the 61 and 1 of the 18
-  later runs). From 9 October a loop goes on while a round finds no more serious defects than the
-  one before, a rise stops it for a ruling and there is no cap (ticket #316; 6 of the 61 and 17 of
-  the 18) [@trials/2026-10-11-review-rounds/results/loop-rule.md].
+  twice. Before the script of 29 September (merged 05:33 UTC) a loop went on until a round found
+  no verified gating finding and applied no change, with a cap of three rounds (13 of the 61
+  runs). Under the script, round 2 followed a round 1 that applied a fix, another round followed
+  only a round with a verified P1 or P2, and a fourth round needed a ruling (ticket #80; 42 of the
+  61 and 1 of the 18 later runs). From 9 October (merged 09:19 UTC) a loop goes on while a round
+  finds no more serious defects than the one before, a rise stops it for a ruling and there is no
+  cap (ticket #316; 6 of the 61 and 17 of the 18). A run is on the side its commit says, so one
+  dispatched in the hours before a merge can be on the earlier side
+  [@trials/2026-10-11-review-rounds/results/loop-rule.md].
 - **Where a line came from** is `git blame` at the snapshot the round reviewed, read against the
   commits the run made between rounds. The rule was written and committed before any finding was
   classified [@trials/2026-10-11-review-rounds/rule.md].
@@ -93,8 +95,8 @@ The groups below are by how the ticket was prepared and how the run was done. **
 one-part ticket, several workhorses. **B**: 12 runs, the booking clerk's two-part ticket with
 decisions, checks and verified facts, several workhorses. **C**: 15 runs, the two-part shape
 too (checks and verified facts in every one, decisions in 8) and a single thread, where the coachman
-writes the change. They differ in date as well: A holds 13 runs from before 29 September and 21
-from after, B is all from after, and 6 of C's 15 ran under the rule of 9 October.
+writes the change. They differ in date as well: A holds 13 runs from before the script and 21 from
+it, B is all from it, and 6 of C's 15 ran under the rule of 9 October.
 
 ## The rounds
 
@@ -110,19 +112,19 @@ from after, B is all from after, and 6 of C's 15 ran under the rule of 9 October
 **A long tail.** 7 runs had no serious finding in round 1. Of the 260 rounds, 211 come up to and
 including a run's last round with a serious finding and 49, 19%, come after it: the clean round
 that confirms the last fixes. 15 runs ended on a round that still held a serious finding. The tail is early: 5 of the 12 runs of
-six or more, and 58 of their 115 rounds, are among the 13 runs before 29 September, and the 7 of
-the 48 after it hold 33% of those runs' 171 rounds.
+six or more, and 58 of their 115 rounds, are among the 13 runs before the script, and the 7 of the
+48 after it hold 33% of those runs' 171 rounds.
 
 **The first round goes with the rounds.** Rounds follow round 1's serious findings with a rank
 correlation of 0.83. Across all of a run's serious findings the line is rounds = 1.8 + 0.19 ×
 findings by the Theil–Sen method and 2.1 + 0.18 × findings by least squares, so about five serious
 findings add a round. Criteria (rho 0.43 with rounds) and lines changed before review
-(0.23) are associated with rounds, and once round 1's count is held that falls to 0.08 and −0.01.
+(0.26) are associated with rounds, and once round 1's count is held that falls to 0.08 and −0.03.
 Ticket length has none (−0.01), and decisions and checks have none once the first round is held
 (−0.12 and −0.11). The pattern differs in the 15 single-thread runs, where lines changed goes with
-rounds at 0.64 and keeps 0.64 with round 1 held, against 0.12 and −0.09 in the 46 runs with several
-workhorses. Size alone does not explain the rounds: runs of under 400 changed lines took a
-median 3.5, of 400 to 999 took 2, and of 2,500 or more took 4
+rounds at 0.64 and keeps 0.64 with round 1 held, against 0.15 and −0.12 in the 45 runs with several
+workhorses and a known change. Size alone does not explain the rounds: runs of under 400 changed
+lines took a median 3, of 400 to 999 took 2, and of 2,500 or more took 4
 [@trials/2026-10-11-review-rounds/results/features.md].
 
 ## What the rounds after the first are made of
@@ -202,7 +204,7 @@ fewer took 3 [@trials/2026-10-11-review-rounds/results/features.md]. That is the
 five-criteria rule of 2026-10-10 makes, and the records fit it.
 
 **How the ticket was prepared.** Set against all the one-part tickets, the two-part ticket carried a
-median four times the change (the means are 1.3 times, and not distinguishable) and had a fifth of
+median four times the change (the means are 1.2 times, and not distinguishable) and had a fifth of
 the findings per line, and no fewer rounds that can be told from chance:
 
 | Measure, median (mean) | A, one-part | B, two-part | One-sided p that A is higher |
@@ -210,20 +212,20 @@ the findings per line, and no fewer rounds that can be told from chance:
 | rounds | 4.0 (5.0) | 3.0 (4.1) | 0.27 |
 | serious findings in round 1 | 4.0 (5.3) | 4.0 (4.4) | 0.31 |
 | acceptance criteria | 5.5 (6.1) | 14.5 (13.5) | 1.00 |
-| lines changed before review | 826 (2,627) | 3,383 (3,351) | 0.74 |
+| lines changed before review | 838 (2,707) | 3,383 (3,351) | 0.73 |
 | serious findings per criterion | 2.1 (2.4) | 0.4 (0.9) | 0.009 |
 | serious findings per 1,000 lines changed | 10.8 (17.1) | 2.0 (2.9) | 0.001 |
 
-Group A is two periods, and the split moves most of that gap. The 13 runs before 29 September took
-a median 5 rounds and found a median 8 serious findings in round 1. The 21 from it took 3 and 3.
+Group A is two periods, and the split moves most of that gap. The 13 runs before the script took a
+median 5 rounds and found a median 8 serious findings in round 1. The 21 from it took 3 and 3.
 Against those 21 the two-part ticket has the same median 3 rounds, about half the serious findings
 per criterion (0.4 against 0.8, p 0.12) and two fifths per 1,000 lines (2.0 against 5.2, p 0.010),
 on a change four times the size:
 
 | Group | Runs | Rounds, median (mean) | Round 1 serious, median | Serious in all, median | Per criterion, median | Per 1,000 lines, median |
 | --- | --- | --- | --- | --- | --- | --- |
-| A, before 29 September | 13 | 5.0 (6.8) | 8.0 | 18.0 | 3.0 | 19.3 |
-| A, from 29 September | 21 | 3.0 (3.8) | 3.0 | 5.0 | 0.8 | 5.2 |
+| A, before the script | 13 | 5.0 (6.8) | 8.0 | 18.0 | 3.0 | 19.3 |
+| A, from the script | 21 | 3.0 (3.8) | 3.0 | 5.0 | 0.8 | 5.2 |
 | B, two-part ticket | 12 | 3.0 (4.1) | 4.0 | 7.0 | 0.4 | 2.0 |
 | C, two-part ticket, single thread | 15 | 2.0 (2.8) | 1.0 | 1.0 | 0.3 | 1.3 |
 
@@ -233,18 +235,18 @@ Group C, with the two-part shape and a single thread, had a median of 2 rounds a
 findings per 1,000 lines; set against the 21, its rounds, findings per criterion and findings in
 all differ at p 0.08 to 0.12 and its findings per 1,000 lines at p 0.010. Every two-part ticket
 carries its checks and its verified facts, so their separate effect cannot be read here. Group B
-differs from A's later runs in reviewer lanes and in who prepared the ticket, and C in mode and in
-six runs under the rule of 9 October. The association is real in the counts, is much smaller than
-the table above shows, and is not shown to be the ticket's.
+differs from A's later runs in who prepared the ticket, and C in mode, in reviewer lanes (9 of its
+15 had haiku in place of mimo) and in six runs under the rule of 9 October. The association is real
+in the counts, is much smaller than the table above shows, and is not shown to be the ticket's.
 
 ## When a loop could stop
 
 The halting problem is only the framing: no method decides in general whether a change has a
 defect left. The question is which observable signs predict, in these runs, that the next round
 finds none, and what a loop would have to record to use them. The loop stops on the round itself:
-a round with no serious finding ends it. Since 9 October it also stops for a ruling when a round
-finds more serious defects than the one before, and before that a cap of three rounds did
-(above). The signal tables below are mostly of runs under the first two rules, 55 of the 61; 17 of
+after round 1, a round with no serious finding ends it. Since 9 October it also stops for a ruling
+when a round finds more serious defects than the one before, and before that a cap of three rounds
+did (above). The signal tables below are mostly of runs under the first two rules, 55 of the 61; 17 of
 the 18 later runs ran under the third.
 
 **The ceiling.** The 49 rounds after a run's last serious finding are 19% of the rounds. A round
@@ -275,21 +277,24 @@ and 56 in the later set, with the next round clean 23% and 27% of the time:
   Others look useful in one set and do not carry: every finding in the change and not named before
   was 50% and then 17%, and at least half in lines an earlier fix wrote 20% and then 38%.
 - **The candidate rules of the convergence page do not do it.** A falling count (rule 4) was 21%
-  against 23%. A signal near rule 5's, at least half the findings in lines an earlier fix wrote,
+  against 23%. The rule now in force is the other way round, a fall goes on and a rise stops it,
+  and is tried below. A signal near rule 5's, at least half the findings in lines an earlier fix wrote,
   was 20% against 28% in the 61 runs and 38% against 23% in the later set, so it does not hold the
   same way twice. The reviewers' overlap (rule 8) had the right sign, 32% against 18%, and is
   weak. Its estimate ran at about two thirds of what later rounds found in the change (102
   estimated unseen, 147 found), and at a fifth in the later set (11 against 56). In 23 of the 53
   runs the lanes had no finding in common, which makes the estimate large and uncertain: those
   runs give 55 of the 102.
-- **The rule now in force, replayed.** It goes on while a round finds no more serious defects than
-  the one before, stops for a ruling on a rise and ends on a round with none. Over the 61 runs a
-  rise came in 17: first at round 2 in 4, round 3 in 4, round 4 in 3 and round 5 or later in 6.
-  Those runs took a median 6 rounds against 3 for the 44 that never rose, 9 of the 12 runs of six
-  or more are among them, and 61 of the 260 rounds came after a first rise. In the later set, most
-  of it run under the rule, 6 of 18 rose, with all 4 runs of six or more among them. A rise marks a
-  run that will be long. It is not a sign that the next round is clean, and what a ruling at that
-  point would change was not tried [@trials/2026-10-11-review-rounds/results/loop-rule.md].
+- **The rule now in force, replayed.** After round 1, a round that finds no more serious defects
+  than the one before goes on, a round with none ends the loop and a rise stops it for a ruling.
+  Over the 61 runs a rise came in 16: first at round 2 in 4, round 3 in 3, round 4 in 3 and round
+  5 or later in 6. Those runs took a median 7 rounds against 3 for the 45 that never rose. 9 of the
+  12 runs of six or more are among them and 7 of the 16 took fewer than six; a run that first
+  rises at round k has at least k rounds by construction. 61 of the 260 rounds came after a first
+  rise. In the later set, 17 of 18 run under the rule, 6 rose, among them all 4 runs of six or
+  more and 2 that took 4. A rise is not a sign that the next round is clean, and what a ruling at
+  that point would change was not tried
+  [@trials/2026-10-11-review-rounds/results/loop-rule.md].
 - **What does predict is going on.** After a round of five or more serious findings the next round
   was clean once in 51 transitions in the 61 runs, and in none of 9 in the later set, where the
   signal was tried fresh. After two, three and four findings 25%, 18% and 17% were in the 61 runs
@@ -297,7 +302,7 @@ and 56 in the later set, with the next round clean 23% and 27% of the time:
   yet a reason to stop.
 - **Round 1 shows it first.** Five or more serious findings in round 1 came in 22 of the 61 runs,
   which hold 147 of the 260 rounds and 10 of the 12 runs of six or more; they took a median 5
-  rounds against 2. Of the 48 runs from 29 September, 13 had it, with 76 of those runs' 171
+  rounds against 2. Of the 48 runs from the script, 13 had it, with 76 of those runs' 171
   rounds and 6 of their 7 runs of six or more. In the later set 5 of 18 had it, with all 4 of the
   runs of six or more [@trials/2026-10-11-review-rounds/results/loop-rule.md].
 - **Four rules, tried after each round of each run.** At most one finding with fixes of 30 lines or
@@ -370,7 +375,7 @@ points from at least one reader 8 and 17, 7%. With the findings outside the chan
 ticket does not settle, 7 and 14, or 10 and 20 [@trials/2026-10-11-review-rounds/results/marks.md].
 No one cause is large, and rounds follow the count of serious findings in total. That count is
 lower per changed line in both groups with the clerk's two-part ticket than in the one-part
-tickets from 29 September (2.0 and 1.3 against 5.2, p 0.010 each), and by about half or more per
+tickets from the script (2.0 and 1.3 against 5.2, p 0.010 each), and by about half or more per
 criterion (0.4 and 0.3 against 0.8, p 0.12 and 0.10). In total it is lower in C (a median 1.0
 serious finding against 5.0, p 0.08, with lines changed alike) and not in B (7.0), where the work
 was four times the size. Whether the ticket is the reason, or the date, the lanes and the mode,
@@ -392,8 +397,10 @@ the records cannot say.
   differ from the rest in more than the rule: their first review found a median 8 serious findings
   against 2.5 in the 42 under the next rule. Date, ticket, flow and rule moved together, so the
   records cannot say which of them made the rounds fewer.
-- **The replay of the rule in force** is after the fact. A ruling at a rise might have changed what
-  followed, and none was made.
+- **The replay of the rule in force** is after the fact. In the 61 runs none of the rising runs
+  ran under the rule, so no ruling was made at those rises and one might have changed what
+  followed. In the later set 5 of the 6 that rose ran under it, so a ruling was due at each, and
+  what followed is what it led to.
 - **The stop signals** are tried after the fact. A transition exists only where the loop ran
   another round, because the round before held a serious finding, or round 1 applied a fix, or the
   user ruled so. The later set is two days of runs, 17 single thread, and was not used to choose a

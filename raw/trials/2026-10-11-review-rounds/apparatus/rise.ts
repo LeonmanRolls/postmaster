@@ -8,17 +8,18 @@ export type LoopRule = "until-clean" | "scripted-cap" | "rise";
 export const LOOP_RULES: ReadonlyArray<{ rule: LoopRule; label: string }> = [
   {
     rule: "until-clean",
-    label: "Goes on until a round finds nothing, a cap of three rounds, before 29 September",
+    label:
+      "Goes on until a round finds nothing and applies no change, a cap of three rounds, before the script of 29 September",
   },
   {
     rule: "scripted-cap",
     label:
-      "Another round only after a round with a verified P1 or P2, a cap of three rounds (#80, from 29 September)",
+      "Round 2 after a round 1 that applied a fix, then another round only after a round with a verified P1 or P2, a cap of three rounds (the script of #80, merged 29 September)",
   },
   {
     rule: "rise",
     label:
-      "Goes on while a round finds no more than the one before, a rise stops it for a ruling, no cap (#316, from 9 October)",
+      "Goes on while a round finds no more than the one before, a rise stops it for a ruling, no cap (#316, merged 9 October)",
   },
 ];
 
@@ -29,10 +30,16 @@ export function ruleOf(holdsScripted: boolean | null, holdsRise: boolean | null)
   return holdsScripted ? "scripted-cap" : "until-clean";
 }
 
-/** The first round, counted from 2, that logged more serious findings than the round before. */
+/**
+ * The first round, counted from 2, that logged more serious findings than the round before, where
+ * the rule would still have been running: a round after the first with none ends the loop, so a
+ * later rise is not one the rule reaches.
+ */
 export function firstRise(counts: readonly number[]): number | null {
   for (let i = 1; i < counts.length; i++) {
-    if ((counts[i] ?? 0) > (counts[i - 1] ?? 0)) return i + 1;
+    const here = counts[i] ?? 0;
+    if (here === 0) return null;
+    if (here > (counts[i - 1] ?? 0)) return i + 1;
   }
   return null;
 }
@@ -159,13 +166,10 @@ export function groupRows(
   const sets: Array<[string, RunInput[]]> = [
     ["A, all", inputs.filter(isA)],
     [
-      "A, before 29 September",
+      "A, before the script",
       inputs.filter((r) => isA(r) && ruleOfRun.get(r.run) === "until-clean"),
     ],
-    [
-      "A, from 29 September",
-      inputs.filter((r) => isA(r) && ruleOfRun.get(r.run) !== "until-clean"),
-    ],
+    ["A, from the script", inputs.filter((r) => isA(r) && ruleOfRun.get(r.run) !== "until-clean")],
     ["B", inputs.filter((r) => eraOf(r).startsWith("B"))],
     ["C", inputs.filter((r) => eraOf(r).startsWith("C"))],
   ];

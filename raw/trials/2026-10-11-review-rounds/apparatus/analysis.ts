@@ -22,6 +22,27 @@ export type RunInput = {
   dispatchedAt: string | null;
 };
 
+/**
+ * The lines and files of the change a run made before its first review, from the commits traced to
+ * it. Null where none could be traced: a size that is not known is not a size of nothing.
+ */
+export function changeSize(
+  commits: ReadonlyArray<{
+    phase: string;
+    onMain: boolean;
+    added: number;
+    deleted: number;
+    paths: readonly string[];
+  }>,
+): { lines: number; files: number } | null {
+  const change = commits.filter((c) => c.phase === "change" && !c.onMain);
+  if (change.length === 0) return null;
+  return {
+    lines: sum(change.map((c) => c.added + c.deleted)),
+    files: new Set(change.flatMap((c) => c.paths)).size,
+  };
+}
+
 /** The three groups the runs fall in by how their ticket was prepared and what mode they ran in. */
 export type Era =
   | "A one-part ticket, several workhorses"

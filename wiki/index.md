@@ -161,15 +161,16 @@ Why the design is shaped as it is.
   **mixed**. Of 61 runs the median took 3 rounds, and a fifth of them hold 44% of the rounds, a
   third of all rounds being in the 13 runs before the loop's rule changed on 29 September. Rounds
   follow the first round's serious findings (rho 0.83), and across the 61 runs criteria and change
-  size go with them through it, though not in the 15 single-thread runs. Of 335 later findings that
+  size go with them through it, except that in the 15 single-thread runs the change's size keeps a
+  link of 0.64 with rounds. Of 335 later findings that
   could be placed, 44% were in the change and not named before and 48% are in lines an earlier fix
   wrote. Two readers say a ticket left a point open for 8% to 20% of the marked later findings, most
   often a state or an input case. No one cause a ticket could settle accounts for more than about a
   twentieth of the rounds, and what a ticket's preparation seems to save shrinks once the runs
-  before 29 September are set apart. Runs with more than five criteria took 76 rounds above the
+  before the script of 29 September are set apart. Runs with more than five criteria took 76 rounds above the
   smaller tickets' median (68 net). No stop signal tried predicts a clean next round above about
-  half; the rise rule in force since 9 October, replayed, marks 17 of the 61 runs, which took a
-  median 6 rounds against 3. From
+  half; the rise rule in force since 9 October, replayed, marks 16 of the 61 runs, which took a
+  median 7 rounds against 3. From
   [#400](https://github.com/brindlewick/postmaster/issues/400); nothing was changed, and six
   changes are proposed.
 - [Each project defines how a change to it is verified](concepts/verification.md): **claimed**.

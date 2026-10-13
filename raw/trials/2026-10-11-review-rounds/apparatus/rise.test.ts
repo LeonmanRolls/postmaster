@@ -26,6 +26,10 @@ describe("firstRise", () => {
   test("a rise from none counts", () => {
     expect(firstRise([0, 1])).toBe(2);
   });
+  test("a rise after a round with none is not one the rule reaches", () => {
+    expect(firstRise([4, 0, 1])).toBeNull();
+    expect(firstRise([4, 3, 0, 2])).toBeNull();
+  });
 });
 
 describe("ruleOf", () => {
@@ -161,12 +165,12 @@ describe("groupRows", () => {
     const rows = groupRows(inputs, rules);
     const get = (label: string) => rows.find((r) => r.label === label);
     expect(get("A, all")?.runs).toBe(2);
-    expect(get("A, before 29 September")?.runs).toBe(1);
-    expect(get("A, from 29 September")?.runs).toBe(1);
+    expect(get("A, before the script")?.runs).toBe(1);
+    expect(get("A, from the script")?.runs).toBe(1);
     expect(get("B")?.runs).toBe(1);
     expect(get("C")?.runs).toBe(1);
     expect(
-      (get("A, before 29 September")?.rounds ?? 0) + (get("A, from 29 September")?.rounds ?? 0),
+      (get("A, before the script")?.rounds ?? 0) + (get("A, from the script")?.rounds ?? 0),
     ).toBe(get("A, all")?.rounds ?? -1);
   });
   test("computes the per-criterion and per-line figures and skips unknown sizes", () => {
