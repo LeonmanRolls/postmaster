@@ -21,8 +21,8 @@
 //     call        a name followed by ()
 //     identifier  a snake_case identifier
 //     npm-name    a ## Libraries list line whose name is not an exact npm package name. A
-//                 valid name is exempt from the file and identifier rules; the version and
-//                 the vetting words after it stay under every plain rule.
+//                 valid name is exempt from the file, identifier, path and flag rules; the
+//                 version and the vetting words after it stay under every plain rule.
 //     mark        a decision whose mark is not (proposed) or (given by the user)
 //   in the agents' part (it must follow from the plain part)
 //     part        no ### Checks, ### Technical notes or ### Verified at <hex sha>; or no numbered
@@ -191,7 +191,7 @@ function plainLineFindings(
   line: string,
   n: number,
   out: Finding[],
-  fileIdentExempt: { a: number; b: number } | null = null,
+  nameExempt: { a: number; b: number } | null = null,
 ): void {
   const tick = line.indexOf(TICK);
   if (tick >= 0) {
@@ -218,9 +218,9 @@ function plainLineFindings(
       const b = a + m[0].length;
       if (overlaps(claimed, a, b)) continue;
       if (
-        fileIdentExempt !== null &&
-        (kind === "file" || kind === "identifier") &&
-        overlaps([[fileIdentExempt.a, fileIdentExempt.b]], a, b)
+        nameExempt !== null &&
+        (kind === "file" || kind === "identifier" || kind === "path" || kind === "flag") &&
+        overlaps([[nameExempt.a, nameExempt.b]], a, b)
       ) {
         continue;
       }
