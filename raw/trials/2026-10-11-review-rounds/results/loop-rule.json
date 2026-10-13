@@ -1,0 +1,449 @@
+{
+ "boundaries": {
+  "scripted": "46f02902c766ecab523d0c7948e16b7945870a85",
+  "rise": "c07793e6a9eef10b8006f19cb90189177cd1db4b"
+ },
+ "controls": {
+  "scriptedHoldsItself": true,
+  "scriptedParentHoldsIt": false,
+  "riseHoldsItself": true,
+  "riseParentHoldsIt": false
+ },
+ "runs": [
+  {
+   "run": "18",
+   "pin": "bb782a97",
+   "rule": "until-clean"
+  },
+  {
+   "run": "38",
+   "pin": "7e6a7151",
+   "rule": "until-clean"
+  },
+  {
+   "run": "57",
+   "pin": "c994e8f2",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "75",
+   "pin": "ffe37821",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "80",
+   "pin": "7e6a7151",
+   "rule": "until-clean"
+  },
+  {
+   "run": "81",
+   "pin": "b627af7c",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "85",
+   "pin": "dfb93110",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "92",
+   "pin": "ffe37821",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "98",
+   "pin": "e902378f",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "102",
+   "pin": "ffe37821",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "105",
+   "pin": "bb782a97",
+   "rule": "until-clean"
+  },
+  {
+   "run": "106",
+   "pin": "baa28c14",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "108",
+   "pin": "0b02eefc",
+   "rule": "until-clean"
+  },
+  {
+   "run": "109",
+   "pin": "bb782a97",
+   "rule": "until-clean"
+  },
+  {
+   "run": "110",
+   "pin": "ffe37821",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "112",
+   "pin": "bb782a97",
+   "rule": "until-clean"
+  },
+  {
+   "run": "113",
+   "pin": "bb782a97",
+   "rule": "until-clean"
+  },
+  {
+   "run": "114",
+   "pin": "bb782a97",
+   "rule": "until-clean"
+  },
+  {
+   "run": "116",
+   "pin": "7e6a7151",
+   "rule": "until-clean"
+  },
+  {
+   "run": "121",
+   "pin": "7e6a7151",
+   "rule": "until-clean"
+  },
+  {
+   "run": "122",
+   "pin": "baa28c14",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "124",
+   "pin": "6e9f87cc",
+   "rule": "until-clean"
+  },
+  {
+   "run": "132",
+   "pin": "07b463dd",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "135",
+   "pin": "6e9f87cc",
+   "rule": "until-clean"
+  },
+  {
+   "run": "158",
+   "pin": "73fca4e4",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "159",
+   "pin": "73fca4e4",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "160",
+   "pin": "ffe37821",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "163",
+   "pin": "601bfd9c",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "165",
+   "pin": "997f1901",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "170",
+   "pin": "ffe37821",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "179",
+   "pin": "653ba2e8",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "182",
+   "pin": "0620bfc9",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "200",
+   "pin": "d06ea3a7",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "201",
+   "pin": "56b7a04c",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "202",
+   "pin": "40d50ce0",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "216",
+   "pin": "40d50ce0",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "217",
+   "pin": "40d50ce0",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "218",
+   "pin": "0620bfc9",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "227",
+   "pin": "40d50ce0",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "232",
+   "pin": "49734805",
+   "rule": "rise"
+  },
+  {
+   "run": "233",
+   "pin": "67d4ae25",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "237",
+   "pin": "40d50ce0",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "251",
+   "pin": "ede70e22",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "252",
+   "pin": "93d8b862",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "258",
+   "pin": "5c58c834",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "259",
+   "pin": "5c58c834",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "265",
+   "pin": "5037e714",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "266",
+   "pin": "af47492a",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "268",
+   "pin": "af47492a",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "270",
+   "pin": "393f263a",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "281",
+   "pin": "06fcced3",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "316",
+   "pin": "06fcced3",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "318",
+   "pin": "57d47032",
+   "rule": "rise"
+  },
+  {
+   "run": "319",
+   "pin": "57d47032",
+   "rule": "rise"
+  },
+  {
+   "run": "323",
+   "pin": "501d2064",
+   "rule": "rise"
+  },
+  {
+   "run": "324",
+   "pin": "49734805",
+   "rule": "rise"
+  },
+  {
+   "run": "325",
+   "pin": "49734805",
+   "rule": "rise"
+  },
+  {
+   "run": "326",
+   "pin": "57d47032",
+   "rule": "rise"
+  },
+  {
+   "run": "327",
+   "pin": "5af2bbf9",
+   "rule": "rise"
+  },
+  {
+   "run": "328",
+   "pin": "98b52d7d",
+   "rule": "rise"
+  },
+  {
+   "run": "332",
+   "pin": "8baf5af9",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "335",
+   "pin": "8baf5af9",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "337",
+   "pin": "3850c8a1",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "338",
+   "pin": "5cfe615f",
+   "rule": "rise"
+  },
+  {
+   "run": "339",
+   "pin": "377f46fd",
+   "rule": "rise"
+  },
+  {
+   "run": "340",
+   "pin": "3850c8a1",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "342",
+   "pin": "3850c8a1",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "344",
+   "pin": "49734805",
+   "rule": "rise"
+  },
+  {
+   "run": "347",
+   "pin": "443e07e6",
+   "rule": "scripted-cap"
+  },
+  {
+   "run": "348",
+   "pin": "49734805",
+   "rule": "rise"
+  },
+  {
+   "run": "352",
+   "pin": "6ce9f749",
+   "rule": "rise"
+  },
+  {
+   "run": "355",
+   "pin": "291ad79f",
+   "rule": "rise"
+  },
+  {
+   "run": "373",
+   "pin": "02a68f9b",
+   "rule": "rise"
+  },
+  {
+   "run": "374",
+   "pin": "e20eb957",
+   "rule": "rise"
+  },
+  {
+   "run": "375",
+   "pin": "453e9f7b",
+   "rule": "rise"
+  },
+  {
+   "run": "379",
+   "pin": "c4a9ab00",
+   "rule": "rise"
+  },
+  {
+   "run": "390",
+   "pin": "d99b7112",
+   "rule": "rise"
+  },
+  {
+   "run": "391",
+   "pin": "bbfce1b4",
+   "rule": "rise"
+  },
+  {
+   "run": "407",
+   "pin": "57d47032",
+   "rule": "rise"
+  },
+  {
+   "run": "408",
+   "pin": "6ff6bc0f",
+   "rule": "rise"
+  },
+  {
+   "run": "409",
+   "pin": "6ff6bc0f",
+   "rule": "rise"
+  },
+  {
+   "run": "414",
+   "pin": "bbfce1b4",
+   "rule": "rise"
+  },
+  {
+   "run": "425",
+   "pin": "89cbb633",
+   "rule": "rise"
+  },
+  {
+   "run": "426",
+   "pin": "6ff6bc0f",
+   "rule": "rise"
+  },
+  {
+   "run": "429",
+   "pin": "6ff6bc0f",
+   "rule": "rise"
+  },
+  {
+   "run": "466",
+   "pin": "d99b7112",
+   "rule": "rise"
+  },
+  {
+   "run": "467",
+   "pin": "d99b7112",
+   "rule": "rise"
+  }
+ ]
+}
