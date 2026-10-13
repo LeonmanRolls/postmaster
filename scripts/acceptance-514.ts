@@ -354,6 +354,174 @@ export function makeScratch(): Scratch {
   return { dir, repo, branch, head, mb, ticketFile, storyDir, adapter, image, ghDir, ghLog };
 }
 
+/** A removed address, split so no email literal sits in the source. */
+export const SCRUB_ADDR = "jane@acme-corp" + ".example.dev";
+
+/** One file, one removed line holding the address, one kept line. */
+export const SCRUB_BASE = ["owner: " + SCRUB_ADDR, "keep"];
+export const SCRUB_HEAD = ["keep"];
+
+/** The change story for the scrub repo: the removed line read on a step. */
+export const STORY_SCRUB: unknown = {
+  repoUrl: "https://github.com/brindlewick/postmaster",
+  ticket: 514,
+  base: "main",
+  head: "scrubfeat",
+  status: "unpushed",
+  title: "Story of a removed address",
+  sections: [
+    { id: "open", label: "Start", title: "The branch" },
+    { id: "c1", label: "C1", title: "First criterion" },
+    { id: "c2", label: "C2", title: "Second criterion" },
+    { id: "left", label: "End", title: "What the steps leave out" },
+  ],
+  scenes: [
+    {
+      id: "hero",
+      kind: "image",
+      label: "Branch scrubfeat",
+      chip: "for your reading",
+      prompt: "art/opening-prompt.txt",
+      alt: "A branch told before it is pushed.",
+    },
+    {
+      id: "ticket",
+      kind: "doc",
+      from: "issue",
+      number: 514,
+      label: "Ticket #514",
+      chip: "what you sign",
+      cut: "## For the agents",
+    },
+    {
+      id: "d",
+      kind: "diagram",
+      label: "The change",
+      chip: "diagram",
+      svg: "diagrams/d.svg",
+      states: ["before", "after"],
+      caption: "What the branch touches.",
+    },
+    { id: "cfg", kind: "head", file: "cfg.ts", from: 1, to: 1 },
+    { id: "left", kind: "leftovers", label: "What the steps leave out", chip: "list" },
+  ],
+  steps: [
+    {
+      id: "title",
+      kind: "title",
+      scene: "hero",
+      section: "open",
+      title: "A branch, told before it is pushed",
+      text: "This is the story of a branch before it is pushed: what it changed, drawn first and then shown in code, one part at a time. Scroll, and the panel follows the step in the box.",
+    },
+    {
+      id: "criteria",
+      scene: "ticket",
+      section: "open",
+      find: [FIND_C1, FIND_C2],
+      excerpt: true,
+      title: "Two things had to be true",
+      text: "The ticket names two criteria. Each gets its own section below, in order: a drawing of the part first, then the code that makes it true.",
+    },
+    {
+      id: "c1",
+      kind: "criterion",
+      scene: "ticket",
+      section: "c1",
+      find: [FIND_C1],
+      excerpt: true,
+      title: "Steps with their drawings",
+      text: "The first criterion asks that the edited calculation and the added notes read as steps, each drawn before it is shown.",
+    },
+    {
+      id: "c1d",
+      scene: "d",
+      section: "c1",
+      state: "before",
+      title: "What the branch touches",
+      text: "One line out, nothing added. The next step shows the line that went.",
+    },
+    {
+      id: "c1code",
+      scene: "cfg",
+      section: "c1",
+      focus: [[1, 1]],
+      title: "The removed line",
+      text: "The owner line as it was before the change, sitting where it was.",
+    },
+    {
+      id: "c2",
+      kind: "criterion",
+      scene: "ticket",
+      section: "c2",
+      find: [FIND_C2],
+      excerpt: true,
+      title: "Nothing left out",
+      text: "The second criterion asks that every touched file is on a step or in the closing list at the end.",
+    },
+    {
+      id: "c2d",
+      scene: "d",
+      section: "c2",
+      state: "after",
+      title: "The rest of the change",
+      text: "There is nothing else: one file, one line gone.",
+    },
+    {
+      id: "end",
+      scene: "left",
+      section: "left",
+      title: "What the steps leave out",
+      text: "{shown} of the {changed} changed lines are on the steps above. The other {left} are here, file by file, with the files no step shows.",
+    },
+  ],
+};
+
+/**
+ * The scrub repository: no remote, a base commit holding one file with an
+ * address line, a branch removing that line. The ticket, stubs and story
+ * ride along as the scratch's do.
+ */
+export function makeEmailScratch(): Scratch {
+  const dir = mkdtempSync(join(tmpdir(), "story-514-scrub-"));
+  const repo = join(dir, "repo");
+  mkdirSync(repo, { recursive: true });
+  const branch = "scrubfeat";
+  git(repo, ["init", "-b", "main", "."]);
+  git(repo, ["config", "user.name", "story-fixture"]);
+  git(repo, ["config", "user.email", "story-fixture@example.invalid"]);
+  git(repo, ["config", "commit.gpgsign", "false"]);
+  writeFileSync(join(repo, "cfg.ts"), `${SCRUB_BASE.join("\n")}\n`);
+  git(repo, ["add", "-A"]);
+  git(repo, ["commit", "-m", "base"]);
+  git(repo, ["checkout", "-b", branch]);
+  writeFileSync(join(repo, "cfg.ts"), `${SCRUB_HEAD.join("\n")}\n`);
+  git(repo, ["add", "-A"]);
+  git(repo, ["commit", "-m", "the change"]);
+  const head = git(repo, ["rev-parse", branch]).trim();
+  const mb = git(repo, ["merge-base", "main", branch]).trim();
+
+  const ticketFile = join(dir, "ticket-514.json");
+  writeFileSync(ticketFile, JSON.stringify(TICKET_514));
+  const storyDir = join(dir, "story514");
+  mkdirSync(join(storyDir, "diagrams"), { recursive: true });
+  mkdirSync(join(storyDir, "art"), { recursive: true });
+  writeFileSync(join(storyDir, "story.json"), `${JSON.stringify(STORY_SCRUB, null, 2)}\n`);
+  writeFileSync(join(storyDir, "diagrams", "d.svg"), DRAWING_SVG);
+  writeFileSync(join(storyDir, "art", "opening-prompt.txt"), PROMPT_514);
+  const adapter = join(dir, "stub-adapter.sh");
+  writeFileSync(adapter, STUB_ADAPTER_SH);
+  chmodSync(adapter, 0o755);
+  const image = join(dir, "known.png");
+  writeFileSync(image, Buffer.from(KNOWN_PNG_B64, "base64"));
+  const ghDir = join(dir, "gh-stub");
+  mkdirSync(ghDir, { recursive: true });
+  writeFileSync(join(ghDir, "gh"), GH_STUB_SH);
+  chmodSync(join(ghDir, "gh"), 0o755);
+  const ghLog = join(dir, "gh-calls.log");
+  return { dir, repo, branch, head, mb, ticketFile, storyDir, adapter, image, ghDir, ghLog };
+}
+
 export function cleanup(dir: string): void {
   rmSync(dir, { recursive: true, force: true });
 }
@@ -509,14 +677,18 @@ export function expectedChange(repo: string, mb: string, head: string): Expected
   let minus = "";
   let oldNo = 0;
   let newNo = 0;
+  let inHunk = false;
+  const tab = String.fromCharCode(9);
+  const pathOf = (line: string): string => line.slice(4).split(tab)[0] ?? "";
   for (const line of text.split("\n")) {
     if (line.startsWith("diff --git ")) {
       cur = null;
       minus = "";
-    } else if (line.startsWith("--- ")) {
-      minus = line.slice(4);
-    } else if (line.startsWith("+++ ")) {
-      const p = line.slice(4);
+      inHunk = false;
+    } else if (line.startsWith("--- ") && !inHunk) {
+      minus = pathOf(line);
+    } else if (line.startsWith("+++ ") && !inHunk) {
+      const p = pathOf(line);
       if (p === "/dev/null") cur = minus === "/dev/null" ? null : minus.replace(/^a\//u, "");
       else cur = p.replace(/^b\//u, "");
     } else if (line.startsWith("@@ ") && cur !== null) {
@@ -525,10 +697,11 @@ export function expectedChange(repo: string, mb: string, head: string): Expected
       if (!m) throw new Error(`bad hunk header: ${line}`);
       oldNo = Number(m[1]);
       newNo = Number(m[3]);
-    } else if (line.startsWith("+") && !line.startsWith("+++") && cur !== null) {
+      inHunk = true;
+    } else if (line.startsWith("+") && cur !== null && inHunk) {
       added.add(`${cur}:+${newNo}`);
       newNo += 1;
-    } else if (line.startsWith("-") && !line.startsWith("---") && cur !== null) {
+    } else if (line.startsWith("-") && cur !== null && inHunk) {
       removed.add(`${cur}:-${oldNo}`);
       oldNo += 1;
     }

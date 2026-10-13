@@ -23,6 +23,8 @@ import {
   CALC_BASE,
   CALC_HEAD,
   changeRows,
+  FIND_C1,
+  FIND_C2,
   cleanup,
   codeText,
   coverageMissingChange,
@@ -32,6 +34,7 @@ import {
   ghCalls,
   LATER_MARKER,
   launchFirefox,
+  makeEmailScratch,
   makeScratch,
   measureRender,
   nameStatus,
@@ -53,7 +56,16 @@ import { run } from "./lib/proc.ts";
 
 interface StoryJson {
   sections: { id: string }[];
-  steps: { id: string; section: string }[];
+  steps: {
+    id: string;
+    section: string;
+    scene: string;
+    title: string;
+    text: string;
+    focus?: number[][];
+    find?: string[];
+  }[];
+  scenes: { id: string; kind: string; file?: string; from?: number; to?: number }[];
 }
 
 /** A copy of the scratch story with one edit, for the refusal controls. */
@@ -254,6 +266,141 @@ describe("C2: a change's story has a section for each criterion", () => {
       expect(b.code).toBe(0);
       if (!b.html) throw new Error("c2full build wrote no page");
       expect(navLabels(b.html)).toEqual(["Start", "C1", "C2", "End"]);
+    } finally {
+      cleanup(s.dir);
+    }
+  });
+});
+
+describe("change-story refusals are pinned end to end", () => {
+  test("a binary file as a code scene is refused, writing nothing", () => {
+    const s = makeScratch();
+    try {
+      const storyDir = variantStory(s.dir, s.storyDir, "story-bin", (story) => {
+        story.scenes.push({ id: "bin", kind: "head", file: "blob.bin", from: 1, to: 1 });
+        story.steps.push({
+          id: "binx",
+          scene: "bin",
+          section: "c2",
+          title: "Binary",
+          text: "A binary file shown as code.",
+          focus: [[1, 1]],
+        });
+      });
+      const b = runChangeBuild(s, "refbin", storyDir);
+      expect(b.code).toBe(1);
+      expect(b.err).toContain("is a binary file, and binary files are named in the closing list");
+      expect(b.html).toBeNull();
+      expect(b.sheet).toBeNull();
+      expect(b.record).toBeNull();
+      expect(existsSync(b.outDir)).toBe(false);
+    } finally {
+      cleanup(s.dir);
+    }
+  });
+
+  test("a removed file as a head scene is refused, writing nothing", () => {
+    const s = makeScratch();
+    try {
+      const storyDir = variantStory(s.dir, s.storyDir, "story-gone", (story) => {
+        story.scenes.push({ id: "gone", kind: "head", file: "notes.md", from: 1, to: 2 });
+        story.steps.push({
+          id: "gonex",
+          scene: "gone",
+          section: "c2",
+          title: "Gone",
+          text: "A removed file shown at the head.",
+          focus: [[1, 1]],
+        });
+      });
+      const b = runChangeBuild(s, "refgone", storyDir);
+      expect(b.code).toBe(1);
+      expect(b.err).toContain("was removed by this change");
+      expect(b.html).toBeNull();
+      expect(b.sheet).toBeNull();
+      expect(b.record).toBeNull();
+      expect(existsSync(b.outDir)).toBe(false);
+    } finally {
+      cleanup(s.dir);
+    }
+  });
+
+  test("an added file as a base scene is refused, writing nothing", () => {
+    const s = makeScratch();
+    try {
+      const storyDir = variantStory(s.dir, s.storyDir, "story-new", (story) => {
+        story.scenes.push({ id: "new", kind: "base", file: "added.md", from: 1, to: 2 });
+        story.steps.push({
+          id: "newx",
+          scene: "new",
+          section: "c2",
+          title: "New",
+          text: "An added file shown at the base.",
+          focus: [[1, 1]],
+        });
+      });
+      const b = runChangeBuild(s, "refnew", storyDir);
+      expect(b.code).toBe(1);
+      expect(b.err).toContain("was added by this change");
+      expect(b.html).toBeNull();
+      expect(b.sheet).toBeNull();
+      expect(b.record).toBeNull();
+      expect(existsSync(b.outDir)).toBe(false);
+    } finally {
+      cleanup(s.dir);
+    }
+  });
+
+  test("uncovered lines with no closing list are refused, writing nothing", () => {
+    const s = makeScratch();
+    try {
+      const storyDir = variantStory(s.dir, s.storyDir, "story-noleft", (story) => {
+        story.scenes = story.scenes.filter((x) => x.id !== "left");
+        story.steps = story.steps.filter((x) => x.id !== "end");
+      });
+      const b = runChangeBuild(s, "refleft", storyDir);
+      expect(b.code).toBe(1);
+      expect(b.err).toContain("are on no step, and no step shows the list of them");
+      expect(b.html).toBeNull();
+      expect(b.sheet).toBeNull();
+      expect(b.record).toBeNull();
+      expect(existsSync(b.outDir)).toBe(false);
+    } finally {
+      cleanup(s.dir);
+    }
+  });
+
+  test("one section quoting two criteria is refused, writing nothing", () => {
+    const s = makeScratch();
+    try {
+      const storyDir = variantStory(s.dir, s.storyDir, "story-shared", (story) => {
+        const c1 = story.steps.find((x) => x.id === "c1");
+        if (!c1) throw new Error("no c1 step");
+        c1.find = [FIND_C1, FIND_C2];
+      });
+      const b = runChangeBuild(s, "refshared", storyDir);
+      expect(b.code).toBe(1);
+      expect(b.err).toContain("quotes criteria 1 and 2");
+      expect(b.html).toBeNull();
+      expect(b.sheet).toBeNull();
+      expect(b.record).toBeNull();
+      expect(existsSync(b.outDir)).toBe(false);
+    } finally {
+      cleanup(s.dir);
+    }
+  });
+
+  test("a removed address is scrubbed on the step and counted", () => {
+    const s = makeEmailScratch();
+    try {
+      const b = runChangeBuild(s, "scrub");
+      expect(b.code).toBe(0);
+      if (!b.html) throw new Error("scrub build wrote no page");
+      if (!b.sheet) throw new Error("scrub build wrote no sheet");
+      expect(b.out).toContain("1 address(es) removed");
+      expect(b.html).not.toContain("jane@");
+      expect(b.html).toContain("&lt;address removed&gt;");
+      expect(b.sheet).not.toContain("jane@");
     } finally {
       cleanup(s.dir);
     }
