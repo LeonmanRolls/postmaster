@@ -1125,19 +1125,26 @@ describe("the shim never recurses", () => {
       // a 60s wall clock enforced below (there is no `timeout` binary on
       // macOS), and a group-size trip that kills the tree and fails the
       // test within seconds instead of filling the machine. The shim runs
-      // under a waiting sh, never exec'd, so the watched tree is two deep
-      // for the whole run and the depth assertion below cannot miss a
-      // transient child under load the way a bare spawn can.
+      // under a waiting sh, so the watched tree is two deep for the whole
+      // run and the depth assertion below cannot miss a transient child
+      // under load the way a bare spawn can. The wrapper script ends in a
+      // builtin on purpose: bash, which is macOS's /bin/sh, execs the last
+      // simple command of a -c string instead of forking, so a bare
+      // '"$0" "$@"' would leave the tree one deep there; the trailing
+      // exit keeps the shell waiting on every shell.
       const TRIP = 60;
       const WALL_MS = 60000;
       const started = Date.now();
-      const child = Bun.spawn(["sh", "-c", '"$0" "$@"', join(bin, "bun"), "--version"], {
-        cwd: project,
-        env,
-        stdin: "ignore",
-        stdout: "pipe",
-        stderr: "pipe",
-      });
+      const child = Bun.spawn(
+        ["sh", "-c", '"$0" "$@"; rc=$?; exit "$rc"', join(bin, "bun"), "--version"],
+        {
+          cwd: project,
+          env,
+          stdin: "ignore",
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
       let peak = 0;
       let code = -1;
       for (;;) {
