@@ -42,6 +42,7 @@ under `## For the agents`. Follow [the template](ticket-template.md), and run:
 ```sh
 <tool>/scripts/run ticket-check --body <draft> --title "<title>" --project <repo>
 <tool>/scripts/run ticket-parts <draft>
+<tool>/scripts/run ticket-capabilities <draft>
 ```
 
 Keep the criteria and the decisions as simple as you can, one idea each. A criterion is one thing
@@ -121,6 +122,29 @@ which verifier and which step failed: the project may have changed under the ver
 it, through a new tool, browser or service version, or a file the verifier does not list. Do not
 rewrite the check around the failure.
 
+### Check what the libraries already do
+
+Before the draft names a mechanism, find out what the libraries, SDKs and services the project
+already uses do for it. Do this for each one the change touches, and for each one a decision would
+wrap, replace or work around.
+
+1. Read the vendor's own documentation for the feature, opened in a browser, and the installed
+   version's types or source for its settings and methods. A search result is not a source.
+2. List what it already offers for each thing the ticket needs: keeping a setting or a choice,
+   remembering state, sending or blocking a request, clearing data, and the like.
+3. Where a criterion is a guarantee the documentation only implies, run the library against it
+   with a throwaway page or test against a stand-in, and keep what it showed.
+4. Where the ticket would add code for something the library already does, write the library's own
+   way as the alternative in the decision, in plain words, and say what it cannot do. A decision
+   that adds such code without that line is not finished. The plain part says in one sentence what
+   the library already does, so the user chooses between the real options.
+5. Write the result under `### Existing capabilities` in the agents' part, in the template's form,
+   and run `<tool>/scripts/run ticket-capabilities <draft>`. It must exit 0. A change that touches
+   nothing outside the repository says so in one line.
+
+A ticket that re-opens work already built is checked the same way, against the code that exists.
+Why: [capabilities before design](../../wiki/concepts/capabilities-before-design.md).
+
 ### Show the draft and work through the user's feedback
 
 Tell the user in two or three plain sentences what the ticket asks for. List each decision you
@@ -179,14 +203,15 @@ has a `ready` label; your brief command takes that label off first.
 
 Only when the user says it is ready, read back what they reviewed — the published page when you published one, otherwise the editor's copy — and show them any difference from the draft file. Where the two differ, save the user's version from the document to the draft file and mark that. When you cannot read back what the user reviewed, tell the user so and mark only after they confirm the draft.
 
-Remove the first-line `DRAFT:` marker from the draft and save the final text there. Run both checks again:
+Remove the first-line `DRAFT:` marker from the draft and save the final text there. Run the checks again:
 
 ```sh
 <tool>/scripts/run ticket-check --body <draft> --title "<title>" --project <repo>
 <tool>/scripts/run ticket-parts <draft> --final
+<tool>/scripts/run ticket-capabilities <draft>
 ```
 
-Both must exit 0. Then update the ticket and mark it ready through its adapter:
+All must exit 0. Then update the ticket and mark it ready through its adapter:
 
 ```sh
 <tool>/scripts/run ticket-ready mark <repo> <ticket-id> --body <draft> --title "<title>"

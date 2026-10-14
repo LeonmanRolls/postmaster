@@ -8,6 +8,12 @@ updated: 2026-10-15
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
 
+## [2026-10-15] ingest | capabilities are checked before a ticket picks a design
+
+At the user's request, after a run built a consent mechanism beside the one its analytics SDK already offered and a
+reviewer asked for the rework. Wrote [the page](concepts/capabilities-before-design.md) at standing `claimed`, with no
+record behind it, and changed the clerk runbook and the ticket template to carry the check. No standing changed.
+
 ## [2026-10-15] update | the review loop has had no round cap since 9 October
 
 The README's flow links the review-loop page, and that page still said a cap of three rounds ends
