@@ -1,12 +1,18 @@
 ---
 title: Log
 type: schema
-updated: 2026-10-11
+updated: 2026-10-15
 ---
 
 # Log
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
+
+## [2026-10-15] ingest | capabilities are checked before a ticket picks a design
+
+At the user's request, after a run built a consent mechanism beside the one its analytics SDK already offered and a
+reviewer asked for the rework. Wrote [the page](concepts/capabilities-before-design.md) at standing `claimed`, with no
+record behind it, and changed the clerk runbook and the ticket template to carry the check. No standing changed.
 
 ## [2026-10-11] ingest | one person's reading of a function with and without mutation
 

@@ -548,6 +548,43 @@ describe("the draft marker", () => {
   });
 });
 
+describe("the existing capabilities note", () => {
+  const NOTE =
+    'no "### Existing capabilities" section: write it and run ticket-capabilities before sign-off';
+  const WITH = edit(
+    FIT,
+    "### Verified at 0123abc",
+    "### Existing capabilities\n\nNone: nothing outside the repository is involved.\n\n### Verified at 0123abc",
+  );
+
+  test("a ticket without the section is told to write it, and still fits", () => {
+    const out = cli(FIT);
+    expect(out.code).toBe(0);
+    expect(out.findings).toEqual([]);
+    expect(out.notes).toContain(NOTE);
+  });
+
+  test("a ticket with the section gets no such note", () => {
+    const out = cli(WITH);
+    expect(out.code).toBe(0);
+    expect(out.notes).not.toContain(NOTE);
+  });
+
+  test("the heading is read in any case", () => {
+    const out = cli(edit(WITH, "### Existing capabilities", "### EXISTING CAPABILITIES"));
+    expect(out.notes).not.toContain(NOTE);
+  });
+
+  test("a heading inside a fenced block is not the section", () => {
+    const fenced = edit(
+      FIT,
+      "### Verified at 0123abc",
+      `${FENCE}\n### Existing capabilities\n${FENCE}\n\n### Verified at 0123abc`,
+    );
+    expect(cli(fenced).notes).toContain(NOTE);
+  });
+});
+
 describe("the notes", () => {
   const words = (n: number): string => Array(n).fill("word").join(" ");
 

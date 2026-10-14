@@ -37,8 +37,10 @@
 //
 // Notes, printed after the findings and never failing: the words in the plain part; the numbers of
 // criteria, decisions and technical notes; each criterion or decision long enough to be more
-// than one idea (the limits are below); and, when more than five criteria are counted, a note
-// saying so and what to do instead. The last criterion is not counted when it asks for a fixture
+// than one idea (the limits are below); when more than five criteria are counted, a note
+// saying so and what to do instead; and, when the agents' part has no ### Existing capabilities
+// section, a note to write it and run ticket-capabilities. A ticket from before that section
+// stays ready, so it is a note and never a finding. The last criterion is not counted when it asks for a fixture
 // run; the counts note still counts every criterion.
 //
 // The ticket reads one file and contacts nothing.
@@ -418,6 +420,11 @@ export function analyze(text: string, final: boolean): Report | null {
   // The notes.
   notes.push(`plain part: ${plainWords} words`);
   notes.push(`criteria ${N}, decisions ${decisions.length}, technical notes ${noteCount}`);
+  if (!sub(/^existing capabilities$/iu)) {
+    notes.push(
+      'no "### Existing capabilities" section: write it and run ticket-capabilities before sign-off',
+    );
+  }
   const counted = N - (isFixtureLine(criteria[N - 1]) ? 1 : 0);
   if (counted > MAX_CRITERIA) {
     notes.push(

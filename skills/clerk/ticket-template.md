@@ -77,6 +77,19 @@ default
   commit, and any hint on where to start. Evidence and links the plain part has no room for.>
   (C1, D1, D2)
 
+### Existing capabilities
+
+<What the libraries, SDKs and services this change touches already do, read from the vendor's own
+documentation and the installed version. The agents use the library's own option where one is
+listed here. A custom mechanism that duplicates one is a deviation: the hand-off records it with
+its reason, and it is not marked do-not-reopen. For a change that touches nothing outside the
+repository, the single line "None: nothing outside the repository is involved.">
+
+- **<library or service, and the thing the ticket needs from it>** Offers: <what it provides, with
+  its source: a documentation link, or a file and line of the installed version>. Uses: <what this
+  ticket takes from it, or "nothing">. Custom: <what stays ours and why the library cannot do it,
+  or "none">. (C1, D1)
+
 ### Verified at <base sha>
 
 - <A premise the ticket relies on, and how it was checked at the base.>
@@ -118,9 +131,11 @@ default
 - **Decisions** are the choices the ticket makes so that the run need not ask. Each is one idea: one
   choice, the reason, and what it beat, a sentence each. The user reviews each one marked
   `(proposed)`, which are the writer's choices. A decision they gave themselves is marked
-  `(given by the user)`. The mark never names a model, because the ticket is public. A decision is
-  stated by what it changes for the flow or its user, not by where it is made in the code. A choice
-  only the lanes care about, such as a name, a file or an order, is not a decision. Leave it to them.
+  `(given by the user)`. The mark never names a model, because the ticket is public. When a library
+  already offers a way to do what a decision chooses, `Instead of` names the library's own way in
+  plain words. A decision is stated by what it changes for the flow or its user, not by where it is
+  made in the code. A choice only the lanes care about, such as a name, a file or an order, is not
+  a decision. Leave it to them.
   The decisions come in two parts. `### Not covered by the acceptance criteria` comes first and
   holds only the decisions whose effect no criterion states: these are the ones the user has to
   read. `### Covered by the acceptance criteria` follows and holds the rest, under one line saying
@@ -130,6 +145,10 @@ default
   conditions, test inputs) goes under `## For the agents`, in the checks or the technical notes.
   Never drop a choice that changes what a person sees or what the flow does. Simplify the words and
   move the detail down.
+- **Existing capabilities** name, for each library, SDK or service the change touches or a decision
+  would wrap, replace or work around, what it already offers, each with its source, what the ticket
+  takes from it, and what stays custom and why. The clerk reads the vendor's documentation and the
+  installed version to write it, and `<tool>/scripts/run ticket-capabilities` checks its form.
 - **Technical notes** each carry, in a tag group such as `(C2, D1)`, the criteria and decisions they
   follow from, where `C2` is the second criterion and `D1` the first decision. A note that follows
   from none is either a detail the lanes decide, and does not belong, or a decision the plain part
