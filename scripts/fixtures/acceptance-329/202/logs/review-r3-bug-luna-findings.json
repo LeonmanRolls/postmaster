@@ -1,0 +1,54 @@
+[
+  {
+    "file": "scripts/reach.ts",
+    "line": 1845,
+    "line_end": 1845,
+    "target": "scripts/reach.ts:1845",
+    "severity": "P2",
+    "summary": "Restore the synthesis branch from the round snapshot",
+    "body": "If a reviewer detaches or switches the synthesis worktree, this precondition fails before restoration can run. The snapshot stores the commit and file status but not the symbolic branch, so `restoreRound` exits 1 instead of putting the worktree back as it was, stopping the review leg. Record and restore the original branch.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/check-target.ts",
+    "line": 81,
+    "line_end": 81,
+    "target": "scripts/check-target.ts:81",
+    "severity": "P2",
+    "summary": "Detect ignored files in checkout changes",
+    "body": "When an unrecorded lane write creates or modifies a gitignored file in the main checkout, `git status` omits it even with `--untracked-files=all`; `reachTarget` then reports the checkout as clean instead of finding the unexplained change. The status-based synthesis snapshot also misses ignored files, so they can remain after restore.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/reach.ts",
+    "line": 804,
+    "line_end": 804,
+    "target": "scripts/reach.ts:804",
+    "severity": "P2",
+    "summary": "Treat unreadable Claude task logs as not checked",
+    "body": "If a copied Claude task transcript is unreadable or contains malformed JSON, `parseTaskFile` converts it to an empty event list. The parent stream can still contain a recognized task call, causing the lane to be marked checked while the subagent's file accesses disappear from the reach results. Propagate task-log parse failures so the lane is reported as not checked.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/landing.ts",
+    "line": 396,
+    "line_end": 396,
+    "target": "scripts/landing.ts:396",
+    "severity": "P2",
+    "summary": "Escape branch names in the rendered card",
+    "body": "A valid Git branch name can contain `<!--` (for example, `x<!--`), but this interpolation emits the branch and default-branch names raw. The resulting mandatory card block contains an HTML comment opener, which the landing validator rejects, preventing the run from producing a valid ship card. Escape both branch fields as the path and reason fields are escaped.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  }
+]

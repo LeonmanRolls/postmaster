@@ -34,6 +34,14 @@ The record of what they did is how the work gets checked, and how the flow itsel
   comes with a control that could have come out the other way, so a passing check means
   something.
 
+## Adding a library takes the user's word
+
+postmaster does not let agents add packages as they see fit. A run adds
+only a library its ticket lists, each one vetted by the clerk before the
+user signed the ticket off, and its coachman asks the postmaster, who
+asks the user, before adding it. Anything else is refused before it
+downloads, and the landing checks again before it merges.
+
 ## Design rules
 
 Project files are optional and discovery remains the default; they record only project decisions

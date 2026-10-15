@@ -6,9 +6,11 @@ Postmaster takes a ticket to a reviewed, verified pull request. Most of its effo
 
 Anthropic's [AI-native SDLC playbook](https://claude.com/resources/articles/the-ai-native-sdlc-playbook) makes the case that code is no longer the bottleneck. The work moves to the steps on either side of the build: planning before it, and review and testing after it. Postmaster is built to match. The time goes into a plan you have signed off and into checking the result, so the part in the middle can be quick and its output trusted. What the project's wiki takes from the playbook is [written down there](wiki/sources/ai-native-sdlc-playbook.md).
 
+A design goal of postmaster is not to give you a complete solution. It is to let you run experiments on different flows, so that you can find what works for your project.
+
 ## The flow
 
-1. Plan. A booking clerk works with you on the ticket until it has acceptance criteria and, for each one, a check that shows it is met: a command, a test, or a walk through the running app. You read the ticket once and sign it off. Nothing starts before that.
+1. Plan. A booking clerk works with you on the ticket until it has acceptance criteria and, for each one, a check that shows it is met: a command, a test, or a walk through the running app. You read the ticket once and sign it off. Nothing starts before that. A run may add a library only if the ticket lists it, the clerk has vetted it and you have said yes.
 2. Implement. The acceptance tests are written from the ticket's checks and committed before any of the change. The implementer then loops until every one of them passes. A check that cannot pass as written is not edited to fit; it comes back to you.
 3. Review. Reviewers read the change through different lenses: style, bugs and security. They report what they find, the implementer fixes it, and they look again. The loop ends when a round finds nothing serious, and smaller findings are listed for you instead of looped on. If a third round still finds something serious, it stops and brings you what is left.
 4. Verify and land. The project's checks run on the final commit, and a check that could not run counts as not run, never as a pass. The result is a pull request with a ship card that lists what was checked and the evidence for it. In a pull-request project you merge it; postmaster never does.

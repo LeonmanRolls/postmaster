@@ -1,0 +1,80 @@
+[
+  {
+    "file": "scripts/runs-watch.ts",
+    "line": 435,
+    "line_end": 437,
+    "target": "scripts/runs-watch.ts:435",
+    "severity": "not provided",
+    "summary": "L1 — `runs-watch` prints a false default-interval warning on every poll in a project-alone setup , `:556-558`. With a complete `settings.toml` and no global config, the ENOENT branch warns \"poll interval is the default, 120s\" on every iteration, but the project's `postmaster.poll_seconds` actually wins (e.g. 30s). Fix: resolve the project value first; only warn from the global fallback when the project supplies none.",
+    "body": "**L2 — `launch.ts` error messages blame the global config for values from the project file** — `scripts/launch.ts:148`, `:175`, `:186-201`, `:209-223`, `:1361-1362`. With `--project`, `die(...)` still interpolates `sourcePath` (`~/.postmaster/config.toml`) even when the bad value came from the project's `settings.toml`, sending the user to edit the wrong file. front-door and plane fixed this; launch was left behind. Fix: label with `resolved.projectFile ?? sourcePath`.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  },
+  {
+    "file": "scripts/launch.ts",
+    "line": 148,
+    "line_end": "not provided",
+    "target": "scripts/launch.ts:148",
+    "severity": "not provided",
+    "summary": "L2 — `launch.ts` error messages blame the global config for values from the project file , `:175`, `:186-201`, `:209-223`, `:1361-1362`. With `--project`, `die(...)` still interpolates `sourcePath` (`~/.postmaster/config.toml`) even when the bad value came from the project's `settings.toml`, sending the user to edit the wrong file. front-door and plane fixed this; launch was left behind. Fix: label with `resolved.projectFile ?? sourcePath`.",
+    "body": "**L3 — documented \"projects_roots always comes from the global config\" invariant not enforced** — `AGENTS.md:246-248`, `settings.example.toml:5` vs `effective-config.ts:971-981` (`stripLegacy`). A local `projects_roots` lands in the effective config while docs say it's global-only. No consumer reads it today, so no user-visible break. Fix: `delete out.projects_roots` in `stripLegacy`, or reword the docs.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  },
+  {
+    "file": "AGENTS.md",
+    "line": 246,
+    "line_end": 248,
+    "target": "AGENTS.md:246",
+    "severity": "not provided",
+    "summary": "L3 — documented \"projects_roots always comes from the global config\" invariant not enforced , `settings.example.toml:5` vs `effective-config.ts:971-981` (`stripLegacy`). A local `projects_roots` lands in the effective config while docs say it's global-only. No consumer reads it today, so no user-visible break. Fix: `delete out.projects_roots` in `stripLegacy`, or reword the docs.",
+    "body": "**L4 — acceptance unrecordable for an explicit `--config` path** — `effective-config.ts:79-80`, `:870`, `:801` vs `project-settings.ts:111`. Readers given a non-global config path gate against `dirname(<path>)/accepted-project-settings.json`, but `accept` only writes beside `globalConfigPath()` — so a tracked settings file stays permanently `pending` and unfixable by the user. Fix: accept an optional config path, or resolve acceptance against the global store.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  },
+  {
+    "file": "effective-config.ts",
+    "line": 79,
+    "line_end": 80,
+    "target": "effective-config.ts:79",
+    "severity": "not provided",
+    "summary": "L4 — acceptance unrecordable for an explicit `--config` path , `:870`, `:801` vs `project-settings.ts:111`. Readers given a non-global config path gate against `dirname(<path>)/accepted-project-settings.json`, but `accept` only writes beside `globalConfigPath()` — so a tracked settings file stays permanently `pending` and unfixable by the user. Fix: accept an optional config path, or resolve acceptance against the global store.",
+    "body": "**L5 — third copy of the GIT_* scrub list** — `scripts/runs-watch.ts:504-515` duplicates `GIT_ENV_KEYS` in `effective-config.ts:674-682` (and `front-door.ts:26-36`), violating design rule 7. Fix: export a shared `gitEnv()`.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  },
+  {
+    "file": "scripts/runs-watch.ts",
+    "line": 504,
+    "line_end": 515,
+    "target": "scripts/runs-watch.ts:504",
+    "severity": "not provided",
+    "summary": "L5 — third copy of the GIT_* scrub list duplicates `GIT_ENV_KEYS` in `effective-config.ts:674-682` (and `front-door.ts:26-36`), violating design rule 7. Fix: export a shared `gitEnv()`.",
+    "body": "Minor note: `plane.ts:1036` can attribute an error to a pending settings file that contributed nothing; mitigated by the adjacent notice and pinned by a test — not flagged as a bug.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  },
+  {
+    "file": "plane.ts",
+    "line": 1036,
+    "line_end": "not provided",
+    "target": "plane.ts:1036",
+    "severity": "not provided",
+    "summary": "Minor note can attribute an error to a pending settings file that contributed nothing; mitigated by the adjacent notice and pinned by a test — not flagged as a bug.",
+    "body": "**Clean categories:** logic/guards/edge cases, security (gate unforgeable from inside the repo, pending content never parsed), error handling, performance, behavior changes (all documented and test-pinned).",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  }
+]

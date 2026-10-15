@@ -1,0 +1,196 @@
+import { describe, expect, test } from "bun:test";
+import {
+  fixYield,
+  overlapCheck,
+  pathKind,
+  RULES,
+  type RunFacts,
+  roundFacts,
+  roundGaps,
+  signalRows,
+  simulate,
+  transitions,
+  unseenEstimate,
+} from "./signals.ts";
+
+const run: RunFacts = {
+  run: "1",
+  rounds: 4,
+  pair: ["luna", "mimo"],
+  best: [3, 2, 1, 0],
+  findings: [
+    { round: 1, severity: "P2", lanes: ["luna"], file: "a.ts", group: null },
+    { round: 1, severity: "P2", lanes: ["mimo"], file: "b.ts", group: null },
+    { round: 1, severity: "P1", lanes: ["luna", "mimo"], file: "c.ts", group: null },
+    { round: 2, severity: "P2", lanes: ["luna"], file: "a.ts", group: "made-by-last-fix" },
+    { round: 2, severity: "P2", lanes: ["mimo"], file: "d.ts", group: "missed-lens-reviewed" },
+    { round: 3, severity: "P2", lanes: ["luna"], file: "a.ts", group: "made-by-last-fix" },
+  ],
+  commits: [
+    { phase: "change", added: 100, deleted: 0, paths: ["a.ts"], onMain: false },
+    { phase: "fix:1", added: 10, deleted: 5, paths: ["a.ts", "a.test.ts"], onMain: false },
+    { phase: "fix:2", added: 4, deleted: 2, paths: ["README.md"], onMain: false },
+    { phase: "fix:3", added: 3, deleted: 0, paths: ["a.ts"], onMain: false },
+  ],
+};
+
+describe("what is known at the end of a round", () => {
+  const facts = roundFacts(run);
+  test("counts, lanes and corroboration of a round", () => {
+    expect(facts[0]?.n).toBe(3);
+    expect(facts[0]?.traced).toBe(3);
+    expect(facts[0]?.complete).toBe(true);
+    expect(facts[0]?.p1).toBe(1);
+    expect(facts[0]?.corroborated).toBe(1);
+    expect(facts[0]?.first).toBe(2);
+    expect(facts[0]?.second).toBe(2);
+    expect(facts[0]?.both).toBe(1);
+    expect(facts[0]?.lanes).toEqual(["luna", "mimo"]);
+  });
+  test("a finding in a file an earlier round named is a same-file finding", () => {
+    expect(facts[1]?.sameFile).toBe(1);
+    expect(facts[1]?.madeByFix).toBe(1);
+    expect(facts[1]?.missed).toBe(1);
+  });
+  test("the lines of a round's fixes, in all files and in code", () => {
+    expect(facts[0]?.fixLines).toBe(15);
+    expect(facts[0]?.fixCodeLines).toBe(15);
+    expect(facts[0]?.fixCommits).toBe(1);
+    expect(facts[1]?.fixLines).toBe(6);
+    expect(facts[1]?.fixCodeLines).toBe(0);
+    expect(facts[1]?.fixCommits).toBe(1);
+  });
+  test("a path is a test, a document or code", () => {
+    expect(pathKind("scripts/a.test.ts")).toBe("test");
+    expect(pathKind("wiki/concepts/a.md")).toBe("doc");
+    expect(pathKind("scripts/a.ts")).toBe("code");
+  });
+});
+
+describe("transitions and rules", () => {
+  test("a transition is a round that ended and was followed by another", () => {
+    const ts = transitions([run]);
+    expect(ts.map((t) => [t.round, t.next, t.clean])).toEqual([
+      [1, 2, false],
+      [2, 1, false],
+      [3, 0, true],
+    ]);
+  });
+  test("the rows count where a signal holds and the next round was clean", () => {
+    const rows = signalRows(transitions([run]));
+    const one = rows.find((r) => r.id === "one");
+    expect(one?.flagged).toBe(1);
+    expect(one?.flaggedClean).toBe(1);
+    expect(one?.other).toBe(2);
+    expect(one?.otherClean).toBe(0);
+  });
+  test("a rule stops a run at the first round it fires and counts what it skipped", () => {
+    const rule = RULES.find((r) => r.id === "one-and-tiny");
+    const s = simulate(rule as (typeof RULES)[number], [run]);
+    expect(s?.fires).toBe(1);
+    expect(s?.roundsSaved).toBe(1);
+    expect(s?.seriousSkipped).toBe(0);
+    expect(s?.cleanSkips).toBe(1);
+    expect(s?.confirmingRounds).toBe(1);
+  });
+  test("a run the rule never fires on saves nothing (negative control)", () => {
+    const rule = RULES.find((r) => r.id === "words-only");
+    const quiet: RunFacts = { ...run, commits: run.commits.filter((c) => c.phase !== "fix:2") };
+    const s = simulate(rule as (typeof RULES)[number], [quiet]);
+    expect(s.fires).toBe(0);
+    expect(s.roundsSaved).toBe(0);
+  });
+  test("the capture-recapture estimate of what two lanes leave unseen", () => {
+    expect(unseenEstimate({ first: 2, second: 2, both: 2 })).toBeCloseTo(0, 5);
+    expect(unseenEstimate({ first: 3, second: 3, both: 0 })).toBeGreaterThan(5);
+  });
+});
+
+describe("what a round's fix commits bring", () => {
+  const commits = [
+    { run: "1", sha: "aaaaaaaa", phase: "fix:1", added: 10, deleted: 2, onMain: false },
+    { run: "1", sha: "bbbbbbbb", phase: "fix:1", added: 3, deleted: 0, onMain: false },
+    { run: "1", sha: "cccccccc", phase: "fix:2", added: 0, deleted: 0, onMain: false },
+    { run: "1", sha: "dddddddd", phase: "fix:2", added: 4, deleted: 1, onMain: false },
+  ];
+  const findings = [
+    { run: "1", round: 2, originKind: "fix", originSha: "aaaaaaaa" },
+    { run: "1", round: 4, originKind: "fix", originSha: "dddddddd" },
+    { run: "1", round: 2, originKind: "change", originSha: null },
+  ];
+  test("a commit counts for the next round where a finding in its lines is in the next round", () => {
+    const rows = fixYield(commits, findings);
+    expect(rows[0]).toEqual({
+      round: "1",
+      commits: 2,
+      nextRound: 1,
+      anyLater: 1,
+      nextRoundFindings: 0,
+    });
+  });
+  test("the next round's serious findings are summed for the runs that went on", () => {
+    const rows = fixYield(commits, findings, [{ run: "1", rounds: 4, best: [3, 2, 1, 0] }]);
+    expect(rows[0]?.nextRoundFindings).toBe(2);
+    expect(rows[1]?.nextRoundFindings).toBe(1);
+  });
+  test("a commit that changed no line is left out and a later round is counted apart", () => {
+    const rows = fixYield(commits, findings);
+    expect(rows[1]).toEqual({
+      round: "2",
+      commits: 1,
+      nextRound: 0,
+      anyLater: 1,
+      nextRoundFindings: 0,
+    });
+  });
+});
+
+describe("what the overlap says was left", () => {
+  test("two lanes that named the same findings leave nothing unseen, and disjoint ones leave some", () => {
+    const same = overlapCheck([
+      {
+        pair: ["luna", "mimo"],
+        findings: [
+          { round: 1, lanes: ["luna", "mimo"], group: null },
+          { round: 1, lanes: ["luna", "mimo"], group: null },
+        ],
+      },
+    ]);
+    expect(same.estimatedUnseen).toBeCloseTo(0, 5);
+    expect(same.noOverlap).toBe(0);
+    const apart = overlapCheck([
+      {
+        pair: ["luna", "mimo"],
+        findings: [
+          { round: 1, lanes: ["luna"], group: null },
+          { round: 1, lanes: ["mimo"], group: null },
+          { round: 2, lanes: ["luna"], group: "missed-lens-reviewed" },
+        ],
+      },
+    ]);
+    expect(apart.noOverlap).toBe(1);
+    expect(apart.estimatedUnseen).toBeGreaterThan(0);
+    expect(apart.laterMissed).toBe(1);
+  });
+  test("a run with no pair, or no finding in round 1, is not counted (negative control)", () => {
+    expect(
+      overlapCheck([{ pair: null, findings: [{ round: 1, lanes: ["luna"], group: null }] }]).runs,
+    ).toBe(0);
+    expect(overlapCheck([{ pair: ["luna", "mimo"], findings: [] }]).runs).toBe(0);
+  });
+});
+
+describe("the time from one round to the next", () => {
+  test("minutes between consecutive rounds' first launches, and none across a missing round", () => {
+    const gaps = roundGaps({
+      "1": "2026-10-09T10:00:00Z",
+      "2": "2026-10-09T11:10:00Z",
+      "3": "2026-10-09T11:40:00Z",
+      "5": "2026-10-09T15:00:00Z",
+    });
+    expect(gaps).toEqual([70, 30]);
+  });
+  test("a run with one round has no gap (negative control)", () => {
+    expect(roundGaps({ "1": "2026-10-09T10:00:00Z" })).toEqual([]);
+  });
+});

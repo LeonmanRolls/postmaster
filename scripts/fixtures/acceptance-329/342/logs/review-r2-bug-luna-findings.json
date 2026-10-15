@@ -1,0 +1,28 @@
+[
+  {
+    "file": "skills/postmaster/coachman.md",
+    "line": 913,
+    "line_end": 913,
+    "target": "skills/postmaster/coachman.md:913",
+    "severity": "P1",
+    "summary": "Verify a clean fixture score before merging this contract change",
+    "body": "This changes a listed coachman-contract file (`scripts/run coachman-contract BASE HEAD` reports `yes skills/postmaster/coachman.md`). The required fixture must be dispatched from this branch and score clean before merge, and no clean score is verified in this review; please provide that score before treating the change as ready ([AGENTS.md](AGENTS.md#L35-L40)).",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/reviewer-copy-acceptance.test.ts",
+    "line": 150,
+    "line_end": 150,
+    "target": "scripts/reviewer-copy-acceptance.test.ts:150",
+    "severity": "P2",
+    "summary": "Use the default timeout for these fast tests",
+    "body": "This suite adds multiple 15s and 30s per-test overrides for checks that complete in milliseconds to a few seconds. The project sets a 60s default and requires custom limits only when a test needs longer; remove these lower overrides to follow [AGENTS.md](AGENTS.md#L282-L288) and avoid needless failures under load.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  }
+]

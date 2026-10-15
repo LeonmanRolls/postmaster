@@ -1,0 +1,51 @@
+id	set	session	sides_with	note
+105.4.1	split	no	B	stranding an uncloseable space is wrong under any reading; rollback or naming it is the lanes' choice
+109.3.2	split	no	B	criterion 2 makes BASE's behaviour the standard, and BASE ran nothing from the target
+110.4.1	split	no	A	verify.sh already bounds gates at 1800 seconds; mirroring it is the one sane answer
+112.4.2	split	unclear	B	the text is a fragment and states no claim
+122.7.1	split	no	A	a veto that blocks every resume on a JSON key is wrong under any reading
+122.7.2	split	no	A	a digit stem matching inside an ordinary number is a plain bug
+124.2.4	split	no	B	a restart must tell the two states apart; recording which is the one answer
+124.2.5	split	no	B	a crash before the marker is removed must not redo landing
+135.3.6	split	no	A	criterion 4's reviewable record is not met where suppressed detections leave no trace
+135.4.3	split	no	A	an open-ended list of shapes; the finding adds a shape and decides nothing
+135.4.4	split	no	A	criterion 3 has every suspect ruled on; an unremediable one contradicts it
+135.4.5	split	no	A	the same open-ended list of shapes as 135.4.3
+135.4.6	split	no	A	a bound on decode depth is the lanes' detail
+163.2.2	split	no	B	trusting the branch's copy of the detector is wrong; the base's is the one answer
+201.2.1	split	no	A	criterion 2's rule lets only Bubblewrap create namespaces; refusing a writable path follows
+202.5.2	split	no	A	decision D8 makes any outside write a finding; the named operand was missed
+266.3.1	split	no	A	criterion 6 requires the same stops as the removed code
+268.4.1	split	yes	B	criterion 6 and decision D8 disagree on identical duplicates; the fix chose a discriminator
+323.3.1	split	no	B	deleting a possibly live checkout is a missing guard; not cleaning up is the answer
+335.7.1	split	no	A	the base reported missing config; silently dropping it has one sane answer
+335.7.2	split	no	B	the ruling on 335.6.1 and criterion 2, wherever the flow reads it, settle this
+38.6.2	split	no	A	a sentence with no mechanism behind it is wrong under any reading
+38.8.2	split	no	A	an open-ended list of shapes; the finding trims a shape and decides nothing
+57.2.4	split	no	A	criterion 5 requires walls caught; a missed wording is a defect and not a choice
+18.2.4	both-yes	yes
+18.4.1	both-yes	yes
+57.5.1	both-yes	yes
+105.2.1	both-yes	no		the ticket gives the leg where it has one; absence labels without it
+105.3.2	both-yes	no		the same; an empty leg number is an absent one
+105.3.3	both-yes	yes
+109.8.2	both-yes	yes
+110.2.2	both-yes	yes
+110.3.1	both-yes	yes
+124.3.2	both-yes	yes
+135.3.13	both-yes	yes
+163.2.3	both-yes	no		running the branch's own copy of the checker is wrong under any reading; the base's is the one answer
+163.4.2	both-yes	yes
+179.4.2	both-yes	yes
+200.2.3	both-yes	yes
+218.2.1	both-yes	yes
+251.2.2	both-yes	yes
+251.3.4	both-yes	yes
+251.4.2	both-yes	yes
+251.6.2	both-yes	no		binding must equal the signed text; the race is a hole in the implementation once it is bound
+268.8.1	both-yes	yes
+323.2.3	both-yes	yes
+323.3.2	both-yes	yes
+323.4.2	both-yes	yes
+323.5.3	both-yes	yes
+335.6.1	both-yes	yes

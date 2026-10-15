@@ -1272,6 +1272,11 @@ function sameBytes(aPath: string, bPath: string): boolean {
   return readFileSync(aPath).equals(readFileSync(bPath));
 }
 
+// The bug-review command's name, as a finished review task's notification carries it
+// in its summary: the command alone, without its arguments (the launch writes
+// `/code-review <level> <base>...HEAD`). A literal here, not shared with the launch.
+const REVIEW_TASK_SUMMARY = "/code-review";
+
 export function harvest(
   eventsPath: string,
   logsDir: string,
@@ -1280,17 +1285,28 @@ export function harvest(
   sessionRoot: string | null = null,
 ): string[] {
   const wanted: string[] = [];
+  let listed = 0;
+  let reviewed = 0;
   for (const event of readEvents(eventsPath)) {
     if (
       eventField(event, "type") === "system" &&
       eventField(event, "subtype") === "task_notification"
     ) {
+      listed += 1;
+      // Every task but the review's own is a command the review ran, already shown in
+      // its record: ignored, whatever it names. The review's own task is the one the
+      // stream names after the review command.
+      if (eventField(event, "summary") !== REVIEW_TASK_SUMMARY) continue;
+      reviewed += 1;
       const path = eventField(event, "output_file");
       if (!path) fail("task_notification names no output file");
       if (typeof path !== "string") fail("task_notification output_file is not text");
       if (!wanted.includes(path)) wanted.push(path);
     }
   }
+  // Tasks listed, none of them the review's: the stream's form changed, so fail loudly
+  // rather than count a review the reach check cannot read.
+  if (listed > 0 && reviewed === 0) fail("no task_notification names the review task");
   mkdirSync(logsDir, { recursive: true });
   const scrubbed = stripChars(prefix.replace(PREFIX_SANITIZE, "-"), ".-");
   const clean = scrubbed === "" ? "review" : scrubbed;

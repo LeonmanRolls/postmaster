@@ -102,22 +102,27 @@ function wait(dirRaw: string, glob: string, countRaw: string, timeoutRaw: string
   return 0;
 }
 
+/** Sleep without reading the wall clock, so time asleep is the timeout's own measure. */
+export function sleepMs(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
 /** Poll until countFn reaches count or timeout seconds elapse. The timeout
  * counts slept seconds through sleep alone and never reads the wall clock,
  * so time asleep is not counted and a clock set forward cannot end the wait
- * early. Naps are 20 seconds but the last, which is the remainder. */
+ * early. Naps are napSeconds but the last, which is the remainder. */
 export function countdown(
   countFn: () => number,
   count: number,
   timeout: number,
-  sleep: (ms: number) => void = (ms) => {
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-  },
+  sleep: (ms: number) => void = sleepMs,
+  napSeconds = 20,
 ): "present" | "timeout" {
+  const napLen = napSeconds >= 1 ? Math.floor(napSeconds) : 20;
   let left = timeout;
   while (countFn() < count) {
     if (left <= 0) return "timeout";
-    const nap = left < 20 ? left : 20;
+    const nap = left < napLen ? left : napLen;
     sleep(nap * 1000);
     left -= nap;
   }
