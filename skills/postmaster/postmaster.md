@@ -402,8 +402,13 @@ is what needs judgment or what it could not complete:
   partial state: complete or unwind that state (finish the remaining part, or restore
   `manifest.json`'s leg) rather than taking the step fresh.
 - **TAKEOVER:** the attempt record says `walled` on the primary coachman. Log `degrade`, write
-  the takeover prompt below, then run `<tool>/scripts/run run-meta run-pinned <dispatch> host leg takeover <dispatch>
-  <repo>/.worktrees/<TICKET> <leg-name> <n> <dispatch>/leg-<n>-takeover.txt`. The script
+  the takeover prompt below. Starting the fallback launches a new session, so the agent is the
+  user's to confirm first: ask in a plain sentence that names the run's recorded fallback (`config.team.coachman_fallback`
+  in `run.json`) and recommends one, and start only on their answer. Then run
+  `<tool>/scripts/run run-meta run-pinned <dispatch> host leg takeover <dispatch>
+  <repo>/.worktrees/<TICKET> <leg-name> <n> <dispatch>/leg-<n>-takeover.txt --recorded` for the recorded
+  fallback, or `--model <m> --effort <e>` (and `--harness`, `--env-file` where they differ) for another agent the
+  user named; the command refuses to start with neither. The script
   preserves the old stream, starts a fresh fallback stream and records its outcome and thread id.
 - **RESUME:** the attempt record says `incomplete`: the harness started, produced a thread id,
   and exited without the hand-off. The watcher resumes a transient end itself, so a RESUME

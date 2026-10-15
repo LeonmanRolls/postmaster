@@ -4,6 +4,8 @@
 //
 //   run launch form   <name> [--leg <leg>] [--run <dispatch>] [--project <repo>]
 //   run launch launch <name> <cwd> <prompt-file> [--leg <leg>] [--last <file>] [--run <dispatch>]
+//                    coachman_fallback, inside a run, may add --model <m> --effort <e> [--harness <h>]
+//                    [--env-file <f>]: the agent a takeover names, laid over the recorded fallback
 //   run launch review <name> <cwd> <base> [--last <file>] [--run <dispatch>]
 //   run launch resume <name> <cwd> <thread-id> <prompt-file> [--leg <leg>] [--last <file>]
 //                    [--run <dispatch>]
@@ -138,6 +140,7 @@ function resolveSpec(
   leg: string,
   recorded: boolean,
   project: string,
+  override: Readonly<Record<string, string>> = {},
 ): Spec {
   let cfg: Record<string, unknown>;
   let localLayer: Record<string, unknown> | null = null;
@@ -221,6 +224,16 @@ function resolveSpec(
     const team = (cfg.team as Record<string, unknown>) ?? {};
     if (team === null || typeof team !== "object") die(`[team] in ${sourcePath} is not a table`);
     spec = team.coachman_fallback;
+    if (Object.keys(override).length > 0) {
+      // A takeover that names its agent lays it over the recorded fallback: model and effort, and
+      // the harness and env file when given. The recorded table is not changed.
+      const base = spec !== null && typeof spec === "object" && !Array.isArray(spec) ? spec : {};
+      const was = base as Record<string, unknown>;
+      spec = { ...was, ...override };
+      console.error(
+        `launch: coachman_fallback runs on ${String(override.model ?? was.model ?? "")} at ${String(override.effort ?? was.effort ?? "")}, as the takeover command named it; ${sourcePath} recorded ${String(was.model ?? "none")} at ${String(was.effort ?? "none")}`,
+      );
+    }
     notALane(spec, "team.coachman_fallback");
   } else if (name === "postmaster") {
     const team = (cfg.team as Record<string, unknown>) ?? {};
@@ -1360,6 +1373,7 @@ if (import.meta.main) {
   let RUN = "";
   let PROJECT = "";
   let SESSION_NAME = "";
+  const OVERRIDE: Record<string, string> = {};
   const args: string[] = [];
   let i = 2;
   while (i < argv.length) {
@@ -1384,6 +1398,10 @@ if (import.meta.main) {
       if (i + 1 >= argv.length || !argv[i + 1]) die("--name needs a value");
       SESSION_NAME = argv[i + 1] ?? "";
       i += 2;
+    } else if (a === "--model" || a === "--effort" || a === "--harness" || a === "--env-file") {
+      if (i + 1 >= argv.length || !argv[i + 1]) die(`${a} needs a value`);
+      OVERRIDE[a === "--env-file" ? "env_file" : a.slice(2)] = argv[i + 1] ?? "";
+      i += 2;
     } else {
       args.push(a ?? "");
       i += 1;
@@ -1393,6 +1411,11 @@ if (import.meta.main) {
     die(`coachman needs --leg synthesis, review or ship to ${CMD}`);
   }
   if (SESSION_NAME) process.env.POSTMASTER_LAUNCH_NAME = SESSION_NAME;
+  if (Object.keys(OVERRIDE).length > 0 && (NAME !== "coachman_fallback" || !RUN)) {
+    die(
+      "--model, --effort, --harness and --env-file name a takeover's agent: they go with coachman_fallback, inside a run (--run)",
+    );
+  }
 
   let source: string;
   let recorded = false;
@@ -1412,7 +1435,7 @@ if (import.meta.main) {
       die(`no config at ${CONFIG} (POSTMASTER_CONFIG overrides the path)`);
     }
   }
-  const spec = resolveSpec(source, NAME, LEG, recorded, PROJECT);
+  const spec = resolveSpec(source, NAME, LEG, recorded, PROJECT, OVERRIDE);
   const HARNESS = spec.harness;
   const MODEL = spec.model;
   const EFFORT = spec.effort;

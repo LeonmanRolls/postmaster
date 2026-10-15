@@ -12,7 +12,10 @@
 //   run host name <dispatch> role <text...>                          any other launch, by its role alone
 //   run host run-state [--watch] <dispatch>   the ticket, stage and wait, for the run tab's
 //                                         state pane; --watch reprints every 60 seconds
-//   run host leg launch|takeover <dispatch> <worktree> <leg> <number> <prompt>
+//   run host leg launch <dispatch> <worktree> <leg> <number> <prompt>
+//   run host leg takeover <dispatch> <worktree> <leg> <number> <prompt> --recorded
+//   run host leg takeover <dispatch> <worktree> <leg> <number> <prompt> --model <m> --effort <e>
+//                         [--harness <h>] [--env-file <f>]   (the agent the takeover names, confirmed with the user)
 //   run host leg resume <dispatch> <worktree> <leg> <number> <thread-id> <prompt>
 //   run host leg retry <dispatch> <worktree> <leg> <number>
 //   run host leg outcome <dispatch> <number>
@@ -165,6 +168,7 @@ import {
   pyTrim,
   pyWords,
 } from "./lib/text.ts";
+import { AGENT_ENV, launchFlags, parseTakeover, readAgentEnv } from "./lib/takeover-agent.ts";
 
 const HERE = scriptsDir(import.meta);
 const TOOL = toolRoot(import.meta);
@@ -5929,11 +5933,16 @@ async function legCmd(args: string[]): Promise<void> {
         die("usage: run host leg resume <dispatch> <worktree> <leg> <number> <thread-id> <prompt>");
       await legStart("resume", rest[0]!, rest[1]!, rest[2]!, rest[3]!, rest[5]!, rest[4]!);
       return;
-    case "takeover":
-      if (rest.length !== 5)
-        die("usage: run host leg takeover <dispatch> <worktree> <leg> <number> <prompt>");
-      await legStart("takeover", rest[0]!, rest[1]!, rest[2]!, rest[3]!, rest[4]!);
+    case "takeover": {
+      const parsed = parseTakeover(rest);
+      if ("error" in parsed) die(parsed.error);
+      const [d0, w0, l0, n0, p0] = parsed.positionals;
+      // The agent travels to the launch in the environment, as the attempt phase does.
+      if (parsed.agent === "recorded") delete process.env[AGENT_ENV];
+      else process.env[AGENT_ENV] = JSON.stringify(parsed.agent);
+      await legStart("takeover", d0!, w0!, l0!, n0!, p0!);
       return;
+    }
     case "outcome":
       if (rest.length !== 2) die("usage: run host leg outcome <dispatch> <number>");
       legOutcome(rest[0]!, rest[1]!);
@@ -6053,11 +6062,23 @@ async function legExec(args: string[]): Promise<void> {
     // child is _leg_exec, so the role arrives here unsaid. Say it: every leg attempt runs
     // with the coachman host role, fallback takeovers included.
     process.env.POSTMASTER_LAUNCH_ROLE = "coachman";
+    const agentNamed = readAgentEnv(process.env[AGENT_ENV]);
     const child = spawn(
       join(HERE, "run"),
       launchMode === "resume"
         ? ["launch", "resume", role, wt, thread, prompt, "--leg", leg, "--run", d]
-        : ["launch", "launch", role, wt, prompt, "--leg", leg, "--run", d],
+        : [
+            "launch",
+            "launch",
+            role,
+            wt,
+            prompt,
+            "--leg",
+            leg,
+            "--run",
+            d,
+            ...(request === "takeover" && agentNamed !== null ? launchFlags(agentNamed) : []),
+          ],
       {
         env: process.env,
         stdio: ["ignore", "inherit", "pipe"],

@@ -5426,7 +5426,7 @@ export async function runControls(): Promise<number> {
     );
     prompt = join(legD, "fallback-wall.txt");
     writeFileSync(prompt, "fallback-wall before first event\n");
-    r = await legRun(["takeover", legD, legWt, "synthesis", "1", prompt]);
+    r = await legRun(["takeover", legD, legWt, "synthesis", "1", prompt, "--recorded"]);
     await pass(
       "a pre-event fallback wall is recorded for the user",
       () =>
