@@ -4,9 +4,17 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import {
+  type Header,
+  type IndexEntry,
+  draftText,
+  formatList,
+  vocabulary,
+  vocabularyKey,
+} from "./lib/index-match.ts";
 import { analyze } from "./ticket-capabilities.ts";
 
 const SELF = join(import.meta.dir, "run");
@@ -287,5 +295,331 @@ describe("the command", () => {
     const report = analyze(FIT.replace(/\n/gu, "\r\n").replace(/\r\n/gu, "\n"));
     expect(report?.findings).toEqual([]);
     expect(report?.entries).toBe(1);
+  });
+});
+
+// The menus that `run api-index` and `run code-index` make with --match <draft>.
+
+function cliWith(text: string, menus: string[], extra: string[] = []): Out {
+  const file = join(tmp, `t${seq++}.md`);
+  writeFileSync(file, text);
+  const args = ["ticket-capabilities", file];
+  for (const menu of menus) {
+    const path = join(tmp, `l${seq++}.tsv`);
+    writeFileSync(path, menu);
+    args.push("--candidates", path);
+  }
+  const r = spawnSync(SELF, [...args, ...extra], { encoding: "utf8", timeout: 20000 });
+  const stdout = String(r.stdout ?? "");
+  return {
+    code: r.status ?? 1,
+    findings: stdout.split("\n").filter((l) => l.startsWith("line ")),
+    stdout,
+    err: String(r.stderr ?? ""),
+  };
+}
+
+const entryOf = (symbol: string): IndexEntry => ({
+  symbol,
+  kind: "property",
+  signature: symbol,
+  doc: "",
+  file: "fake/index.d.ts",
+  line: 1,
+});
+
+// A menu as the index commands save it, made from the draft `ticketText` as it stands, or with
+// the key given (null for a menu made without a draft).
+function menuFor(ticketText: string, key?: string | null, names = SYMBOLS): string {
+  const k = key === undefined ? vocabularyKey(vocabulary(draftText(ticketText))) : key;
+  const header: Header = {
+    title: "api-index fake-sdk@1.0.0",
+    total: names.length,
+    ...(k === null ? {} : { vocabularyKey: k }),
+  };
+  return formatList(
+    header,
+    names.slice(0, 2).map((symbol) => ({ entry: entryOf(symbol) })),
+    names.map(entryOf),
+  );
+}
+
+const SYMBOLS = [
+  "Config.cross_subdomain_cookie",
+  "Config.consent_persistence_name",
+  "Config.opt_out_capturing_persistence_type",
+];
+
+const SEARCHED_ENTRY = [
+  "- **Analytics SDK, consent storage** Offers: a setting that stores the visitor's choice in a",
+  "  cookie shared across subdomains (https://example.test/docs/consent and",
+  `  ${TICK}types.ts:1373${TICK}). Uses: ${TICK}cross_subdomain_cookie${TICK}, for the stored choice.`,
+  "  Custom: the banner and the wording.",
+  `  Searched: ${TICK}consent_persistence_name${TICK}, ${TICK}opt_out_capturing_persistence_type${TICK}`,
+  "  and the other persistence settings; none keeps the choice per subdomain. (C1, D1)",
+].join("\n");
+
+const section = (...parts: string[]): string =>
+  ticket(`### Existing capabilities\n\n${parts.join("\n")}`);
+
+describe("with menus", () => {
+  const FIT_STRICT = section(SEARCHED_ENTRY);
+
+  test("a menu made from this draft fits, and the count of menus is printed", () => {
+    const out = cliWith(FIT_STRICT, [menuFor(FIT_STRICT)]);
+    expect(out.findings).toEqual([]);
+    expect(out.code).toBe(0);
+    expect(out.stdout).toContain("existing capabilities: 1 entries, 1 menus made from this draft");
+  });
+
+  test("two menus are both counted", () => {
+    const out = cliWith(FIT_STRICT, [menuFor(FIT_STRICT), menuFor(FIT_STRICT)]);
+    expect(out.code).toBe(0);
+    expect(out.stdout).toContain("2 menus made from this draft");
+  });
+
+  test("without a menu nothing changes: no Searched: part is asked for", () => {
+    expect(cli(FIT).code).toBe(0);
+    expect(cli(FIT).stdout).not.toContain("menus made from this draft");
+  });
+
+  test("the section need not mention anything the menu holds", () => {
+    const names = Array.from({ length: 300 }, (_, i) => `Config.unused_setting_number_${i}`);
+    const out = cliWith(FIT_STRICT, [menuFor(FIT_STRICT, undefined, names)]);
+    expect(out.findings).toEqual([]);
+    expect(out.code).toBe(0);
+  });
+
+  test("a menu made from an older draft is a finding; made from this draft it is not", () => {
+    const menu = menuFor(FIT_STRICT);
+    const changed = FIT_STRICT.replace("A thing is wrong.", "A cookie is wrong.");
+    const stale = cliWith(changed, [menu]);
+    expect(stale.code).toBe(1);
+    expect(stale.findings).toHaveLength(1);
+    expect(stale.findings[0]).toContain("was made from an older draft");
+    expect(stale.findings[0]).toContain("api-index or code-index again");
+    expect(cliWith(FIT_STRICT, [menu]).code).toBe(0);
+  });
+
+  test("a second menu that is old is a finding too", () => {
+    const changed = FIT_STRICT.replace("A thing is wrong.", "A cookie is wrong.");
+    const out = cliWith(changed, [menuFor(changed), menuFor(FIT_STRICT)]);
+    expect(out.code).toBe(1);
+    expect(out.findings).toHaveLength(1);
+  });
+
+  test("editing the capabilities section does not make a menu old", () => {
+    const menu = menuFor(FIT_STRICT);
+    const edited = section(
+      SEARCHED_ENTRY.replace("the stored choice", "keeping the choice around"),
+    );
+    expect(cliWith(edited, [menu]).code).toBe(0);
+  });
+
+  test("taking the DRAFT: marker off at sign-off does not make a menu old", () => {
+    const marked = `DRAFT: awaiting the user's review\n\n${FIT_STRICT}`;
+    expect(cliWith(FIT_STRICT, [menuFor(marked)]).code).toBe(0);
+  });
+
+  test("a menu made without --match is a finding", () => {
+    const out = cliWith(FIT_STRICT, [menuFor(FIT_STRICT, null)]);
+    expect(out.code).toBe(1);
+    expect(out.findings[0]).toContain("was made without --match");
+  });
+});
+
+describe("the Searched: part", () => {
+  const withCustom = (custom: string): string =>
+    section(
+      [
+        "- **Analytics SDK, consent storage** Offers: a setting that stores the visitor's choice in a",
+        "  cookie shared across subdomains (https://example.test/docs/consent).",
+        `  Uses: ${TICK}cross_subdomain_cookie${TICK}, for the stored choice. ${custom} (C1, D1)`,
+      ].join("\n"),
+    );
+  const run = (text: string): Out => cliWith(text, [menuFor(text)]);
+  const missing = (out: Out): boolean => out.findings.some((f) => f.includes("no Searched: part"));
+
+  test("a Custom: part with nothing searched is a finding", () => {
+    expect(missing(run(withCustom("Custom: the banner and the wording.")))).toBe(true);
+  });
+
+  test("a Searched: part that names a setting fixes it", () => {
+    const text = withCustom(
+      `Custom: the banner. Searched: ${TICK}consent_persistence_name${TICK} and the other persistence settings.`,
+    );
+    expect(missing(run(text))).toBe(false);
+  });
+
+  test("a Searched: part that names nothing is a finding", () => {
+    expect(missing(run(withCustom("Custom: the banner. Searched: the documentation.")))).toBe(true);
+  });
+
+  test("a name with an underscore or a hump counts without a code span", () => {
+    expect(
+      missing(run(withCustom("Custom: the banner. Searched: consent_persistence_name."))),
+    ).toBe(false);
+    expect(missing(run(withCustom("Custom: the banner. Searched: optOutCapturing.")))).toBe(false);
+  });
+
+  test("Custom: none needs no Searched: part", () => {
+    expect(missing(run(withCustom("Custom: none.")))).toBe(false);
+    expect(missing(run(withCustom("Custom: None, the setting does it.")))).toBe(false);
+  });
+
+  test("Custom: nonetheless is not none", () => {
+    expect(missing(run(withCustom("Custom: nonetheless a banner.")))).toBe(true);
+  });
+
+  test("Searched: is not a Custom: part: Custom: with only Searched: is empty", () => {
+    const out = run(withCustom(`Custom: Searched: ${TICK}consent_persistence_name${TICK}.`));
+    expect(out.findings.some((f) => f.includes("empty Custom: part"))).toBe(true);
+  });
+
+  test("without a menu a Custom: part needs no Searched: part", () => {
+    const text = withCustom("Custom: the banner and the wording.");
+    expect(cli(text).findings.some((f) => f.includes("no Searched: part"))).toBe(false);
+  });
+});
+
+describe("the candidates option", () => {
+  test("--candidates with no value is a usage error", () => {
+    const file = join(tmp, "usage.md");
+    writeFileSync(file, FIT);
+    const r = spawnSync(SELF, ["ticket-capabilities", file, "--candidates"], {
+      encoding: "utf8",
+      timeout: 20000,
+    });
+    expect(r.status).toBe(2);
+    expect(String(r.stderr)).toContain("usage: run ticket-capabilities");
+  });
+
+  test("a menu that cannot be read is not usable", () => {
+    const file = join(tmp, "unreadable.md");
+    writeFileSync(file, FIT);
+    const r = spawnSync(
+      SELF,
+      ["ticket-capabilities", file, "--candidates", join(tmp, "absent.tsv")],
+      { encoding: "utf8", timeout: 20000 },
+    );
+    expect(r.status).toBe(2);
+    expect(String(r.stderr)).toContain("cannot read");
+  });
+
+  test("two tickets at once are refused", () => {
+    const r = spawnSync(SELF, ["ticket-capabilities", "a.md", "b.md"], {
+      encoding: "utf8",
+      timeout: 20000,
+    });
+    expect(r.status).toBe(2);
+  });
+});
+
+describe("the menus the index commands make", () => {
+  const repo = () => join(tmp, "flow-repo");
+
+  function put(rel: string, text: string): string {
+    const abs = join(repo(), rel);
+    mkdirSync(dirname(abs), { recursive: true });
+    writeFileSync(abs, text);
+    return abs;
+  }
+
+  function library(): void {
+    put(
+      "node_modules/fake-sdk/package.json",
+      JSON.stringify({ name: "fake-sdk", version: "3.0.0", types: "index.d.ts" }),
+    );
+    put(
+      "node_modules/fake-sdk/index.d.ts",
+      [
+        "export interface SdkConfig {",
+        "  /** Share the consent cookie across subdomains. */",
+        "  cross_subdomain_cookie?: boolean;",
+        "  /** Where the consent choice is persisted. */",
+        "  consent_persistence_name?: string;",
+        "  api_host?: string;",
+        "}",
+        "",
+      ].join("\n"),
+    );
+  }
+
+  // A draft whose agents' part is fit under the menus: its entry says what was searched.
+  const draft = (eol: string): string =>
+    FIT.replace(
+      "A thing is wrong.",
+      "The consent cookie must be shared across subdomains and persisted.",
+    )
+      .replace(ENTRY, SEARCHED_ENTRY)
+      .replace(/\n/gu, eol);
+
+  function menu(draftPath: string): string {
+    const out = join(tmp, `flow-menu-${seq++}.tsv`);
+    const r = spawnSync(
+      SELF,
+      ["api-index", repo(), "fake-sdk", "--match", draftPath, "--out", out],
+      { encoding: "utf8", timeout: 30000 },
+    );
+    expect(r.status).toBe(0);
+    return out;
+  }
+
+  function check(draftPath: string, menuPath: string): { status: number | null; stdout: string } {
+    const r = spawnSync(SELF, ["ticket-capabilities", draftPath, "--candidates", menuPath], {
+      encoding: "utf8",
+      timeout: 20000,
+    });
+    return { status: r.status, stdout: String(r.stdout) };
+  }
+
+  for (const [name, eol] of [
+    ["LF", "\n"],
+    ["CRLF", "\r\n"],
+  ] as const) {
+    test(`a menu made by api-index from a ${name} draft is read as this draft's`, () => {
+      library();
+      const draftPath = join(tmp, `flow-draft-${seq++}.md`);
+      writeFileSync(draftPath, draft(eol));
+      const menuPath = menu(draftPath);
+      const text = readFileSync(menuPath, "utf8");
+      expect(text).toContain("SdkConfig.cross_subdomain_cookie");
+      const got = check(draftPath, menuPath);
+      expect(got.stdout).toContain("1 menus made from this draft");
+      expect(got.status).toBe(0);
+    });
+  }
+
+  test("the menu holds every name, also those the ranking left out", () => {
+    library();
+    const draftPath = join(tmp, `flow-draft-${seq++}.md`);
+    writeFileSync(draftPath, draft("\n"));
+    const out = join(tmp, `flow-menu-${seq++}.tsv`);
+    const r = spawnSync(
+      SELF,
+      ["api-index", repo(), "fake-sdk", "--match", draftPath, "--max", "1", "--out", out],
+      { encoding: "utf8", timeout: 30000 },
+    );
+    expect(r.status).toBe(0);
+    const text = readFileSync(out, "utf8");
+    const ranked = text.split("\n").filter((l) => l !== "" && !l.startsWith("#"));
+    expect(ranked.length).toBeLessThanOrEqual(3);
+    expect(text).toContain("api_host");
+  });
+
+  test("changing the draft after the menu was made is refused until the menu is made again", () => {
+    library();
+    const draftPath = join(tmp, `flow-draft-${seq++}.md`);
+    writeFileSync(draftPath, draft("\n"));
+    const menuPath = menu(draftPath);
+    expect(check(draftPath, menuPath).status).toBe(0);
+    writeFileSync(
+      draftPath,
+      draft("\n").replace("and persisted.", "and persisted, with a toggle."),
+    );
+    const stale = check(draftPath, menuPath);
+    expect(stale.status).toBe(1);
+    expect(stale.stdout).toContain("older draft");
+    expect(check(draftPath, menu(draftPath)).status).toBe(0);
   });
 });

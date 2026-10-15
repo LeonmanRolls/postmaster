@@ -8,6 +8,16 @@ updated: 2026-10-15
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
 
+## [2026-10-15] update | the clerk plans from menus of the whole API
+
+At the user's request, after a second clerk, started with the first ticket's references closed, again passed over
+settings that sat beside the ones it used. Added `scripts/run api-index` (a package's declared API, its family's
+packages included) and `scripts/run code-index` (the project's own exports): each saves a menu of the entries nearest
+the draft's words and a map of every name, under a key of the draft's words. `ticket-capabilities --candidates` refuses
+a menu made from an older draft and a custom part with no `Searched:` line. The user's ruling: the clerk must know
+every function available while it plans, and the ticket lists none of them. The clerk runbook and the template carry
+the step. Standing unchanged: `claimed`, with no record behind it.
+
 ## [2026-10-15] lint | the notes file is ignored by git, and a link that leaves the project is refused
 
 Found while drafting a project's first notes: the folder's ignore rules did not list `notes.md`, so a checkout would

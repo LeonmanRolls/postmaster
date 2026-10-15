@@ -132,24 +132,49 @@ rewrite the check around the failure.
 ### Check what the libraries already do
 
 Before the draft names a mechanism, find out what the libraries, SDKs and services the project
-already uses do for it. Do this for each one the change touches, and for each one a decision would
-wrap, replace or work around.
+already uses do for it, and what the project's own code already offers. Do this for each library
+the change touches, for each one a decision would wrap, replace or work around, and for the
+project folders the change touches and the packages it shares.
 
-1. Read the vendor's own documentation for the feature, opened in a browser, and the installed
-   version's types or source for its settings and methods. A search result is not a source. Where
-   the project notes name a wiki or standards page for the area, read it too: the project may
-   already have decided how it uses the library.
-2. List what it already offers for each thing the ticket needs: keeping a setting or a choice,
-   remembering state, sending or blocking a request, clearing data, and the like.
-3. Where a criterion is a guarantee the documentation only implies, run the library against it
+1. Make the menus from the draft as it stands: one for each library, and one for the project's own
+   code. Write each to a file in the draft's folder.
+
+   ```sh
+   <tool>/scripts/run api-index <repo> <package> --from <app-folder> --match <draft> --out <menu>
+   <tool>/scripts/run code-index <repo> <folder-or-glob>... --match <draft> --out <menu>
+   ```
+
+   A menu holds the entries nearest the draft's words, each with its signature and doc comment,
+   and then a map of every name in the index, by file and owner. `api-index` reads the installed
+   package, and the packages of its family that its declarations import; `code-index` reads every
+   export of the folders. Read every menu whole, the map too: while you plan, you must know every
+   function, setting and helper that is available. The ticket does not list them. Make the menus
+   again after any edit that adds or removes a word of the draft, and once more before sign-off:
+   the check refuses a menu made from an older draft.
+2. Read the vendor's own documentation for the feature, opened in a browser, and the installed
+   version's declaration of the names on the menu that are near what the ticket needs. A search
+   result is not a source. Where the project notes name a wiki or standards page for the area, read
+   it too: the project may already have decided how it uses the library.
+3. For each thing the ticket needs (keeping a setting or a choice, remembering state, sending or
+   blocking a request, clearing data, and the like), name the setting, method or helper that does
+   it. Where none does, say which names you looked at.
+4. Where a criterion is a guarantee the documentation only implies, run the library against it
    with a throwaway page or test against a stand-in, and keep what it showed.
-4. Where the ticket would add code for something the library already does, write the library's own
-   way as the alternative in the decision, in plain words, and say what it cannot do. A decision
-   that adds such code without that line is not finished. The plain part says in one sentence what
-   the library already does, so the user chooses between the real options.
-5. Write the result under `### Existing capabilities` in the agents' part, in the template's form,
-   and run `<tool>/scripts/run ticket-capabilities <draft>`. It must exit 0. A change that touches
-   nothing outside the repository says so in one line.
+5. Where the ticket would add code for something the library or the repository already does,
+   write that way as the alternative in the decision, in plain words, and say what it cannot do.
+   A decision that adds such code without that line is not finished. The plain part says in one
+   sentence what the library already does, so the user chooses between the real options.
+6. Write the result under `### Existing capabilities` in the agents' part, in the template's form:
+   what the ticket uses or works around, not what the menus hold. An entry whose `Custom:` part is
+   not "none" ends with a `Searched:` part naming the settings, methods or helpers looked for.
+   Then run
+
+   ```sh
+   <tool>/scripts/run ticket-capabilities <draft> --candidates <menu> [--candidates <menu>]...
+   ```
+
+   once with every menu. It must exit 0. A change that touches nothing outside the repository says
+   so in one line, and makes no menus.
 
 A ticket that re-opens work already built is checked the same way, against the code that exists.
 Why: [capabilities before design](../../wiki/concepts/capabilities-before-design.md).
@@ -217,7 +242,7 @@ Remove the first-line `DRAFT:` marker from the draft and save the final text the
 ```sh
 <tool>/scripts/run ticket-check --body <draft> --title "<title>" --project <repo>
 <tool>/scripts/run ticket-parts <draft> --final
-<tool>/scripts/run ticket-capabilities <draft>
+<tool>/scripts/run ticket-capabilities <draft> [--candidates <menu>]...
 ```
 
 All must exit 0. Then update the ticket and mark it ready through its adapter:
