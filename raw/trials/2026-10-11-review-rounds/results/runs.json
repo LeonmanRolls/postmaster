@@ -1,0 +1,4565 @@
+{
+ "cut": "2026-10-09T22:30:00Z",
+ "runs": [
+  {
+   "run": "18",
+   "layout": "legacy",
+   "dispatchedAt": "2026-09-28T10:27:52Z",
+   "reviewEndedAt": "2026-09-29T04:53:01Z",
+   "pin": "bb782a97",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 4,
+   "roundsInActions": 4,
+   "roundsInFiles": 4,
+   "seriousByRound": [
+    12,
+    5,
+    4,
+    1
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 22,
+   "seriousBest": [
+    12,
+    5,
+    4,
+    1
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 30,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 5939,
+    "shape": "one-part",
+    "criteria": 10,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "38",
+   "layout": "legacy",
+   "dispatchedAt": "2026-09-28T23:27:15Z",
+   "reviewEndedAt": "2026-09-29T10:57:04Z",
+   "pin": "7e6a7151",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 9,
+   "roundsInActions": 9,
+   "roundsInFiles": 9,
+   "seriousByRound": [
+    9,
+    7,
+    6,
+    2,
+    0,
+    2,
+    3,
+    2,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 31,
+   "seriousBest": [
+    9,
+    7,
+    6,
+    2,
+    8,
+    2,
+    3,
+    2,
+    0
+   ],
+   "filledRounds": [
+    5
+   ],
+   "silentRounds": [
+    5
+   ],
+   "findingLines": 47,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 9960,
+    "shape": "one-part",
+    "criteria": 11,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "57",
+   "layout": "project",
+   "dispatchedAt": "2026-09-29T10:10:12Z",
+   "reviewEndedAt": "2026-09-30T22:27:53Z",
+   "pin": "c994e8f2",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 6,
+   "roundsInActions": 6,
+   "roundsInFiles": 6,
+   "seriousByRound": [
+    11,
+    6,
+    2,
+    4,
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 24,
+   "seriousBest": [
+    11,
+    6,
+    2,
+    4,
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 67,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 3314,
+    "shape": "one-part",
+    "criteria": 7,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "75",
+   "layout": "project",
+   "dispatchedAt": "2026-09-30T10:06:10Z",
+   "reviewEndedAt": "2026-09-30T14:17:06Z",
+   "pin": "ffe37821",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 3,
+   "roundsInActions": 3,
+   "roundsInFiles": 3,
+   "seriousByRound": [
+    2,
+    2,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 4,
+   "seriousBest": [
+    2,
+    2,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 13,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 1452,
+    "shape": "one-part",
+    "criteria": 4,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "80",
+   "layout": "legacy",
+   "dispatchedAt": "2026-09-29T00:19:19Z",
+   "reviewEndedAt": "2026-09-29T03:31:39Z",
+   "pin": "7e6a7151",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    2,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 2,
+   "seriousBest": [
+    2,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 16,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 4835,
+    "shape": "one-part",
+    "criteria": 8,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "81",
+   "layout": "legacy",
+   "dispatchedAt": "2026-09-29T06:00:15Z",
+   "reviewEndedAt": "2026-09-29T13:33:15Z",
+   "pin": "b627af7c",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 5,
+   "roundsInActions": 5,
+   "roundsInFiles": 5,
+   "seriousByRound": [
+    3,
+    1,
+    1,
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 6,
+   "seriousBest": [
+    3,
+    1,
+    1,
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 30,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 4207,
+    "shape": "one-part",
+    "criteria": 8,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "85",
+   "layout": "legacy",
+   "dispatchedAt": "2026-09-29T08:11:37Z",
+   "reviewEndedAt": "2026-09-29T23:35:20Z",
+   "pin": "dfb93110",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 4,
+   "roundsInActions": 4,
+   "roundsInFiles": 4,
+   "seriousByRound": [
+    2,
+    1,
+    2,
+    2
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 7,
+   "seriousBest": [
+    2,
+    1,
+    2,
+    2
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 23,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 2981,
+    "shape": "one-part",
+    "criteria": 5,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "92",
+   "layout": "project",
+   "dispatchedAt": "2026-09-30T10:07:28Z",
+   "reviewEndedAt": "2026-09-30T13:36:22Z",
+   "pin": "ffe37821",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 3,
+   "roundsInActions": 3,
+   "roundsInFiles": 3,
+   "seriousByRound": [
+    0,
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 1,
+   "seriousBest": [
+    0,
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 13,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 1198,
+    "shape": "one-part",
+    "criteria": 4,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "98",
+   "layout": "project",
+   "dispatchedAt": "2026-09-30T14:01:53Z",
+   "reviewEndedAt": "2026-10-01T11:20:51Z",
+   "pin": "e902378f",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    3,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 3,
+   "seriousBest": [
+    3,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 10,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 3032,
+    "shape": "one-part",
+    "criteria": 7,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "102",
+   "layout": "project",
+   "dispatchedAt": "2026-09-30T10:08:08Z",
+   "reviewEndedAt": "2026-09-30T14:16:06Z",
+   "pin": "ffe37821",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    3,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 3,
+   "seriousBest": [
+    3,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 13,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 2116,
+    "shape": "one-part",
+    "criteria": 5,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "105",
+   "layout": "legacy",
+   "dispatchedAt": "2026-09-28T10:08:45Z",
+   "reviewEndedAt": "2026-09-29T05:59:59Z",
+   "pin": "bb782a97",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 8,
+   "roundsInActions": 8,
+   "roundsInFiles": 8,
+   "seriousByRound": [
+    4,
+    3,
+    3,
+    2,
+    1,
+    1,
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 15,
+   "seriousBest": [
+    4,
+    3,
+    3,
+    2,
+    1,
+    1,
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 43,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 2666,
+    "shape": "one-part",
+    "criteria": 6,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "106",
+   "layout": "legacy",
+   "dispatchedAt": "2026-09-29T06:28:43Z",
+   "reviewEndedAt": "2026-09-29T10:27:49Z",
+   "pin": "baa28c14",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 1,
+   "roundsInActions": 1,
+   "roundsInFiles": 1,
+   "seriousByRound": [
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 0,
+   "seriousBest": [
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 6,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 1074,
+    "shape": "one-part",
+    "criteria": 3,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "style"
+   }
+  },
+  {
+   "run": "108",
+   "layout": "legacy",
+   "dispatchedAt": "2026-09-28T01:57:30Z",
+   "reviewEndedAt": "2026-09-28T05:24:34Z",
+   "pin": "0b02eefc",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 4,
+   "roundsInActions": 4,
+   "roundsInFiles": 4,
+   "seriousByRound": [
+    8,
+    5,
+    4,
+    1
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 18,
+   "seriousBest": [
+    8,
+    5,
+    4,
+    1
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 38,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 3471,
+    "shape": "one-part",
+    "criteria": 6,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "109",
+   "layout": "legacy",
+   "dispatchedAt": "2026-09-28T09:38:35Z",
+   "reviewEndedAt": "2026-09-30T23:50:24Z",
+   "pin": "bb782a97",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 13,
+   "roundsInActions": 13,
+   "roundsInFiles": 13,
+   "seriousByRound": [
+    21,
+    4,
+    4,
+    6,
+    4,
+    8,
+    0,
+    2,
+    8,
+    5,
+    0,
+    4,
+    0
+   ],
+   "seriousNoRound": 2,
+   "seriousTotal": 68,
+   "seriousBest": [
+    21,
+    4,
+    4,
+    6,
+    4,
+    8,
+    3,
+    2,
+    8,
+    5,
+    4,
+    4,
+    0
+   ],
+   "filledRounds": [
+    7,
+    11
+   ],
+   "silentRounds": [
+    7,
+    11
+   ],
+   "findingLines": 104,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 4726,
+    "shape": "one-part",
+    "criteria": 6,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "110",
+   "layout": "project",
+   "dispatchedAt": "2026-09-30T10:06:50Z",
+   "reviewEndedAt": "2026-09-30T23:03:09Z",
+   "pin": "ffe37821",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 5,
+   "roundsInActions": 5,
+   "roundsInFiles": 5,
+   "seriousByRound": [
+    4,
+    3,
+    2,
+    2,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 11,
+   "seriousBest": [
+    4,
+    3,
+    2,
+    2,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 31,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 1705,
+    "shape": "one-part",
+    "criteria": 4,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "112",
+   "layout": "legacy",
+   "dispatchedAt": "2026-09-28T10:03:17Z",
+   "reviewEndedAt": "2026-09-29T01:52:18Z",
+   "pin": "bb782a97",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 5,
+   "roundsInActions": 5,
+   "roundsInFiles": 5,
+   "seriousByRound": [
+    2,
+    3,
+    2,
+    4,
+    2
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 13,
+   "seriousBest": [
+    2,
+    3,
+    2,
+    4,
+    2
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 26,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 2102,
+    "shape": "one-part",
+    "criteria": 6,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "113",
+   "layout": "legacy",
+   "dispatchedAt": "2026-09-28T10:07:59Z",
+   "reviewEndedAt": "2026-09-29T02:46:32Z",
+   "pin": "bb782a97",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 4,
+   "roundsInActions": 4,
+   "roundsInFiles": 4,
+   "seriousByRound": [
+    5,
+    3,
+    3,
+    2
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 13,
+   "seriousBest": [
+    5,
+    3,
+    3,
+    2
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 21,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 2092,
+    "shape": "one-part",
+    "criteria": 4,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "114",
+   "layout": "legacy",
+   "dispatchedAt": "2026-09-28T10:24:32Z",
+   "reviewEndedAt": "2026-09-29T05:50:21Z",
+   "pin": "bb782a97",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 8,
+   "roundsInActions": 8,
+   "roundsInFiles": 8,
+   "seriousByRound": [
+    8,
+    1,
+    1,
+    1,
+    1,
+    1,
+    4,
+    3
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 20,
+   "seriousBest": [
+    8,
+    1,
+    1,
+    1,
+    1,
+    1,
+    4,
+    3
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 46,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 2462,
+    "shape": "one-part",
+    "criteria": 5,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "116",
+   "layout": "legacy",
+   "dispatchedAt": "2026-09-28T22:15:39Z",
+   "reviewEndedAt": "2026-09-29T04:47:40Z",
+   "pin": "7e6a7151",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 3,
+   "roundsInActions": 3,
+   "roundsInFiles": 3,
+   "seriousByRound": [
+    3,
+    1,
+    1
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 5,
+   "seriousBest": [
+    3,
+    1,
+    1
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 22,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 2147,
+    "shape": "one-part",
+    "criteria": 5,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "121",
+   "layout": "legacy",
+   "dispatchedAt": "2026-09-28T23:41:48Z",
+   "reviewEndedAt": "2026-09-29T05:25:38Z",
+   "pin": "7e6a7151",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 4,
+   "roundsInActions": 4,
+   "roundsInFiles": 4,
+   "seriousByRound": [
+    7,
+    3,
+    5,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 15,
+   "seriousBest": [
+    7,
+    3,
+    5,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 28,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 2721,
+    "shape": "one-part",
+    "criteria": 6,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "122",
+   "layout": "legacy",
+   "dispatchedAt": "2026-09-29T06:18:41Z",
+   "reviewEndedAt": "2026-09-30T21:56:11Z",
+   "pin": "baa28c14",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 13,
+   "roundsInActions": 13,
+   "roundsInFiles": 13,
+   "seriousByRound": [
+    6,
+    4,
+    2,
+    1,
+    3,
+    2,
+    3,
+    1,
+    3,
+    2,
+    2,
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 30,
+   "seriousBest": [
+    6,
+    4,
+    2,
+    1,
+    3,
+    2,
+    3,
+    1,
+    3,
+    2,
+    2,
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 85,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 1952,
+    "shape": "one-part",
+    "criteria": 5,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "124",
+   "layout": "legacy",
+   "dispatchedAt": "2026-09-29T02:58:03Z",
+   "reviewEndedAt": "2026-09-30T22:08:46Z",
+   "pin": "6e9f87cc",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 20,
+   "roundsInActions": 20,
+   "roundsInFiles": 20,
+   "seriousByRound": [
+    13,
+    5,
+    5,
+    3,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 28,
+   "seriousBest": [
+    13,
+    5,
+    5,
+    3,
+    6,
+    9,
+    8,
+    4,
+    4,
+    5,
+    5,
+    2,
+    5,
+    4,
+    3,
+    3,
+    4,
+    5,
+    1,
+    1
+   ],
+   "filledRounds": [
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18
+   ],
+   "silentRounds": [
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18
+   ],
+   "findingLines": 46,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 3571,
+    "shape": "one-part",
+    "criteria": 8,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "132",
+   "layout": "project",
+   "dispatchedAt": "2026-09-29T13:30:14Z",
+   "reviewEndedAt": null,
+   "pin": "07b463dd",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "abandoned",
+   "rounds": 5,
+   "roundsInActions": 5,
+   "roundsInFiles": 5,
+   "seriousByRound": [
+    7,
+    3,
+    4,
+    3,
+    1
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 18,
+   "seriousBest": [
+    7,
+    3,
+    4,
+    3,
+    1
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 45,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 2868,
+    "shape": "one-part",
+    "criteria": 5,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "135",
+   "layout": "legacy",
+   "dispatchedAt": "2026-09-29T03:45:32Z",
+   "reviewEndedAt": "2026-10-02T00:44:26Z",
+   "pin": "6e9f87cc",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "abandoned",
+   "rounds": 5,
+   "roundsInActions": 5,
+   "roundsInFiles": 5,
+   "seriousByRound": [
+    11,
+    5,
+    15,
+    11,
+    1
+   ],
+   "seriousNoRound": 1,
+   "seriousTotal": 44,
+   "seriousBest": [
+    11,
+    5,
+    15,
+    11,
+    1
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 71,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 4664,
+    "shape": "one-part",
+    "criteria": 12,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "158",
+   "layout": "project",
+   "dispatchedAt": "2026-09-29T23:41:02Z",
+   "reviewEndedAt": "2026-09-30T19:17:16Z",
+   "pin": "73fca4e4",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 3,
+   "roundsInActions": 3,
+   "roundsInFiles": 3,
+   "seriousByRound": [
+    3,
+    2,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 5,
+   "seriousBest": [
+    3,
+    2,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 15,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 1474,
+    "shape": "one-part",
+    "criteria": 4,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "159",
+   "layout": "project",
+   "dispatchedAt": "2026-09-29T23:47:17Z",
+   "reviewEndedAt": "2026-09-30T17:58:35Z",
+   "pin": "73fca4e4",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    2,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 2,
+   "seriousBest": [
+    2,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 13,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 839,
+    "shape": "one-part",
+    "criteria": 3,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "160",
+   "layout": "project",
+   "dispatchedAt": "2026-09-30T10:08:49Z",
+   "reviewEndedAt": "2026-09-30T13:55:44Z",
+   "pin": "ffe37821",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 1,
+   "seriousBest": [
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 9,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 950,
+    "shape": "one-part",
+    "criteria": 3,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "163",
+   "layout": "project",
+   "dispatchedAt": "2026-09-29T21:43:55Z",
+   "reviewEndedAt": "2026-10-01T00:18:14Z",
+   "pin": "601bfd9c",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 5,
+   "roundsInActions": 5,
+   "roundsInFiles": 5,
+   "seriousByRound": [
+    8,
+    3,
+    1,
+    2,
+    1
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 15,
+   "seriousBest": [
+    8,
+    3,
+    1,
+    2,
+    1
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 34,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 3049,
+    "shape": "one-part",
+    "criteria": 5,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "165",
+   "layout": "project",
+   "dispatchedAt": "2026-09-29T20:49:46Z",
+   "reviewEndedAt": "2026-09-30T23:39:35Z",
+   "pin": "997f1901",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 4,
+   "roundsInActions": 4,
+   "roundsInFiles": 4,
+   "seriousByRound": [
+    6,
+    2,
+    2,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 10,
+   "seriousBest": [
+    6,
+    2,
+    2,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 36,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 2009,
+    "shape": "one-part",
+    "criteria": 5,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "170",
+   "layout": "project",
+   "dispatchedAt": "2026-09-30T00:56:02Z",
+   "reviewEndedAt": "2026-10-01T08:02:35Z",
+   "pin": "ffe37821",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 3,
+   "roundsInActions": 3,
+   "roundsInFiles": 3,
+   "seriousByRound": [
+    2,
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 3,
+   "seriousBest": [
+    2,
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 21,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 2010,
+    "shape": "one-part",
+    "criteria": 7,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "179",
+   "layout": "project",
+   "dispatchedAt": "2026-09-30T21:13:10Z",
+   "reviewEndedAt": "2026-10-01T14:05:07Z",
+   "pin": "653ba2e8",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 5,
+   "roundsInActions": 5,
+   "roundsInFiles": 5,
+   "seriousByRound": [
+    6,
+    5,
+    4,
+    2,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 17,
+   "seriousBest": [
+    6,
+    5,
+    4,
+    2,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 29,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 4262,
+    "shape": "one-part",
+    "criteria": 8,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "182",
+   "layout": "project",
+   "dispatchedAt": "2026-10-02T11:55:38Z",
+   "reviewEndedAt": "2026-10-02T22:39:59Z",
+   "pin": "0620bfc9",
+   "mode": "synthesis",
+   "workhorses": [
+    "sol",
+    "mimo"
+   ],
+   "reviewers": [
+    "sol",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 1,
+   "seriousBest": [
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 12,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 2354,
+    "shape": "one-part",
+    "criteria": 5,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "200",
+   "layout": "project",
+   "dispatchedAt": "2026-10-02T23:27:50Z",
+   "reviewEndedAt": "2026-10-03T06:28:33Z",
+   "pin": "d06ea3a7",
+   "mode": "synthesis",
+   "workhorses": [
+    "astra",
+    "mimo"
+   ],
+   "reviewers": [
+    "sol"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 4,
+   "roundsInActions": 4,
+   "roundsInFiles": 4,
+   "seriousByRound": [
+    4,
+    3,
+    0,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 7,
+   "seriousBest": [
+    4,
+    3,
+    0,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [
+    3
+   ],
+   "findingLines": 22,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 4148,
+    "shape": "one-part",
+    "criteria": 10,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "201",
+   "layout": "project",
+   "dispatchedAt": "2026-10-01T09:21:41Z",
+   "reviewEndedAt": "2026-10-02T14:20:23Z",
+   "pin": "56b7a04c",
+   "mode": "synthesis",
+   "workhorses": [
+    "sol",
+    "mimo"
+   ],
+   "reviewers": [
+    "sol",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 3,
+   "roundsInActions": 3,
+   "roundsInFiles": 3,
+   "seriousByRound": [
+    2,
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 3,
+   "seriousBest": [
+    2,
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 16,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 2407,
+    "shape": "one-part",
+    "criteria": 7,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "202",
+   "layout": "project",
+   "dispatchedAt": "2026-10-03T15:33:38Z",
+   "reviewEndedAt": "2026-10-04T21:24:50Z",
+   "pin": "40d50ce0",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 9,
+   "roundsInActions": 7,
+   "roundsInFiles": 9,
+   "seriousByRound": [
+    12,
+    4,
+    3,
+    2,
+    4,
+    1,
+    5,
+    0,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 31,
+   "seriousBest": [
+    12,
+    4,
+    3,
+    2,
+    4,
+    1,
+    5,
+    1,
+    2
+   ],
+   "filledRounds": [
+    8,
+    9
+   ],
+   "silentRounds": [
+    8
+   ],
+   "findingLines": 58,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 26224,
+    "shape": "two-part",
+    "criteria": 17,
+    "decisions": 18,
+    "outOfScope": true,
+    "checks": 17,
+    "notes": 14,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "216",
+   "layout": "project",
+   "dispatchedAt": "2026-10-03T15:31:36Z",
+   "reviewEndedAt": "2026-10-10T07:11:43Z",
+   "pin": "40d50ce0",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 15,
+   "roundsInActions": 15,
+   "roundsInFiles": 15,
+   "seriousByRound": [
+    5,
+    1,
+    4,
+    7,
+    4,
+    7,
+    1,
+    3,
+    4,
+    3,
+    5,
+    2,
+    1,
+    2,
+    2
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 51,
+   "seriousBest": [
+    5,
+    1,
+    4,
+    7,
+    4,
+    7,
+    1,
+    3,
+    4,
+    3,
+    5,
+    2,
+    1,
+    2,
+    2
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 118,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 30784,
+    "shape": "two-part",
+    "criteria": 29,
+    "decisions": 20,
+    "outOfScope": true,
+    "checks": 29,
+    "notes": 22,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "217",
+   "layout": "project",
+   "dispatchedAt": "2026-10-03T22:36:58Z",
+   "reviewEndedAt": "2026-10-04T06:37:39Z",
+   "pin": "40d50ce0",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 3,
+   "roundsInActions": 3,
+   "roundsInFiles": 3,
+   "seriousByRound": [
+    2,
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 3,
+   "seriousBest": [
+    2,
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 18,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 22952,
+    "shape": "two-part",
+    "criteria": 17,
+    "decisions": 12,
+    "outOfScope": true,
+    "checks": 17,
+    "notes": 12,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "218",
+   "layout": "project",
+   "dispatchedAt": "2026-10-02T09:59:18Z",
+   "reviewEndedAt": "2026-10-04T03:15:11Z",
+   "pin": "0620bfc9",
+   "mode": "synthesis",
+   "workhorses": [
+    "sol",
+    "mimo"
+   ],
+   "reviewers": [
+    "sol",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 3,
+   "roundsInActions": 3,
+   "roundsInFiles": 3,
+   "seriousByRound": [
+    5,
+    4,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 9,
+   "seriousBest": [
+    5,
+    4,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 27,
+   "ticketSource": "waybill",
+   "ticket": {
+    "chars": 1510,
+    "shape": "one-part",
+    "criteria": 4,
+    "decisions": 0,
+    "outOfScope": false,
+    "checks": 0,
+    "notes": 0,
+    "verifiedAt": false,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "227",
+   "layout": "project",
+   "dispatchedAt": "2026-10-03T22:40:51Z",
+   "reviewEndedAt": "2026-10-04T03:51:10Z",
+   "pin": "40d50ce0",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 1,
+   "seriousBest": [
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 6,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 12133,
+    "shape": "two-part",
+    "criteria": 6,
+    "decisions": 6,
+    "outOfScope": true,
+    "checks": 6,
+    "notes": 9,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "232",
+   "layout": "project",
+   "dispatchedAt": "2026-10-09T19:57:56Z",
+   "reviewEndedAt": "2026-10-09T21:21:53Z",
+   "pin": "49734805",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "sonnet"
+   ],
+   "manifestStage": "done",
+   "rounds": 1,
+   "roundsInActions": 1,
+   "roundsInFiles": 1,
+   "seriousByRound": [
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 0,
+   "seriousBest": [
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 5,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 16705,
+    "shape": "two-part",
+    "criteria": 3,
+    "decisions": 4,
+    "outOfScope": true,
+    "checks": 3,
+    "notes": 20,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "233",
+   "layout": "project",
+   "dispatchedAt": "2026-10-09T06:24:26Z",
+   "reviewEndedAt": "2026-10-09T10:35:02Z",
+   "pin": "67d4ae25",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    0,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 0,
+   "seriousBest": [
+    0,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 18,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 11618,
+    "shape": "two-part",
+    "criteria": 4,
+    "decisions": 5,
+    "outOfScope": true,
+    "checks": 4,
+    "notes": 8,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "237",
+   "layout": "project",
+   "dispatchedAt": "2026-10-04T03:50:35Z",
+   "reviewEndedAt": "2026-10-04T16:08:36Z",
+   "pin": "40d50ce0",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 3,
+   "roundsInActions": 3,
+   "roundsInFiles": 3,
+   "seriousByRound": [
+    5,
+    4,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 9,
+   "seriousBest": [
+    5,
+    4,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 33,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 21268,
+    "shape": "two-part",
+    "criteria": 22,
+    "decisions": 8,
+    "outOfScope": true,
+    "checks": 22,
+    "notes": 12,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "251",
+   "layout": "project",
+   "dispatchedAt": "2026-10-03T14:00:40Z",
+   "reviewEndedAt": "2026-10-04T05:01:34Z",
+   "pin": "ede70e22",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 6,
+   "roundsInActions": 6,
+   "roundsInFiles": 6,
+   "seriousByRound": [
+    11,
+    7,
+    4,
+    3,
+    3,
+    2
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 30,
+   "seriousBest": [
+    11,
+    7,
+    4,
+    3,
+    3,
+    2
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 61,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 36554,
+    "shape": "two-part",
+    "criteria": 18,
+    "decisions": 20,
+    "outOfScope": true,
+    "checks": 18,
+    "notes": 18,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "252",
+   "layout": "project",
+   "dispatchedAt": "2026-10-04T04:28:22Z",
+   "reviewEndedAt": "2026-10-05T01:18:17Z",
+   "pin": "93d8b862",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 4,
+   "roundsInActions": 4,
+   "roundsInFiles": 4,
+   "seriousByRound": [
+    5,
+    5,
+    4,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 14,
+   "seriousBest": [
+    5,
+    5,
+    4,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 46,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 32654,
+    "shape": "two-part",
+    "criteria": 17,
+    "decisions": 14,
+    "outOfScope": true,
+    "checks": 17,
+    "notes": 22,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "258",
+   "layout": "project",
+   "dispatchedAt": "2026-10-04T09:06:45Z",
+   "reviewEndedAt": "2026-10-04T23:23:03Z",
+   "pin": "5c58c834",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 3,
+   "roundsInActions": 3,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    4,
+    0,
+    1
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 5,
+   "seriousBest": [
+    4,
+    0,
+    1
+   ],
+   "filledRounds": [],
+   "silentRounds": [
+    2
+   ],
+   "findingLines": 22,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 21615,
+    "shape": "two-part",
+    "criteria": 12,
+    "decisions": 12,
+    "outOfScope": true,
+    "checks": 12,
+    "notes": 8,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "259",
+   "layout": "project",
+   "dispatchedAt": "2026-10-04T09:05:51Z",
+   "reviewEndedAt": "2026-10-04T19:20:32Z",
+   "pin": "5c58c834",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    3,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 3,
+   "seriousBest": [
+    3,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 8,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 19454,
+    "shape": "two-part",
+    "criteria": 9,
+    "decisions": 11,
+    "outOfScope": true,
+    "checks": 9,
+    "notes": 14,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "265",
+   "layout": "project",
+   "dispatchedAt": "2026-10-04T12:19:36Z",
+   "reviewEndedAt": "2026-10-04T18:32:42Z",
+   "pin": "5037e714",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 1,
+   "roundsInActions": 1,
+   "roundsInFiles": 1,
+   "seriousByRound": [
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 0,
+   "seriousBest": [
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 11,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 9662,
+    "shape": "two-part",
+    "criteria": 6,
+    "decisions": 3,
+    "outOfScope": true,
+    "checks": 6,
+    "notes": 4,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "266",
+   "layout": "project",
+   "dispatchedAt": "2026-10-04T09:35:55Z",
+   "reviewEndedAt": "2026-10-05T01:43:01Z",
+   "pin": "af47492a",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 5,
+   "roundsInActions": 5,
+   "roundsInFiles": 5,
+   "seriousByRound": [
+    4,
+    3,
+    2,
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 10,
+   "seriousBest": [
+    4,
+    3,
+    2,
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 43,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 21701,
+    "shape": "two-part",
+    "criteria": 9,
+    "decisions": 9,
+    "outOfScope": true,
+    "checks": 9,
+    "notes": 26,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "268",
+   "layout": "project",
+   "dispatchedAt": "2026-10-04T09:51:28Z",
+   "reviewEndedAt": "2026-10-09T10:05:13Z",
+   "pin": "af47492a",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 8,
+   "roundsInActions": 8,
+   "roundsInFiles": 8,
+   "seriousByRound": [
+    4,
+    11,
+    4,
+    4,
+    0,
+    0,
+    0,
+    2
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 25,
+   "seriousBest": [
+    4,
+    11,
+    4,
+    4,
+    7,
+    1,
+    1,
+    2
+   ],
+   "filledRounds": [
+    5,
+    6,
+    7
+   ],
+   "silentRounds": [
+    5,
+    6,
+    7
+   ],
+   "findingLines": 52,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 20967,
+    "shape": "two-part",
+    "criteria": 11,
+    "decisions": 11,
+    "outOfScope": true,
+    "checks": 11,
+    "notes": 10,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "270",
+   "layout": "project",
+   "dispatchedAt": "2026-10-04T19:16:13Z",
+   "reviewEndedAt": "2026-10-05T11:48:27Z",
+   "pin": "393f263a",
+   "mode": "synthesis",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 3,
+   "roundsInActions": 3,
+   "roundsInFiles": 3,
+   "seriousByRound": [
+    2,
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 3,
+   "seriousBest": [
+    2,
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 13,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 30040,
+    "shape": "two-part",
+    "criteria": 18,
+    "decisions": 14,
+    "outOfScope": true,
+    "checks": 18,
+    "notes": 12,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "281",
+   "layout": "project",
+   "dispatchedAt": "2026-10-09T01:10:46Z",
+   "reviewEndedAt": "2026-10-09T07:48:00Z",
+   "pin": "06fcced3",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 1,
+   "seriousBest": [
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 8,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 21330,
+    "shape": "two-part",
+    "criteria": 12,
+    "decisions": 4,
+    "outOfScope": true,
+    "checks": 12,
+    "notes": 12,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "316",
+   "layout": "project",
+   "dispatchedAt": "2026-10-09T01:11:20Z",
+   "reviewEndedAt": "2026-10-09T08:17:39Z",
+   "pin": "06fcced3",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 1,
+   "seriousBest": [
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 5,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 15463,
+    "shape": "two-part",
+    "criteria": 6,
+    "decisions": 5,
+    "outOfScope": true,
+    "checks": 6,
+    "notes": 6,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "318",
+   "layout": "project",
+   "dispatchedAt": "2026-10-10T02:25:22Z",
+   "reviewEndedAt": "2026-10-10T06:10:30Z",
+   "pin": "57d47032",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 4,
+   "roundsInActions": 4,
+   "roundsInFiles": 4,
+   "seriousByRound": [
+    4,
+    2,
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 7,
+   "seriousBest": [
+    4,
+    2,
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 22,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 8133,
+    "shape": "two-part",
+    "criteria": 5,
+    "decisions": 3,
+    "outOfScope": true,
+    "checks": 5,
+    "notes": 5,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "319",
+   "layout": "project",
+   "dispatchedAt": "2026-10-10T02:27:17Z",
+   "reviewEndedAt": "2026-10-10T04:09:06Z",
+   "pin": "57d47032",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 1,
+   "roundsInActions": 1,
+   "roundsInFiles": 1,
+   "seriousByRound": [
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 0,
+   "seriousBest": [
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 5,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 13921,
+    "shape": "two-part",
+    "criteria": 5,
+    "decisions": 8,
+    "outOfScope": true,
+    "checks": 5,
+    "notes": 8,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "323",
+   "layout": "project",
+   "dispatchedAt": "2026-10-09T13:32:15Z",
+   "reviewEndedAt": "2026-10-09T17:29:33Z",
+   "pin": "501d2064",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 6,
+   "roundsInActions": 6,
+   "roundsInFiles": 6,
+   "seriousByRound": [
+    8,
+    3,
+    3,
+    3,
+    3,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 20,
+   "seriousBest": [
+    8,
+    3,
+    3,
+    3,
+    3,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 42,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 7668,
+    "shape": "two-part",
+    "criteria": 5,
+    "decisions": 0,
+    "outOfScope": true,
+    "checks": 5,
+    "notes": 5,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "324",
+   "layout": "project",
+   "dispatchedAt": "2026-10-09T18:36:28Z",
+   "reviewEndedAt": "2026-10-09T21:36:35Z",
+   "pin": "49734805",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "sonnet"
+   ],
+   "manifestStage": "done",
+   "rounds": 3,
+   "roundsInActions": 3,
+   "roundsInFiles": 3,
+   "seriousByRound": [
+    5,
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 6,
+   "seriousBest": [
+    5,
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 25,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 5279,
+    "shape": "two-part",
+    "criteria": 5,
+    "decisions": 2,
+    "outOfScope": true,
+    "checks": 5,
+    "notes": 3,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "325",
+   "layout": "project",
+   "dispatchedAt": "2026-10-09T18:37:01Z",
+   "reviewEndedAt": "2026-10-09T21:29:28Z",
+   "pin": "49734805",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "sonnet"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    3,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 3,
+   "seriousBest": [
+    3,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 19,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 6480,
+    "shape": "two-part",
+    "criteria": 5,
+    "decisions": 2,
+    "outOfScope": true,
+    "checks": 5,
+    "notes": 4,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "326",
+   "layout": "project",
+   "dispatchedAt": "2026-10-10T02:25:53Z",
+   "reviewEndedAt": "2026-10-10T17:57:13Z",
+   "pin": "57d47032",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 6,
+   "roundsInActions": 6,
+   "roundsInFiles": 6,
+   "seriousByRound": [
+    5,
+    1,
+    3,
+    1,
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 11,
+   "seriousBest": [
+    5,
+    1,
+    3,
+    1,
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 32,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 10225,
+    "shape": "two-part",
+    "criteria": 6,
+    "decisions": 6,
+    "outOfScope": true,
+    "checks": 6,
+    "notes": 5,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "327",
+   "layout": "project",
+   "dispatchedAt": "2026-10-09T23:14:02Z",
+   "reviewEndedAt": "2026-10-10T01:49:19Z",
+   "pin": "5af2bbf9",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "sonnet"
+   ],
+   "manifestStage": "done",
+   "rounds": 3,
+   "roundsInActions": 3,
+   "roundsInFiles": 3,
+   "seriousByRound": [
+    2,
+    2,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 4,
+   "seriousBest": [
+    2,
+    2,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 14,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 6773,
+    "shape": "two-part",
+    "criteria": 4,
+    "decisions": 1,
+    "outOfScope": true,
+    "checks": 4,
+    "notes": 3,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "328",
+   "layout": "project",
+   "dispatchedAt": "2026-10-10T10:36:20Z",
+   "reviewEndedAt": "2026-10-10T14:29:12Z",
+   "pin": "98b52d7d",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 3,
+   "roundsInActions": 3,
+   "roundsInFiles": 3,
+   "seriousByRound": [
+    4,
+    3,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 7,
+   "seriousBest": [
+    4,
+    3,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 21,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 5271,
+    "shape": "two-part",
+    "criteria": 5,
+    "decisions": 2,
+    "outOfScope": true,
+    "checks": 5,
+    "notes": 4,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "332",
+   "layout": "project",
+   "dispatchedAt": "2026-10-08T12:29:51Z",
+   "reviewEndedAt": "2026-10-08T19:03:53Z",
+   "pin": "8baf5af9",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 1,
+   "seriousBest": [
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 7,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 10582,
+    "shape": "two-part",
+    "criteria": 4,
+    "decisions": 2,
+    "outOfScope": true,
+    "checks": 4,
+    "notes": 8,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "335",
+   "layout": "project",
+   "dispatchedAt": "2026-10-08T13:48:11Z",
+   "reviewEndedAt": "2026-10-09T10:49:19Z",
+   "pin": "8baf5af9",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 9,
+   "roundsInActions": 9,
+   "roundsInFiles": 9,
+   "seriousByRound": [
+    7,
+    3,
+    2,
+    1,
+    1,
+    2,
+    2,
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 19,
+   "seriousBest": [
+    7,
+    3,
+    2,
+    1,
+    1,
+    2,
+    2,
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 69,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 10066,
+    "shape": "two-part",
+    "criteria": 6,
+    "decisions": 0,
+    "outOfScope": true,
+    "checks": 6,
+    "notes": 8,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "337",
+   "layout": "project",
+   "dispatchedAt": "2026-10-08T21:26:23Z",
+   "reviewEndedAt": "2026-10-09T05:19:30Z",
+   "pin": "3850c8a1",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 1,
+   "seriousBest": [
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 13,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 6223,
+    "shape": "two-part",
+    "criteria": 4,
+    "decisions": 0,
+    "outOfScope": true,
+    "checks": 4,
+    "notes": 7,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "338",
+   "layout": "project",
+   "dispatchedAt": "2026-10-09T11:27:18Z",
+   "reviewEndedAt": "2026-10-09T13:02:07Z",
+   "pin": "5cfe615f",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 1,
+   "seriousBest": [
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 13,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 4781,
+    "shape": "two-part",
+    "criteria": 3,
+    "decisions": 0,
+    "outOfScope": true,
+    "checks": 3,
+    "notes": 4,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "339",
+   "layout": "project",
+   "dispatchedAt": "2026-10-09T20:33:48Z",
+   "reviewEndedAt": "2026-10-10T05:42:05Z",
+   "pin": "377f46fd",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 7,
+   "roundsInActions": 7,
+   "roundsInFiles": 7,
+   "seriousByRound": [
+    8,
+    8,
+    1,
+    3,
+    1,
+    3,
+    1
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 25,
+   "seriousBest": [
+    8,
+    8,
+    1,
+    3,
+    1,
+    3,
+    1
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 58,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 7669,
+    "shape": "two-part",
+    "criteria": 6,
+    "decisions": 0,
+    "outOfScope": true,
+    "checks": 6,
+    "notes": 6,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "340",
+   "layout": "project",
+   "dispatchedAt": "2026-10-08T21:29:14Z",
+   "reviewEndedAt": "2026-10-09T03:52:54Z",
+   "pin": "3850c8a1",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    2,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 2,
+   "seriousBest": [
+    2,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 5,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 3486,
+    "shape": "two-part",
+    "criteria": 2,
+    "decisions": 0,
+    "outOfScope": true,
+    "checks": 2,
+    "notes": 4,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "342",
+   "layout": "project",
+   "dispatchedAt": "2026-10-08T22:30:46Z",
+   "reviewEndedAt": "2026-10-09T11:44:37Z",
+   "pin": "3850c8a1",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    0,
+    1
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 1,
+   "seriousBest": [
+    0,
+    1
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 9,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 6060,
+    "shape": "two-part",
+    "criteria": 2,
+    "decisions": 0,
+    "outOfScope": true,
+    "checks": 2,
+    "notes": 4,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "344",
+   "layout": "project",
+   "dispatchedAt": "2026-10-09T18:37:35Z",
+   "reviewEndedAt": "2026-10-10T00:45:20Z",
+   "pin": "49734805",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "sonnet"
+   ],
+   "manifestStage": "done",
+   "rounds": 4,
+   "roundsInActions": 4,
+   "roundsInFiles": 4,
+   "seriousByRound": [
+    0,
+    1,
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 2,
+   "seriousBest": [
+    0,
+    1,
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 24,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 7184,
+    "shape": "two-part",
+    "criteria": 4,
+    "decisions": 3,
+    "outOfScope": true,
+    "checks": 4,
+    "notes": 4,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "347",
+   "layout": "project",
+   "dispatchedAt": "2026-10-09T04:47:37Z",
+   "reviewEndedAt": "2026-10-09T09:26:39Z",
+   "pin": "443e07e6",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "mimo"
+   ],
+   "reviewers": [
+    "luna",
+    "mimo"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    0,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 0,
+   "seriousBest": [
+    0,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 14,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 8685,
+    "shape": "two-part",
+    "criteria": 3,
+    "decisions": 0,
+    "outOfScope": true,
+    "checks": 3,
+    "notes": 7,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "348",
+   "layout": "project",
+   "dispatchedAt": "2026-10-09T19:58:31Z",
+   "reviewEndedAt": "2026-10-09T23:12:47Z",
+   "pin": "49734805",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "sonnet"
+   ],
+   "manifestStage": "done",
+   "rounds": 3,
+   "roundsInActions": 3,
+   "roundsInFiles": 3,
+   "seriousByRound": [
+    3,
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 4,
+   "seriousBest": [
+    3,
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 17,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 15630,
+    "shape": "two-part",
+    "criteria": 6,
+    "decisions": 0,
+    "outOfScope": true,
+    "checks": 6,
+    "notes": 9,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "352",
+   "layout": "project",
+   "dispatchedAt": "2026-10-10T06:36:28Z",
+   "reviewEndedAt": "2026-10-10T23:32:24Z",
+   "pin": "6ce9f749",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 6,
+   "roundsInActions": 6,
+   "roundsInFiles": 6,
+   "seriousByRound": [
+    6,
+    2,
+    1,
+    2,
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 12,
+   "seriousBest": [
+    6,
+    2,
+    1,
+    2,
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 61,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 13503,
+    "shape": "two-part",
+    "criteria": 5,
+    "decisions": 9,
+    "outOfScope": true,
+    "checks": 5,
+    "notes": 10,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "355",
+   "layout": "project",
+   "dispatchedAt": "2026-10-10T16:55:19Z",
+   "reviewEndedAt": "2026-10-10T21:31:58Z",
+   "pin": "291ad79f",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 5,
+   "roundsInActions": 5,
+   "roundsInFiles": 5,
+   "seriousByRound": [
+    5,
+    3,
+    2,
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 11,
+   "seriousBest": [
+    5,
+    3,
+    2,
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 18,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 10466,
+    "shape": "two-part",
+    "criteria": 6,
+    "decisions": 4,
+    "outOfScope": true,
+    "checks": 6,
+    "notes": 6,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "373",
+   "layout": "project",
+   "dispatchedAt": "2026-10-09T09:53:13Z",
+   "reviewEndedAt": "2026-10-09T14:44:12Z",
+   "pin": "02a68f9b",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 3,
+   "roundsInActions": 3,
+   "roundsInFiles": 3,
+   "seriousByRound": [
+    3,
+    1,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 4,
+   "seriousBest": [
+    3,
+    1,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 22,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 10967,
+    "shape": "two-part",
+    "criteria": 4,
+    "decisions": 2,
+    "outOfScope": true,
+    "checks": 4,
+    "notes": 8,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "374",
+   "layout": "project",
+   "dispatchedAt": "2026-10-09T23:49:33Z",
+   "reviewEndedAt": "2026-10-10T03:37:08Z",
+   "pin": "e20eb957",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    3,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 3,
+   "seriousBest": [
+    3,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 24,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 8041,
+    "shape": "two-part",
+    "criteria": 5,
+    "decisions": 2,
+    "outOfScope": true,
+    "checks": 5,
+    "notes": 6,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "375",
+   "layout": "project",
+   "dispatchedAt": "2026-10-10T05:30:43Z",
+   "reviewEndedAt": "2026-10-10T08:02:35Z",
+   "pin": "453e9f7b",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    2,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 2,
+   "seriousBest": [
+    2,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 18,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 6596,
+    "shape": "two-part",
+    "criteria": 4,
+    "decisions": 1,
+    "outOfScope": true,
+    "checks": 4,
+    "notes": 7,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "379",
+   "layout": "project",
+   "dispatchedAt": "2026-10-11T00:18:50Z",
+   "reviewEndedAt": "2026-10-11T02:43:51Z",
+   "pin": "c4a9ab00",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    2,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 2,
+   "seriousBest": [
+    2,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 17,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 13636,
+    "shape": "two-part",
+    "criteria": 5,
+    "decisions": 4,
+    "outOfScope": true,
+    "checks": 5,
+    "notes": 8,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "390",
+   "layout": "project",
+   "dispatchedAt": "2026-10-11T05:56:36Z",
+   "reviewEndedAt": null,
+   "pin": "d99b7112",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "synthesis",
+   "rounds": 0,
+   "roundsInActions": 0,
+   "roundsInFiles": 0,
+   "seriousByRound": [],
+   "seriousNoRound": 0,
+   "seriousTotal": 0,
+   "seriousBest": [],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 0,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 13226,
+    "shape": "two-part",
+    "criteria": 5,
+    "decisions": 4,
+    "outOfScope": true,
+    "checks": 5,
+    "notes": 8,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "391",
+   "layout": "project",
+   "dispatchedAt": "2026-10-11T06:39:29Z",
+   "reviewEndedAt": null,
+   "pin": "bbfce1b4",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "synthesis",
+   "rounds": 0,
+   "roundsInActions": 0,
+   "roundsInFiles": 0,
+   "seriousByRound": [],
+   "seriousNoRound": 0,
+   "seriousTotal": 0,
+   "seriousBest": [],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 0,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 16028,
+    "shape": "two-part",
+    "criteria": 6,
+    "decisions": 6,
+    "outOfScope": true,
+    "checks": 6,
+    "notes": 10,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "407",
+   "layout": "project",
+   "dispatchedAt": "2026-10-10T02:32:04Z",
+   "reviewEndedAt": "2026-10-10T22:23:05Z",
+   "pin": "57d47032",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 4,
+   "roundsInActions": 4,
+   "roundsInFiles": 4,
+   "seriousByRound": [
+    2,
+    1,
+    3,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 6,
+   "seriousBest": [
+    2,
+    1,
+    3,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 20,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 14030,
+    "shape": "two-part",
+    "criteria": 5,
+    "decisions": 0,
+    "outOfScope": true,
+    "checks": 5,
+    "notes": 9,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "408",
+   "layout": "project",
+   "dispatchedAt": "2026-10-10T22:24:27Z",
+   "reviewEndedAt": "2026-10-11T00:26:13Z",
+   "pin": "6ff6bc0f",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    0,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 0,
+   "seriousBest": [
+    0,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 6,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 4407,
+    "shape": "two-part",
+    "criteria": 4,
+    "decisions": 0,
+    "outOfScope": true,
+    "checks": 4,
+    "notes": 4,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "409",
+   "layout": "project",
+   "dispatchedAt": "2026-10-10T22:24:55Z",
+   "reviewEndedAt": null,
+   "pin": "6ff6bc0f",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "review",
+   "rounds": 3,
+   "roundsInActions": 3,
+   "roundsInFiles": 3,
+   "seriousByRound": [
+    11,
+    12,
+    9
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 32,
+   "seriousBest": [
+    11,
+    12,
+    9
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 44,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 8431,
+    "shape": "two-part",
+    "criteria": 5,
+    "decisions": 0,
+    "outOfScope": true,
+    "checks": 5,
+    "notes": 7,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "414",
+   "layout": "project",
+   "dispatchedAt": "2026-10-11T06:45:36Z",
+   "reviewEndedAt": null,
+   "pin": "bbfce1b4",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "dispatched",
+   "rounds": 0,
+   "roundsInActions": 0,
+   "roundsInFiles": 0,
+   "seriousByRound": [],
+   "seriousNoRound": 0,
+   "seriousTotal": 0,
+   "seriousBest": [],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 0,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 14951,
+    "shape": "two-part",
+    "criteria": 5,
+    "decisions": 5,
+    "outOfScope": true,
+    "checks": 5,
+    "notes": 7,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "425",
+   "layout": "project",
+   "dispatchedAt": "2026-10-10T20:12:00Z",
+   "reviewEndedAt": "2026-10-10T23:51:23Z",
+   "pin": "89cbb633",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "done",
+   "rounds": 3,
+   "roundsInActions": 3,
+   "roundsInFiles": 3,
+   "seriousByRound": [
+    4,
+    2,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 6,
+   "seriousBest": [
+    4,
+    2,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 15,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 8577,
+    "shape": "two-part",
+    "criteria": 4,
+    "decisions": 0,
+    "outOfScope": true,
+    "checks": 4,
+    "notes": 7,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "426",
+   "layout": "project",
+   "dispatchedAt": "2026-10-10T23:11:08Z",
+   "reviewEndedAt": null,
+   "pin": "6ff6bc0f",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "review",
+   "rounds": 1,
+   "roundsInActions": 1,
+   "roundsInFiles": 1,
+   "seriousByRound": [
+    17
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 17,
+   "seriousBest": [
+    17
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 36,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 9304,
+    "shape": "two-part",
+    "criteria": 6,
+    "decisions": 3,
+    "outOfScope": true,
+    "checks": 6,
+    "notes": 7,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "429",
+   "layout": "project",
+   "dispatchedAt": "2026-10-10T23:11:39Z",
+   "reviewEndedAt": "2026-10-11T02:45:22Z",
+   "pin": "6ff6bc0f",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "shipping",
+   "rounds": 2,
+   "roundsInActions": 2,
+   "roundsInFiles": 2,
+   "seriousByRound": [
+    3,
+    0
+   ],
+   "seriousNoRound": 0,
+   "seriousTotal": 3,
+   "seriousBest": [
+    3,
+    0
+   ],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 24,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 14015,
+    "shape": "two-part",
+    "criteria": 5,
+    "decisions": 8,
+    "outOfScope": true,
+    "checks": 5,
+    "notes": 10,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "466",
+   "layout": "project",
+   "dispatchedAt": "2026-10-11T05:57:14Z",
+   "reviewEndedAt": null,
+   "pin": "d99b7112",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "synthesis",
+   "rounds": 0,
+   "roundsInActions": 0,
+   "roundsInFiles": 0,
+   "seriousByRound": [],
+   "seriousNoRound": 0,
+   "seriousTotal": 0,
+   "seriousBest": [],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 0,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 7533,
+    "shape": "two-part",
+    "criteria": 3,
+    "decisions": 2,
+    "outOfScope": true,
+    "checks": 3,
+    "notes": 6,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  },
+  {
+   "run": "467",
+   "layout": "project",
+   "dispatchedAt": "2026-10-11T05:57:49Z",
+   "reviewEndedAt": null,
+   "pin": "d99b7112",
+   "mode": "single-thread",
+   "workhorses": [
+    "luna",
+    "haiku"
+   ],
+   "reviewers": [
+    "luna",
+    "haiku"
+   ],
+   "security": [
+    "opus"
+   ],
+   "manifestStage": "synthesis",
+   "rounds": 0,
+   "roundsInActions": 0,
+   "roundsInFiles": 0,
+   "seriousByRound": [],
+   "seriousNoRound": 0,
+   "seriousTotal": 0,
+   "seriousBest": [],
+   "filledRounds": [],
+   "silentRounds": [],
+   "findingLines": 0,
+   "ticketSource": "ticket-body",
+   "ticket": {
+    "chars": 12172,
+    "shape": "two-part",
+    "criteria": 6,
+    "decisions": 2,
+    "outOfScope": true,
+    "checks": 6,
+    "notes": 8,
+    "verifiedAt": true,
+    "turnpikes": "default"
+   }
+  }
+ ]
+}

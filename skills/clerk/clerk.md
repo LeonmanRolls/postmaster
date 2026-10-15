@@ -61,6 +61,22 @@ simplify the words and move the detail down. Keep every decision that changes wh
 or what the flow does in the plain part. The technical part follows from it and adds no behavior.
 Tag each technical note with the criteria and decisions it follows from, such as (C2, D1).
 
+For every ticket, consider which libraries could do its work better than hand-written code,
+such as reading a programming language, a file format or a protocol. Vet each one before
+listing it: check the name against look-alikes, the publisher, the age of the package and the
+version, how widely it is used, that its code matches its published source, its licence, that
+it runs on Linux and macOS alike, its upkeep, its install scripts, what it brings with it,
+and Socket's verdict, taking the name, the version, the publish date, the source and the
+verdict from `<tool>/scripts/run libraries facts <name> <version>` and checking the rest against
+the registry entry and the published source. List only those that pass, each as one line of the
+ticket's `## Libraries` section with its exact npm package name, its exact version and what each check found; a
+library that fails any check is left off the list, with the reason given to the user. A check
+that cannot be read, such as a verdict the scan did not answer, fails the library. A library
+that ships a native build for one system only fails. Where a project's own instructions bar
+libraries, still list what fits
+and say the project's rule stands unless the user lifts it. A ticket that needs no library
+carries no section and asks the user nothing.
+
 A ticket has at most five acceptance criteria. Above five there are two ways under the limit, and
 only two: leave work out of the ticket, or split the ticket by outcome
 into slices the user can each check on their own. Getting under five by

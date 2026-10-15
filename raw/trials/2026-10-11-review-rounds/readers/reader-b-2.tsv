@@ -1,0 +1,121 @@
+158.2.1	unclear	no	other	Text is a fragment of a report string; no defect or behaviour can be read from it.
+158.2.2	unclear	no	other	Text gives only a location in a lint rule; no defect stated, and the ticket does not mention lint.
+324.2.1	no	no	input	Criterion 5 and C5 give an unrequested surface no verifier folder, so unknown verifier folders must be caught.
+342.2.1	no	no	test	Test time limits are a repository rule the ticket's criteria and checks do not reach; one sane fix.
+81.2.1	no	no	state	Criteria 2 and 3 have a revised spec approved after changes; a stale changes decision re-triggering is a bug.
+81.3.1	no	no	prose	Criterion 4 fixes the two-approved bar; branch selection counting from nothing named is the runbook's own gap.
+81.4.1	no	no	input	Criterion 4 counts approved workhorse specs; a typo lane is no workhorse, so counting it is plainly wrong.
+110.2.1	no	no	other	Verifying the right repository is required under any reading; clearing inherited GIT_* has one sane answer.
+110.2.2	yes	no	state	Ticket never says what exit status a failed copy removal gets when the fallback left no residue.
+110.2.3	no	no	input	A failed install hidden behind a multi-statement gate yields a false pass; any reading requires the failure to surface.
+110.3.1	yes	no	other	Ticket leaves where the clean copy lives and how far it resists other local accounts to the fix.
+110.3.2	no	no	input	Install must follow the project's lockfile as verify.sh already does; one sane answer, one lockfile shape mishandled.
+110.4.1	yes	no	site	Ticket never says what happens when the gate hangs; the timeout value and containment were chosen by the fix.
+110.4.2	no	no	input	Gate runner must follow the same lockfile detection as install; one sane answer, yarn and bun shapes mishandled.
+18.2.1	no	no	input	Criterion 2 says a project must never name a credential; bare and camelCase names passing contradicts it.
+18.2.2	no	no	input	Criterion 3 requires each lane's own session exported; matching a decoy by suffix is wrong under any reading.
+18.2.3	no	no	input	Export must identify the lane's own session; a nested id beating the top-level identity is a wrong match.
+18.2.4	yes	no	input	Ticket never says what happens when several store records match one thread: newest, refuse or all.
+18.2.5	no	no	test	Self-test failing because it inherits the project variable is a plain defect; the ticket requires no particular behaviour.
+18.3.1	no	no	input	Criterion 2 forbids naming a credential; camelCase continuations such as secretKey passing contradicts it.
+18.3.2	no	no	state	Flow-owned stream path overwritten by an env file sourced first; ordering with one sane answer, outside the ticket.
+18.3.3	no	no	input	Left boundary is vacuous under IGNORECASE, so the regex cannot do what its own documentation says.
+18.3.4	no	no	input	Export must pick the lane's own thread; a dash-suffix match returning another thread is wrong under any reading.
+18.4.1	yes	no	input	Ticket never says what an explicitly empty --project does: behave as absent or be refused.
+57.2.1	no	no	state	Criterion 2 records a refused launch as refused before any thread; backfilling a stale thread contradicts it.
+57.2.2	no	no	state	Lock ownership by inference is a race defect in the launcher; the ticket offers no choice here.
+57.2.3	no	no	state	An exit trap releasing a lock it may not own is a plain ownership bug with one sane fix.
+57.2.4	yes	no	input	Ticket makes walled an outcome but never says which stderr wordings or status numbers count as a wall.
+57.2.5	no	no	state	Appending after a torn record without a newline fuses lines; any reading requires a clean line break.
+57.2.6	no	no	state	Same torn-tail fuse at a second append site; one sane answer, not a ticket choice.
+57.3.1	no	no	state	Claim check-then-replace race lets two legs run live; an atomic claim is required under any reading.
+57.3.2	no	no	state	Criterion 4 says a refused resume delivers its prompt once answered; a kill in the gap loses it.
+57.4.1	no	no	state	Criterion 1 records each attempt mechanically; an earlier attempt taking a later launch's thread is a bug.
+57.4.2	no	no	state	Criteria 3 and 4 need the next action from the record; a stale NEXT burying a refused resume breaks it.
+57.4.3	no	no	prose	Runbook command names the live tool root instead of the run's pinned checkout; a wrong sentence with one fix.
+57.4.4	no	no	state	Criterion 2 records an attempt without its hand-off as such; a stale done marker finishing it contradicts that.
+57.5.1	yes	no	state	Ticket does not say whether an incomplete outcome or the planning pause wins in next-action precedence.
+179.2.1	no	no	input	Hiding a real criterion behind a comment opener in a code span defeats 'every criterion has evidence'; reference counts two.
+179.2.2	no	no	input	Ticket makes the not-shown reason free text; a slash in it failing as a path is a wrong classification.
+179.2.3	no	no	input	An unclosed comment marker inside a code fence must not hide later entries; one sane reading, a parser shape.
+179.2.4	yes	no	input	Ticket does not say how a not-shown line trailing or continuing an evidence entry is read.
+179.2.5	no	no	input	Section end rule differs from the reference reader; both must list the same criteria, so one sane answer.
+179.3.1	no	no	input	Unclosed opener latching comment mode makes script and reference list different criteria; agreement is required.
+179.3.2	no	no	input	Criterion 6 needs each cited evidence path checked; skipping a second citation on a line breaks it.
+179.3.3	no	no	input	Entry indent rule contradicts the criteria rule in the same script; an indented entry is wrongly reported missing.
+179.3.4	no	no	input	A fenced list item body stays readable; script and reference list different criteria, so it must agree.
+179.4.1	no	no	input	A bare hash heading ends the section in the reference reader; the script reads one criterion too many.
+179.4.2	yes	no	contract	Ticket does not say where a transcript is cited when every criterion is not shown; runbook and checker disagree.
+135.2.1	no	no	state	Criterion 5 says a tripped copy does not complete and a ruling is recorded; partials and gaps break it.
+135.2.2	no	no	state	A scan that could not enumerate files passing clean defeats criterion 8; one sane answer is to fault.
+135.2.3	no	no	input	Criterion 7 needs the wiki scan to run; silently skipping it outside git is a wrong guard.
+135.2.4	no	no	input	Criterion 1 names .env-style assignments of anything key-like; an unquoted value with a comment shape is missed.
+135.2.5	no	no	input	Criterion 1 names home-directory paths; a bare home directory before a quote or space is missed.
+135.3.1	no	no	input	Criterion 1 scans every commit's added lines; skipping lines that start '++ ' is a diff misparse.
+135.3.2	no	no	input	Criterion 1 rules for listed kinds must fire in JSONL transcripts, the incident's own format; they never fire.
+135.3.3	no	no	input	A diff hunk shape raising KeyError and exit 2 swallowing findings is a crash under any reading.
+135.3.4	no	no	input	Criterion 5 and the recheck must not publish secret fragments; same-line multi-span scrub corrupts the copy.
+135.3.5	no	no	input	Criterion 1 says anything that looks like private data; private-shaped file names passing is a missed shape.
+135.3.6	yes	no	other	Ticket asks only for a reviewable allow record; whether suppressed detections must also be logged is unstated.
+135.3.7	no	no	state	Run lifecycle states are outside the ticket; an untold detection still needing telling has one sane answer.
+135.3.8	no	no	state	A failed enumeration exiting 0 hides a failure; criterion 3 gives the script its own exit code.
+135.3.9	no	no	site	Criterion 3 says never print the value; a copy failure printing a private-shaped path repeats that rule's gap.
+135.3.10	no	no	input	Scrub must leave unmatched content intact; re-encoding invalid UTF-8 outside the span corrupts the copy.
+135.3.11	no	no	site	Criterion 12 says stream large files; promotion, merge and lint paths buffering break the same rule.
+135.3.12	no	no	state	Criterion 5 scans before the copy completes; a change between scan and copy landing dirty content breaks it.
+135.3.13	yes	no	other	Ticket is silent on whether an allow may suppress the wiki path rule of criterion 7.
+135.3.14	no	no	site	Criterion 3 says never print the value; a lint fault printing a private-shaped file name repeats the gap.
+135.3.15	no	no	input	Criterion 4 allows one recorded match; a marker silencing other values on its line goes beyond it.
+135.4.1	no	no	input	Criterion 1 names private keys in common shapes; a PEM body surviving the scrub contradicts it.
+135.4.2	no	no	other	Criterion 8 runs the script on every change; an inherited variable silently blinding it defeats that.
+135.4.3	yes	no	input	Ticket says common shapes and calls the scan a backstop; how far escape sequences are looked through is unstated.
+135.4.4	yes	no	contract	Criterion 3 lists suspects by file and line without values; reporting a private-shaped path or line 0 is unstated.
+135.4.5	yes	no	input	Ticket does not say which escape encodings are decoded before matching; raw versus JSON-escaped handling is a choice.
+135.4.6	yes	no	input	Ticket does not say how deeply nested JSON encodings are decoded; any bound is a choice.
+135.4.7	no	no	input	Criterion 4 allows one recorded match; a marker inside record data silencing the next record goes beyond it.
+135.4.8	no	no	input	Criterion 1 names .env-style assignments of anything key-like; compound secret names passing contradicts it.
+135.4.9	no	no	input	Criterion 1 names private keys in common shapes; PGP, PuTTY, SSH2 and age keys being silent contradicts it.
+135.4.10	no	yes	state	Criterion 1 scans every commit base to head; empty range after a dirty merge breaks it; challenges round-2 disposition.
+135.4.11	no	no	input	Criterion 5 recheck must catch what remains; overlapping spans leaving a tail with a clean report is wrong.
+135.5.1	unclear	no	other	Text lists eight fixes, not a defect; too short to tell what the finding says.
+122.2.1	no	no	input	Criterion 3 sends quota or provider walls to the postmaster; wordings with underscore or hyphen separators are missed.
+122.2.2	no	no	input	Criterion 3 wakes the postmaster on a launch refusal; a host prefix hiding it contradicts that.
+122.2.3	no	no	state	Criterion 1 dispatches each next leg once; a guard testing the wrong marker permits re-dispatch.
+122.2.4	no	no	state	Guard against double dispatch misses a launch live but silent; one sane answer, not a ticket choice.
+122.3.1	no	no	input	Skip counted newlines, not lines, so an unterminated last line is miscounted; a plain counting bug.
+122.3.2	no	no	input	Criterion 3 wakes on a wall; inflected wall wordings falling through is a missed wording, not an open choice.
+122.4.1	no	no	input	Criterion 3 wakes on a wall; natural provider phrasings missed is wrong against the stated behaviour.
+122.5.1	no	no	input	Criterion 3 wakes on a wall; a three-word span missing real quota text is a missed wording.
+122.5.2	no	no	input	Criterion 3 wakes on a wall; a trailing boundary missing snake case suffixes is a missed wording.
+122.5.3	no	no	input	Criterion 3 wakes on a wall; structured wall type names not recognised is a missed shape.
+122.6.1	no	no	input	Criterion 3 wakes on a wall; a 100-line window missing an early wall resumes wrongly.
+122.6.2	no	no	input	Criterion 3 wakes on a wall; stemless 'slow down' wall text being resumed contradicts it.
+122.7.1	yes	yes	input	Ticket never says what the veto scans; ruling chose raw lines anywhere, finding objects, JSON keys then excluded.
+122.7.2	yes	yes	input	Ticket never says how digit stems are bounded; the ruling's no-boundary choice lets ordinary numbers veto.
+122.7.3	no	no	input	Ruling already makes unknown structured values wake; one outside the scan window being missed breaks it.
+122.8.1	no	no	input	Criterion 3 wakes on a wall; a key allowlist missing wall fields lets a wall be resumed.
+122.9.1	no	no	input	Criterion 2 resumes on a named transient; a host notice vetoing every uncapped launch defeats it.
+122.9.2	no	no	input	Criteria 2 and 3 need endings classified; error record shapes the adapter attests being missed is a gap.
+122.9.3	no	no	input	A corrupt manifest leg misdispatching or killing the watcher is a missing guard with one sane answer.
+122.10.1	no	no	state	Criterion 3 wakes on a launch refusal; logging a refused resume as success contradicts it.
+122.10.2	no	no	input	Error records nested one level deeper going unmarked is a missed shape; stated behaviour needs them found.
+122.11.1	no	no	state	Criterion 3 wakes on a launch refusal; a truncated err file making refusal_since miss it breaks that.
+122.11.2	no	no	input	Success statuses 2xx and 3xx blocking a resume contradict criterion 2; only error statuses can matter.
+122.12.1	no	no	input	Criterion 2 resumes only on the provider's transient error; a tool subtree's 503 is not one.
+268.2.1	no	no	input	Criterion 1 and D5 list TypeScript's ignore comments; a triple-slash ts-ignore reported clear contradicts them.
+268.2.2	no	no	input	Criterion 1 and D5 list TypeScript's ignore comments; a triple-slash ts-ignore reported clear contradicts them.
+268.3.1	unclear	no	input	Text is only a location; what is wrong with the quote scan cannot be read.
+268.3.2	no	no	input	D8 holds an approval only for the same code; an identity missing an implicit continuation breaks it.
+268.3.4	no	no	input	Criterion 7 requires the user's words recorded; a one-token entry passing without words contradicts it.
+268.4.1	yes	no	input	Criterion 6 says approve each one but D8 identifies by comment and code; identical duplicates are unspecified.
+268.8.1	yes	no	input	D8 keeps approval for the same comment over the same code; whether enclosing context counts is unstated.
+202.2.1	no	no	other	Criterion 11 puts branches back; inheriting GIT_DIR so reset targets another worktree is wrong under any reading.
+202.2.2	no	no	input	Criterion 5 lists every write from the lane's record; a write inside a quoted substitution is missed.
+202.2.3	unclear	no	other	Text is a location and half a sentence on change ownership; the defect cannot be read.
+202.3.2	no	no	state	Criterion 11 puts branches back as before the round; failing when a reviewer detached the worktree breaks it.
+202.3.3	no	no	input	D13 says an unreadable record is reported not checked, never clean; malformed task logs read as empty contradicts it.
+202.5.2	yes	yes	input	Ticket does not say which command operands count as paths; an earlier fix narrowed this and the finding widens it.
+202.5.3	no	no	site	D18 shows outside paths only as outside; not-checked reasons printing them verbatim miss the same rule.
+202.7.1	unclear	no	input	Text is only locations and a severity note; the defect in quoted substitution handling cannot be read.
+202.7.4	no	no	input	A repository path with a space breaking the profile regex is a plain parsing bug, one sane fix.
+202.7.5	no	no	state	Criterion 11 restores the branch to its snapshot; a reviewer-deleted ref making restore fault breaks it.

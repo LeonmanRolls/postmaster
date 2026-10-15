@@ -1,0 +1,28 @@
+[
+  {
+    "file": "scripts/verify.ts",
+    "line": 790,
+    "line_end": 792,
+    "target": "scripts/verify.ts:790",
+    "severity": "P1",
+    "summary": "Invoke the private-data scanner for dispatched checks",
+    "body": "For runs against ordinary external projects, this only passes a detections-log path to the project’s declared checks; `runChecks` never invokes the pinned `scrub-check.sh` or `tree-check.sh`. Unless the target’s own gate independently calls these scripts, no findings are recorded and private data can pass through the new TELL and ship-card flow. Run the pinned scanner as a mandatory check on the target worktree.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/scrub-core.ts",
+    "line": 1514,
+    "line_end": 1517,
+    "target": "scripts/scrub-core.ts:1514",
+    "severity": "P2",
+    "summary": "Decode UTF-16 before scanning Git child output",
+    "body": "When a changed committed file is UTF-16LE or UTF-16BE, Git’s diff output contains NUL-interleaved bytes, but `childLines` decodes them only as UTF-8. The range scan therefore misses text that the `--files` mode correctly detects from a BOM-marked file, allowing such findings to pass the gate; the raw-blob scan has the same issue. Detect the encoding or scan the blob through the BOM-aware reader before feeding lines to the scanner.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  }
+]

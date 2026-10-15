@@ -1,11 +1,19 @@
-// Tests beside scripts/log-action.ts, moved from its --self-test on #109: 61 controls.
+// Tests beside scripts/log-action.ts, moved from its --self-test on #109: 67 controls.
 // Each test repeats the write it checks, so it passes alone as well as in file order.
 // Repeated tool-fault argument lists are module constants; the mixed bad-byte write is a helper.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { toolRoot } from "./lib/paths.ts";
 import { decodeDropInvalid } from "./lib/proc.ts";
 import { controlOf, kindsOf } from "./log-action";
@@ -210,6 +218,20 @@ describe("positive controls", () => {
     expect(lines()).toBe(before + 1);
   });
 
+  test("a review finish and a later finding report are written", () => {
+    const before = lines();
+    const finish = logAction(["coachman", "review-finish", "luna", "bug round 1"]);
+    expect(finish.code).toBe(0);
+    const also = logAction([
+      "coachman",
+      "finding-also",
+      "src/a.ts:1",
+      "gating P2 r1 bug luna reading: the same defect",
+    ]);
+    expect(also.code).toBe(0);
+    expect(lines()).toBe(before + 2);
+  });
+
   test("as one line in the run's log and the same line in the ledger", () => {
     const r = logAction(["postmaster", "note", "RUN-1", "ledger check"]);
     expect(r.code).toBe(0);
@@ -282,6 +304,97 @@ describe("positive controls", () => {
     expect(entry.action).toBe("ticket-check");
     expect(entry.target).toBe("2");
     expect(entry.detail).toBe("ready");
+  });
+
+  test("a project postmaster experiment is written to the postmaster log and ledger", () => {
+    const project = join(tmp, "project-experiment");
+    mkdirSync(project, { recursive: true });
+    const r = projectAction(project, [
+      "postmaster",
+      "experiment",
+      "e1",
+      "start",
+      "look=2026-10-18",
+    ]);
+    expect(r.code).toBe(0);
+    const log = readFileSync(
+      join(project, ".postmaster", "runs", "postmaster", "actions.jsonl"),
+      "utf8",
+    );
+    const ledger = readFileSync(join(project, ".postmaster", "runs", "ledger.jsonl"), "utf8");
+    const entry = JSON.parse(log.trim());
+    expect(log).toBe(ledger);
+    expect(entry.run).toBe("postmaster");
+    expect(entry.actor).toBe("postmaster");
+    expect(entry.action).toBe("experiment");
+    expect(entry.target).toBe("e1");
+    expect(entry.detail).toBe("start look=2026-10-18");
+  });
+
+  test("a project event through a symlinked log path is refused", () => {
+    const cases: Array<{
+      setup: (project: string, outside: string) => void;
+      check: (outside: string) => void;
+    }> = [
+      {
+        setup: (project, outside) => symlinkSync(outside, join(project, ".postmaster")),
+        check: (outside) => expect(existsSync(join(outside, "runs"))).toBe(false),
+      },
+      {
+        setup: (project, outside) => {
+          mkdirSync(join(project, ".postmaster"), { recursive: true });
+          symlinkSync(outside, join(project, ".postmaster", "runs"));
+        },
+        check: (outside) => expect(existsSync(join(outside, "ledger.jsonl"))).toBe(false),
+      },
+      {
+        setup: (project, outside) => {
+          mkdirSync(join(project, ".postmaster", "runs"), { recursive: true });
+          symlinkSync(outside, join(project, ".postmaster", "runs", "postmaster"));
+        },
+        check: (outside) => expect(existsSync(join(outside, "actions.jsonl"))).toBe(false),
+      },
+      {
+        setup: (project, outside) => {
+          mkdirSync(join(project, ".postmaster", "runs"), { recursive: true });
+          writeFileSync(join(outside, "victim.txt"), "held\n");
+          symlinkSync(
+            join(outside, "victim.txt"),
+            join(project, ".postmaster", "runs", "ledger.jsonl"),
+          );
+        },
+        check: (outside) =>
+          expect(readFileSync(join(outside, "victim.txt"), "utf8")).toBe("held\n"),
+      },
+      {
+        setup: (project, outside) => {
+          mkdirSync(join(project, ".postmaster", "runs", "postmaster"), { recursive: true });
+          writeFileSync(join(outside, "victim.txt"), "held\n");
+          symlinkSync(
+            join(outside, "victim.txt"),
+            join(project, ".postmaster", "runs", "postmaster", "actions.jsonl"),
+          );
+        },
+        check: (outside) =>
+          expect(readFileSync(join(outside, "victim.txt"), "utf8")).toBe("held\n"),
+      },
+    ];
+    for (const [i, c] of cases.entries()) {
+      const project = join(tmp, `project-symlink-${i}`);
+      const outside = join(tmp, `project-symlink-${i}-outside`);
+      mkdirSync(project, { recursive: true });
+      mkdirSync(outside, { recursive: true });
+      c.setup(project, outside);
+      const r = projectAction(project, [
+        "postmaster",
+        "experiment",
+        "e1",
+        "start",
+        "look=2026-10-18",
+      ]);
+      expect(r.code).not.toBe(0);
+      c.check(outside);
+    }
   });
 
   test("a project clerk note is written to the ledger only", () => {
@@ -809,6 +922,19 @@ describe("negative controls: nothing is written", () => {
     expect(r.err.includes("opens with its class, gating or style")).toBe(true);
   });
 
+  test("a later finding report with no class", () => {
+    const before = lines();
+    const r = logAction([
+      "coachman",
+      "finding-also",
+      "src/c.ts:7",
+      "P2 r1 bug luna reading: no class",
+    ]);
+    expect(r.code).toBe(1);
+    expect(lines()).toBe(before);
+    expect(r.err.includes("opens with its class, gating or style")).toBe(true);
+  });
+
   test("a premise result without its base is refused", () => {
     const before = lines();
     const r = logAction(["coachman", "premises", "abc1234", "result=same"]);
@@ -823,6 +949,34 @@ describe("negative controls: nothing is written", () => {
     expect(r.code).toBe(1);
     expect(lines()).toBe(before);
     expect(r.err.includes("coachman or postmaster")).toBe(true);
+  });
+
+  test("a run log through a symlinked actions file is refused", () => {
+    const dispatch = join(tmp, "project-symlink-actions", ".postmaster", "runs", "T9");
+    const outside = join(tmp, "project-symlink-actions-outside");
+    mkdirSync(dispatch, { recursive: true });
+    mkdirSync(outside, { recursive: true });
+    writeFileSync(join(outside, "victim.txt"), "held\n");
+    symlinkSync(join(outside, "victim.txt"), join(dispatch, "actions.jsonl"));
+    const r = spawnSync(SELF, ["log-action", dispatch, "coachman", "note", "T9", "hello"], {
+      encoding: "utf8",
+    });
+    expect(r.status).not.toBe(0);
+    expect(readFileSync(join(outside, "victim.txt"), "utf8")).toBe("held\n");
+  });
+
+  test("a run log through a symlinked runs ledger is refused", () => {
+    const dispatch = join(tmp, "project-symlink-runsledger", ".postmaster", "runs", "T9");
+    const outside = join(tmp, "project-symlink-runsledger-outside");
+    mkdirSync(dispatch, { recursive: true });
+    mkdirSync(outside, { recursive: true });
+    writeFileSync(join(outside, "victim.txt"), "held\n");
+    symlinkSync(join(outside, "victim.txt"), join(dirname(dispatch), "ledger.jsonl"));
+    const r = spawnSync(SELF, ["log-action", dispatch, "coachman", "note", "T9", "hello"], {
+      encoding: "utf8",
+    });
+    expect(r.status).not.toBe(0);
+    expect(readFileSync(join(outside, "victim.txt"), "utf8")).toBe("held\n");
   });
 
   test("a switch-off with a target out of shape", () => {
@@ -857,6 +1011,53 @@ describe("negative controls: nothing is written", () => {
       "comment:0123456789abcdef",
       "approved bunfig.toml",
     ]);
+    expect(r.code).toBe(1);
+    expect(lines()).toBe(before);
+    expect(r.err.includes("carries the decision")).toBe(true);
+  }, 30000);
+
+  test("an approved library is written", () => {
+    const before = lines();
+    const r = logAction([
+      "postmaster",
+      "library",
+      "library:0123456789abcdef",
+      "approved",
+      "library left-pad 1.3.0 added",
+      "yes,",
+      "take",
+      "it",
+    ]);
+    expect(r.code).toBe(0);
+    expect(lines()).toBe(before + 1);
+    const last = lastLine();
+    expect(
+      last !== null &&
+        last.action === "library" &&
+        last.target === "library:0123456789abcdef" &&
+        last.detail === "approved library left-pad 1.3.0 added yes, take it",
+    ).toBe(true);
+  }, 30000);
+
+  test("a library with a target out of shape", () => {
+    const before = lines();
+    const r = logAction(["coachman", "library", "left-pad@1.3.0", "approved yes take it"]);
+    expect(r.code).toBe(1);
+    expect(lines()).toBe(before);
+    expect(r.err.includes("library:<16 hex>")).toBe(true);
+  }, 30000);
+
+  test("a library whose decision is another word", () => {
+    const before = lines();
+    const r = logAction(["coachman", "library", "library:0123456789abcdef", "maybe yes"]);
+    expect(r.code).toBe(1);
+    expect(lines()).toBe(before);
+    expect(r.err.includes("opens with its decision, approved or refused")).toBe(true);
+  }, 30000);
+
+  test("a library with the decision and nothing after it", () => {
+    const before = lines();
+    const r = logAction(["coachman", "library", "library:0123456789abcdef", "approved"]);
     expect(r.code).toBe(1);
     expect(lines()).toBe(before);
     expect(r.err.includes("carries the decision")).toBe(true);

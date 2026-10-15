@@ -3,14 +3,16 @@
 //   run refresh-parser [<version>] [--waive-age <version>]
 //
 // With no version, takes the latest 7.x the registry names; with one, takes
-// exactly it. A version published under seven days earlier is refused unless
-// --waive-age names that same version, the user's waiver for one version.
-// Socket's scanner checks the package before anything is downloaded, and a
-// flagged or unchecked package is refused. Downloads the tarball, checks its
-// registry integrity hash, and writes scripts/lib/vendor/babel-parser.js,
-// LICENSE and VERSION. The bundle must stay self-contained (no require
-// calls): a bundle that imports anything else fails the refresh instead of
-// landing half-vendored.
+// exactly it. A version the ticket lists no approval for is refused before
+// anything is downloaded, from the tree's own approval cache. A version
+// published under seven days earlier is refused unless --waive-age names
+// that same version, the user's waiver for one version. Socket's scanner
+// checks the package before anything is downloaded, and a flagged or
+// unchecked package is refused. Downloads the tarball, checks its registry
+// integrity hash, and writes scripts/lib/vendor/babel-parser.js, LICENSE
+// and VERSION. The bundle must stay self-contained (no require calls): a
+// bundle that imports anything else fails the refresh instead of landing
+// half-vendored.
 //
 // POSTMASTER_REFRESH_FIXTURE=<dir> reads the packument from
 // <dir>/packument.json and the tarball from <dir>/<version>.tgz instead of
@@ -23,7 +25,8 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type ScanAdvisory, scanner } from "./lib/install-scanner.ts";
+import { type ScanAdvisory, socketScanOnly } from "./lib/install-scanner.ts";
+import { isApproved } from "./lib/library-approvals.ts";
 import { toolRoot } from "./lib/paths.ts";
 
 const REGISTRY = "https://registry.npmjs.org/@babel/parser";
@@ -167,12 +170,24 @@ async function fetchJson(url: string): Promise<unknown> {
   return (await response.json()) as unknown;
 }
 
+/** Refuse a version the ticket lists no approval for, before anything is
+ * downloaded. The vendored bundle is never in bun.lock, so its approval is
+ * its own check against the tree's cache, not the install's scan. */
+export function assertApproved(root: string, version: string): void {
+  if (!isApproved(root, PACKAGE, version)) {
+    throw new Error(
+      `refresh-parser: refusing ${PACKAGE}@${version}: the ticket lists no approval for it; ` +
+        `stop and report it to the coachman`,
+    );
+  }
+}
+
 /** Refuse a package the scanner flags or cannot check, before anything is
  * downloaded. */
 async function assertScanned(version: string): Promise<void> {
   let advisories: ScanAdvisory[];
   try {
-    advisories = await scanner.scan({ packages: [{ name: PACKAGE, version }] });
+    advisories = await socketScanOnly([{ name: PACKAGE, version }]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`refresh-parser: cannot scan ${PACKAGE}@${version}: ${message}`);
@@ -244,6 +259,7 @@ async function main(argv: string[], root: string): Promise<number> {
         : (JSON.parse(readFileSync(join(fixture, "packument.json"), "utf8")) as unknown);
     const version = resolveVersion(options.version, options.version ?? packumentLatest(doc));
     const take = packumentTake(doc, version);
+    assertApproved(process.env["POSTMASTER_REFRESH_ROOT"] ?? root, version);
     assertOldEnough(version, take.publishedAt, Date.now(), options.waiver);
     await assertScanned(version);
     await refresh(version, take, root, fixture);

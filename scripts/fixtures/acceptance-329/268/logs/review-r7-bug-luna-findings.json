@@ -1,0 +1,41 @@
+[
+  {
+    "file": "skills/postmaster/postmaster.md",
+    "line": 566,
+    "line_end": 568,
+    "target": "skills/postmaster/postmaster.md:566",
+    "severity": "P1",
+    "summary": "Revalidate switch-offs against the head that lands",
+    "body": "On the pull-request route, this check runs before the PR opens. If a later push adds a suppression or changes check settings, the user can merge that new head without the postmaster checking it; the later `already-landed` check can notice the mismatch only after the merge. Revalidate and hold the exact head to be merged so an unapproved switch-off cannot land.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "skills/postmaster/postmaster.md",
+    "line": 704,
+    "line_end": 706,
+    "target": "skills/postmaster/postmaster.md:704",
+    "severity": "P2",
+    "summary": "Route legacy refusals and missing reasons back to the leg",
+    "body": "Legacy Stage F treats every nonzero status as an entry to present to the user and record. Exit 3 means a comment lacks its required reason, and exit 4 means the user has already refused it; neither should prompt for another approval. In both cases, withhold and send the discrepancy back to the coachman, as current Stage F does.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/lib/switch-offs.ts",
+    "line": 997,
+    "line_end": 998,
+    "target": "scripts/lib/switch-offs.ts:997",
+    "severity": "P2",
+    "summary": "Show the resolved diff for symlinked settings",
+    "body": "When an unchanged settings symlink points to a file whose contents change, `changedAliases` selects the symlink, but Git sees no diff at that path. The listing therefore shows “(no textual diff)” instead of the change the user is being asked to approve. Generate the displayed diff from the resolved target blobs.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  }
+]
