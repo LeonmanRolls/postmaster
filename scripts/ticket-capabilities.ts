@@ -3,7 +3,7 @@
 // shape (skills/clerk/ticket-template.md) has a `### Existing capabilities` section in the form
 // the template gives.
 //
-//   scripts/run ticket-capabilities <body-file>
+//   scripts/run ticket-capabilities <body-file> [--candidates <menu>]...
 //
 // The section holds either one line, `None: <why>`, for a change that touches nothing outside the
 // repository, or one entry for each library, SDK or service the change touches or that a decision
@@ -19,13 +19,32 @@
 //   - an entry has no bold name, lacks a label, has the labels out of order, has an empty part,
 //     cites no source in its `Offers:` part, or has no tag group.
 //
-// A ticket reads one file and contacts nothing. Whether the sources say what the entry says is
-// the clerk's to have checked and the user's to be able to follow; this command checks the form.
+// With `--candidates`, the command also checks the menus that `run api-index` and `run code-index`
+// made with `--match <draft>`, the clerk's view of everything the libraries and the project's own
+// code offer. A menu must have been made from the draft as it stands now (its vocabulary key
+// matches), so that the clerk planned with the whole index in front of it. An entry whose `Custom:`
+// part is not "none" must also carry a `Searched:` part naming the settings, methods or helpers
+// that were looked for, so that "the library cannot do this" rests on a look. The section does not
+// list what a menu holds: the clerk needs to know it while it plans, not to repeat it. Findings
+// added:
+//   - a menu made without --match, or from an older draft;
+//   - an entry with a Custom: part and no Searched: part that names a setting, method or helper.
+//
+// A ticket reads its files and contacts nothing. Whether the sources say what the entry says is
+// the clerk's to have checked and the user's to be able to follow; this command checks the form
+// and that the menus the clerk planned from are the draft's own.
 //
 //   exit 0  fit; the entry count is printed
 //   exit 1  findings
 //   exit 2  not usable: usage, an unreadable file, or no `## For the agents` heading
 import { readFileSync } from "node:fs";
+import {
+  type ParsedList,
+  draftText,
+  parseList,
+  vocabulary,
+  vocabularyKey,
+} from "./lib/index-match.ts";
 import { agentsIndex, fenceMap, level3Sections, normalizeTicket } from "./lib/ticket-sections.ts";
 
 export interface Finding {
@@ -48,6 +67,10 @@ const URL_RE = /https?:\/\/[^ \t)\]>]+/u;
 // A file and a line of the installed version: a name with an extension, a colon and a number.
 const FILE_LINE_RE = /[\p{L}\p{N}_./@-]+\.[\p{L}]+:[0-9]+/u;
 const LABELS = ["Offers:", "Uses:", "Custom:"] as const;
+const NONE_PART_RE = /^none(?![\p{L}\p{N}])/iu;
+const SEARCHED = "Searched:";
+// A setting, method or helper named in the text: a code span, or a name with an underscore or a hump.
+const NAMED_RE = /`[^`]+`|[A-Za-z_$][A-Za-z0-9_$]*(?:_|[a-z][A-Z])[A-Za-z0-9_$]*/u;
 
 // Blank the inline code spans of a line, keeping its length, so that an example is not read as text.
 function blankCode(line: string): string {
@@ -90,7 +113,12 @@ function labelAt(text: string, label: string, from: number): number {
   return -1;
 }
 
-function checkEntry(text: string, line: number, add: (line: number, msg: string) => void): void {
+function checkEntry(
+  text: string,
+  line: number,
+  add: (line: number, msg: string) => void,
+  strict: boolean,
+): void {
   const head = text.split("\n")[0];
   if (!NAME_RE.test(head)) add(line, "entry has no name in bold: start it with - **name**");
   const flat = blankCode(text.split("\n").join(" "));
@@ -109,9 +137,11 @@ function checkEntry(text: string, line: number, add: (line: number, msg: string)
     }
   }
   if (!missing) {
+    // A `Searched:` part follows `Custom:` and is not part of it.
+    const searchedAt = labelAt(flat, SEARCHED, at[2] + LABELS[2].length);
     for (let k = 0; k < LABELS.length; k++) {
       const start = at[k] + LABELS[k].length;
-      const end = k + 1 < LABELS.length ? at[k + 1] : flat.length;
+      const end = k + 1 < LABELS.length ? at[k + 1] : searchedAt >= 0 ? searchedAt : flat.length;
       const part = flat.slice(start, end).replace(TAG_RE, " ");
       const min = k === 0 ? 3 : 1;
       if (words(part) < min) add(line, `entry has an empty ${LABELS[k]} part`);
@@ -125,12 +155,32 @@ function checkEntry(text: string, line: number, add: (line: number, msg: string)
     if (!URL_RE.test(offers) && !FILE_LINE_RE.test(offers)) {
       add(line, "entry cites no source in Offers: give a documentation link or a file and line");
     }
+    if (strict) {
+      const customEnd = searchedAt >= 0 ? searchedAt : flat.length;
+      const custom = flat
+        .slice(at[2] + LABELS[2].length, customEnd)
+        .replace(TAG_RE, " ")
+        .trim();
+      // raw and flat have the same length, so a position in one is the same place in the other
+      const searched = searchedAt >= 0 ? raw.slice(searchedAt + SEARCHED.length) : "";
+      if (!NONE_PART_RE.test(custom) && !NAMED_RE.test(searched)) {
+        add(
+          line,
+          "entry has a Custom: part and no Searched: part naming the settings, methods or helpers looked for",
+        );
+      }
+    }
   }
   if (!TAG_RE.test(flat)) add(line, "entry has no tag group such as (C1, D2)");
 }
 
+export interface CandidateList {
+  readonly name: string;
+  readonly list: ParsedList;
+}
+
 // null when the text has no `## For the agents` heading.
-export function analyze(text: string): Report | null {
+export function analyze(text: string, candidates: readonly CandidateList[] = []): Report | null {
   const lines = text.split("\n");
   const ai = agentsIndex(lines);
   if (ai < 0) return null;
@@ -157,6 +207,7 @@ export function analyze(text: string): Report | null {
       heads.push(i);
     }
   }
+  const strict = candidates.length > 0;
   for (const n of none) {
     if (words(n.reason) < 3) add(n.line, "None: needs a reason in a few words");
   }
@@ -176,36 +227,85 @@ export function analyze(text: string): Report | null {
     for (let i = start; i < end; i++) {
       if (!isFenced(i)) parts.push(lines[i]);
     }
-    checkEntry(parts.join("\n").trimEnd(), start + 1, add);
+    checkEntry(parts.join("\n").trimEnd(), start + 1, add, strict);
+  }
+  if (strict) {
+    const key = vocabularyKey(vocabulary(draftText(text)));
+    for (const c of candidates) {
+      if (c.list.vocabularyKey === null) {
+        add(
+          section.at + 1,
+          `${c.name} was made without --match <draft>: make it again with the draft`,
+        );
+      } else if (c.list.vocabularyKey !== key) {
+        add(
+          section.at + 1,
+          `${c.name} was made from an older draft: run api-index or code-index again with --match <draft>, read it, and revise the section`,
+        );
+      }
+    }
   }
   findings.sort((a, b) => a.line - b.line);
   return { findings, entries: heads.length };
 }
 
-const USAGE = "usage: run ticket-capabilities <body-file>";
+const USAGE = "usage: run ticket-capabilities <body-file> [--candidates <menu>]...";
 
 function main(argv: string[]): number {
-  if (argv.length !== 1 || argv[0].startsWith("-")) {
+  const files: string[] = [];
+  const listPaths: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === "--candidates") {
+      const v = argv[i + 1];
+      if (v === undefined || v.startsWith("--")) {
+        console.error(USAGE);
+        return 2;
+      }
+      listPaths.push(v);
+      i += 1;
+    } else if (argv[i].startsWith("-")) {
+      console.error(USAGE);
+      return 2;
+    } else {
+      files.push(argv[i]);
+    }
+  }
+  if (files.length !== 1) {
     console.error(USAGE);
     return 2;
   }
   let text: string;
   try {
-    text = readFileSync(argv[0], "utf8");
+    text = readFileSync(files[0], "utf8");
   } catch (e) {
     console.error(
-      `ticket-capabilities: cannot read ${argv[0]}: ${e instanceof Error ? e.message : String(e)}`,
+      `ticket-capabilities: cannot read ${files[0]}: ${e instanceof Error ? e.message : String(e)}`,
     );
     return 2;
   }
-  const report = analyze(normalizeTicket(text));
+  const lists: CandidateList[] = [];
+  for (const p of listPaths) {
+    try {
+      lists.push({ name: p, list: parseList(readFileSync(p, "utf8")) });
+    } catch (e) {
+      console.error(
+        `ticket-capabilities: cannot read ${p}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      return 2;
+    }
+  }
+  const report = analyze(normalizeTicket(text), lists);
   if (!report) {
     console.error('ticket-capabilities: no "## For the agents" section');
     return 2;
   }
   for (const f of report.findings)
-    console.log(`line ${f.line}: capabilities: ${clip(f.text, 120)}`);
-  if (report.findings.length === 0) console.log(`existing capabilities: ${report.entries} entries`);
+    console.log(`line ${f.line}: capabilities: ${clip(f.text, 160)}`);
+  if (report.findings.length === 0) {
+    console.log(
+      `existing capabilities: ${report.entries} entries${lists.length > 0 ? `, ${lists.length} menus made from this draft` : ""}`,
+    );
+  }
   return report.findings.length > 0 ? 1 : 0;
 }
 

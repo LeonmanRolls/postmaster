@@ -83,16 +83,19 @@ default
 
 ### Existing capabilities
 
-<What the libraries, SDKs and services this change touches already do, read from the vendor's own
-documentation and the installed version. The agents use the library's own option where one is
-listed here. A custom mechanism that duplicates one is a deviation: the hand-off records it with
-its reason, and it is not marked do-not-reopen. For a change that touches nothing outside the
-repository, the single line "None: nothing outside the repository is involved.">
+<What the libraries, SDKs and services this change touches already do, and what the project's own
+code already offers, read from the vendor's own documentation, the installed version and the menus
+`api-index` and `code-index` made from this draft. The agents use the library's own option, or the
+project's own helper, where one is listed here. A custom mechanism that duplicates one is a
+deviation: the hand-off records it with its reason, and it is not marked do-not-reopen. For a
+change that touches nothing outside the repository, the single line "None: nothing outside the
+repository is involved.">
 
-- **<library or service, and the thing the ticket needs from it>** Offers: <what it provides, with
-  its source: a documentation link, or a file and line of the installed version>. Uses: <what this
-  ticket takes from it, or "nothing">. Custom: <what stays ours and why the library cannot do it,
-  or "none">. (C1, D1)
+- **<library, service or project module, and the thing the ticket needs from it>** Offers: <what
+  it provides, with its source: a documentation link, or a file and line of the installed version
+  or the project>. Uses: <what this ticket takes from it, or "nothing">. Custom: <what stays ours
+  and why it cannot do it, or "none">. Searched: <the settings, methods or helpers looked for
+  before saying so; left out when Custom is "none">. (C1, D1)
 
 ### Verified at <base sha>
 
@@ -150,9 +153,13 @@ repository, the single line "None: nothing outside the repository is involved.">
   Never drop a choice that changes what a person sees or what the flow does. Simplify the words and
   move the detail down.
 - **Existing capabilities** name, for each library, SDK or service the change touches or a decision
-  would wrap, replace or work around, what it already offers, each with its source, what the ticket
-  takes from it, and what stays custom and why. The clerk reads the vendor's documentation and the
-  installed version to write it, and `<tool>/scripts/run ticket-capabilities` checks its form.
+  would wrap, replace or work around, and for the project code it touches, what it already offers,
+  each with its source, what the ticket takes from it, and what stays custom and why, with the
+  settings, methods or helpers searched. The clerk reads the vendor's documentation, the installed
+  version and the menus `<tool>/scripts/run api-index` and `<tool>/scripts/run code-index` make from
+  the draft, to write it; the section does not list what a menu holds, because the clerk needs to
+  know it while planning, not to repeat it. `<tool>/scripts/run ticket-capabilities` checks its
+  form and that each menu was made from this draft.
 - **Technical notes** each carry, in a tag group such as `(C2, D1)`, the criteria and decisions they
   follow from, where `C2` is the second criterion and `D1` the first decision. A note that follows
   from none is either a detail the lanes decide, and does not belong, or a decision the plain part
