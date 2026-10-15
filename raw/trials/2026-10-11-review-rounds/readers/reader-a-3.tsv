@@ -1,0 +1,121 @@
+252.2.1	no	no	input	Criterion 5 saves uncommitted changes before removal; dirty submodule contents are lost, so code contradicts it.
+252.2.2	no	no	input	Criterion 5 saves any commits no branch holds; merge commits are dropped, so code contradicts the stated behaviour.
+252.2.3	no	no	contract	D9 says the dry run makes the real run's checks; it promises removal the real run refuses.
+252.2.4	no	no	input	Criterion 9 says closing words go once; substring match wrongly treats a longer comment as already posted.
+252.2.5	no	no	contract	D9 says the dry run ends with the real run's exit status; here it exits 3 instead.
+252.3.1	no	no	input	Inherited git environment redirects the scan to another checkout before removal; ticket's save-before-removal requires the right folder.
+252.3.2	no	no	contract	D9 says the dry run makes the real run's checks; the pin lock refusal is not previewed.
+252.3.3	no	no	input	Criterion 6 requires flagging unlanded work; quoted paths make flags silently missing, contradicting it.
+252.3.4	no	no	contract	D2 has the command set the ticket's state and Plane has an adapter; the adapter call is wrong.
+109.2.1	no	no	input	AC2 requires the same output as BASE; BASE keeps the replacement character, the port drops it.
+109.2.2	no	no	contract	AC2 requires the same exit codes; BASE reports 128 plus the signal number, the port reports 128.
+109.2.3	no	no	contract	AC2 requires the same exit codes; BASE's launch dies by the signal, the port exits 1.
+109.2.4	no	no	contract	AC2 requires BASE's observable behaviour; BASE passes the inherited SHLVL on, the port drops it.
+109.3.1	no	no	input	AC2 requires BASE's exit codes; BASE aborts where the port launches on an unmodified environment.
+109.3.2	yes	yes	other	Criteria never say whether wrappers load the target's bunfig and .env; finding overturns round-1's below-bar call.
+109.3.3	no	no	input	AC2 requires BASE's exit codes; BASE exits 2 on tab-indented break, the port exits 0.
+109.3.4	no	no	input	AC1 forbids Python in scripts; the oracle pattern misses versioned interpreters, so the check is wrong against it.
+109.4.1	no	no	input	AC2 requires BASE's behaviour; the env file's output is parsed as the dump, verified by execution.
+109.4.2	no	no	input	AC2 requires BASE's exit codes; BASE exits 0 without launching, the port exits 1.
+109.4.3	no	no	input	A large environment kills the launch with rc 143; any reading of the ticket requires the fix.
+109.4.4	no	no	test	AC3 keeps every BASE control; this control asserts the wrong thing, so it is vacuous.
+109.4.5	no	no	input	AC2 requires BASE's exit codes; BASE refuses a ticket with bad bytes, the port loads it.
+109.4.6	no	no	state	AC2 requires BASE's behaviour; BASE enters the working directory before sourcing the env file.
+109.5.1	no	no	contract	AC2 requires BASE's observable behaviour; BASE hands the worktree as PWD, the port hands a stale one.
+109.5.2	no	no	input	AC2 requires BASE's literal treatment of the harness name; executing a payload is plainly wrong.
+109.5.3	no	no	input	AC2 requires BASE's literal treatment of the path; executing a payload is plainly wrong.
+109.5.4	no	no	input	AC2 requires BASE's output; BASE passes the prompt bytes raw, the port decodes them as UTF-8.
+109.6.1	no	no	contract	AC2 and BASE-laid sessions: the key must match BASE's, or resume misses existing sessions.
+109.6.2	no	no	input	AC2 requires BASE's messages and effects; BASE reports no such directory and touches nothing.
+109.6.3	no	no	state	AC2 requires BASE's behaviour; BASE changes directory first, the port checks exports in a stale environment.
+109.6.4	no	no	contract	AC2 requires BASE's behaviour; BASE aborts after 1200 seconds with a message, the port has no deadline.
+109.6.5	no	no	contract	AC2 requires BASE's behaviour; BASE reports a timeout after 60 seconds, the port has none.
+109.6.6	no	no	contract	AC2 requires BASE's behaviour; BASE had a 30 second timeout, the port's fetch has none.
+109.6.7	no	no	state	AC2 requires BASE's behaviour; BASE fails on a git error, the port ignores the exit code.
+109.6.8	no	no	input	AC2 requires BASE's behaviour; BASE keeps quoted arguments, the port's shebang split breaks them.
+109.8.1	no	no	input	AC2 requires BASE's output; non-ASCII text produces different fault ids than BASE.
+109.8.2	yes	yes	contract	AC1 forbids Python, AC3 keeps BASE controls; ticket silent on tests running BASE's Python; conflicts with a ruling.
+109.9.1	no	no	input	AC2 requires BASE's output; non-ASCII addresses leak through publish where BASE redacts them.
+109.9.2	no	no	input	AC2 requires BASE's output; an Arabic-digit address is published raw and neighbours are over-withheld.
+109.9.3	no	no	input	AC2 requires BASE's output; non-ASCII letters before a key make a false ticket key.
+109.9.4	no	no	input	AC2 requires BASE's output; the fault id splits on Unicode word boundaries differently from BASE.
+109.9.5	no	no	input	AC2 requires BASE's behaviour; casefold differs from toLowerCase, so some remotes are rejected.
+109.9.6	no	no	input	AC2 requires BASE's behaviour; case-insensitive matching differs for the long-s name.
+109.9.7	no	no	input	AC2 requires BASE's behaviour; Unicode digits are mishandled where BASE's isdigit accepts them.
+109.9.8	no	no	input	AC2 requires BASE's behaviour; the end anchor differs, so only the first line is returned.
+109.10.1	no	no	other	AC5 requires check to exit 0; it exits 1 at HEAD on lint and format.
+109.10.2	no	no	input	AC2 requires BASE's behaviour; BASE rejects that digit while the port's tables disagree.
+109.10.3	no	no	input	The round-9 ruling requires the guard to catch ASCII-only primitives; five forms slip through, so the check is wrong.
+109.10.4	no	yes	input	Principle requires an observable difference from BASE; splitlines differs on exotic separators; finding overturns a ship-card entry.
+109.10.5	no	no	input	AC1 forbids Python in scripts; classifier false positives and negatives, so the check is wrong against it.
+109.12.1	no	no	contract	Host refusing every automatic dispatch breaks AC2's "a run in flight keeps working"; any reading requires the fix.
+109.12.2	no	no	contract	AC2 requires BASE's behaviour; the capitalised key never matches the lowercased lookup, so prose misclassifies.
+109.12.3	no	no	input	AC2 requires BASE's behaviour; BASE accepts fences of three or more, the port reads exactly three.
+109.12.4	no	no	input	AC2 requires BASE's behaviour; BASE anchors on newlines only, the port also matches after U+2028.
+105.2.1	yes	no	input	Ticket says leg only "where it has one"; silent on a legacy coachman with missing or unparseable leg.
+105.2.2	yes	no	state	Ticket never says what happens when closing the root tab fails; the recovery policy is a choice.
+105.2.3	yes	no	state	Ticket silent on tab creation failing after the root tab closes; the recovery policy is a choice.
+105.3.1	yes	no	state	Ticket states no placement-failure handling; how to leave a closeable space is a choice.
+105.3.2	yes	no	input	Ticket gives a leg only "where it has one"; an empty leg number could label plainly or refuse.
+105.3.3	yes	yes	site	Ticket silent on labelling a model-less coachman; finding says round-1's scoping, which exempted it, was wrong.
+105.4.1	yes	no	state	Ticket states no failed-tag or failed-create handling; leaving a closeable space is a choice.
+105.4.2	yes	no	state	Ticket states no failed mark-write handling; avoiding an orphaned space is a choice among policies.
+105.5.1	yes	no	state	Ticket states no post-create failure handling; rollback or leave-and-name is a choice.
+105.6.1	yes	no	input	Ticket silent on closing the root tab when pane metadata is incomplete; refuse or close only own pane.
+105.7.1	no	no	input	An empty-string tab_id is a wrong comparison; one sane fix, a falsy check.
+38.4.1	no	no	input	AC7 says unparseable output fails loudly, never counts clean; ignoring a declared findings list loses a bug.
+38.4.2	no	no	input	AC7 says output it cannot parse must not count as clean; an error result is wrongly filtered out.
+38.6.1	no	no	state	AC7 says a failed parse must not count as clean; a failed harvest's verdict is still counted.
+38.6.2	no	no	contract	Sentence promises behaviour no script provides; any reading requires fixing the words or the code.
+38.7.1	no	no	state	AC7 says unreadable output must not count clean; a stale --last file from a failed turn does.
+38.7.2	no	no	site	Run-log entry exists on the harvest-fail arm but not the degrade arm; one sane answer, add it.
+38.7.3	no	no	input	AC6 requires faithful findings; fence stripping corrupts triple backticks inside JSON strings, a plain bug.
+38.8.1	no	no	contract	AC6 maps harness fields without inventing; failure_scenario is available content, so dropping it loses information.
+38.8.2	no	no	input	AC7 requires loud failure on unparseable output; prose word:number read as a location is a plain bug.
+323.2.1	no	no	input	Placeholder-shaped repo path is rewritten and an unknown token throws; any reading requires verbatim values.
+323.2.2	yes	no	site	Ticket says the verifier is made in a working copy; whether uncommitted files count is not stated.
+323.2.3	yes	no	state	Ticket never says what happens to the branch and worktree when a run fails partway.
+323.3.1	yes	no	state	Ticket states no failure cleanup policy; deleting after a failed stop is a choice among policies.
+323.3.2	yes	yes	state	Ticket silent on keeping or discarding session work on failure; finding reverses round 2's cleanup.
+323.3.3	no	no	site	AC1 requires a working copy of its own; inherited GIT_DIR redirecting the session's commits breaks it.
+323.4.1	no	no	site	AC3 requires pages for three to five features; reporting success without them contradicts it.
+323.4.2	yes	no	prose	Ticket does not say what the prompt demands for surfaces that cannot run two copies.
+323.4.3	no	no	state	A stale registration makes every later add fail; any reading requires picking a usable path.
+323.5.1	no	no	site	AC4 requires the session itself to hand over; a hand-over already in base must not pass.
+323.5.2	no	no	input	AC3 counts pages; quoted non-ASCII names are undercounted, contradicting it.
+323.5.3	yes	yes	prose	Ticket silent on drives of single-copy surfaces; finding restores state-of-own the round-4 reword dropped.
+266.2.1	no	no	input	Inherited git environment redirects lookups to another repository; any reading requires the right repository.
+266.2.2	no	no	input	AC4 reads exactly the root agents' instructions; a basename test wrongly exempts a nested file.
+266.2.3	no	no	prose	Quotes are not among the listed shell syntax; an unquoted path breaks on spaces, a regression.
+266.3.1	no	no	state	AC6 requires the same stops as the removed code; orphaned group members are left running.
+266.3.2	no	no	contract	AC6 requires the same stops; document still describes a raw kill the script no longer does.
+266.4.1	no	no	state	AC6 requires the same stops; a reused pid after a zombie leader makes the scan kill foreign processes.
+113.2.1	no	no	input	AC4 sweeps skills and wiki; a root path containing a pipe makes the sweep scan nothing and pass.
+113.2.2	no	no	input	AC2 states the rule, not a verbatim bullet; the check false-faults on a rewrapped bullet.
+113.2.3	no	no	site	AC4 requires nothing else states the rule; six stale sentences are checked only in home files.
+113.3.1	no	no	input	AC4 says nothing else still says it; a capitalised stale claim passes the case-sensitive sweep.
+113.3.2	no	no	test	AC2 concerns postmaster.md's limit; a quotation elsewhere satisfies a check meant for the Hard rules section.
+113.3.3	no	no	input	AC4 sweeps skills and wiki; symlinked files and directories are skipped, so the sweep is incomplete.
+113.4.1	no	no	input	AC4 requires a complete sweep; a newline in a filename splits the loop and lets stale claims pass.
+113.4.2	no	no	input	AC4 requires a complete sweep; a newline in a filename splits the loop and lets stale claims pass.
+108.2.1	no	no	input	AC2 spawns unless harness and model match; a newline in a config value truncates it to self.
+108.2.2	no	no	input	Acceptance check should refuse stray arguments; one sane answer, a small gap.
+108.2.3	no	no	input	AC6 requires no stale claim remains; CRLF endings evade the folding, so the check misses it.
+108.2.4	no	no	input	AC2 spawns when the target is another repo; an empty repository path compares equal and chooses self.
+108.2.5	no	no	input	AC6 says no document still states the claim; a paraphrase evades the phrase check.
+108.3.1	no	no	input	AC2 spawns when the target is another repo; inherited GIT_DIR makes distinct repositories compare equal.
+108.3.2	no	no	input	AC4 prints self only from valid reports; whitespace-only values should count as missing, one sane answer.
+108.3.3	no	no	prose	Example passes unquoted values so multi-word values split; quoting is the one sane answer.
+108.3.4	no	no	prose	Example leaves the repo basename unquoted so spaces split it; quoting is the one sane answer.
+108.4.1	no	no	prose	AC1 keeps the same conversation under self; the headless sentence is wrong for the self route.
+165.2.1	unclear	no	other	Text is only "not provided: Compare:", too short to tell what is claimed.
+165.3.1	no	no	site	Every sibling inspection failure returns 2; this one returns success silently, one sane answer under AC3.
+165.3.2	no	no	state	AC1 has a resume reuse the tab; refusing after the prior tab already closed has one sane answer.
+200.2.1	no	no	contract	Direction leaves files as they are, process-only; a private device tree hides existing host shm objects.
+200.2.3	yes	no	state	AC7 says log the fallback; ticket silent on what happens when the action log cannot be written.
+218.2.1	yes	no	state	Notes say in-flight runs keep wrappers; ticket silent on recorded absolute paths into main that the merge deletes.
+218.2.2	no	no	input	AC3 requires skill-refs to check the new form; a name with an extension passes though the entry exits 2.
+218.2.3	no	no	input	AC3 requires checking the new form; top-level scripts and .bak suffixes are wrongly accepted as library refs.
+218.2.4	no	no	input	AC3's fix mode rewrites the old form; corrupting a path:line reference is plainly wrong.
+75.2.1	no	no	input	AC2 refuses on existing branches in the repo; inherited GIT_DIR can make it inspect another repository.
+75.2.2	unclear	no	other	Text is only a target and location header with no claim, too short to tell.

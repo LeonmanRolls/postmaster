@@ -703,8 +703,15 @@ function git(repo: string, args: string[]): string {
   return r.out;
 }
 
-function commitOfRef(repo: string, ref: string): string {
+export function commitOfRef(repo: string, ref: string): string {
   return git(repo, ["rev-parse", "--verify", `${ref}^{commit}`]).trim();
+}
+
+/** The merge base of two commits, or a refusal when they share none. */
+export function mergeBase(repo: string, a: string, b: string): string {
+  const base = git(repo, ["merge-base", a, b]).trim();
+  if (base === "") throw new Error(`no merge base of ${a} and ${b}`);
+  return base;
 }
 
 function isSource(path: string): boolean {
@@ -809,7 +816,7 @@ function changedPaths(repo: string, base: string, head: string): string[] {
     .filter((path) => path !== "");
 }
 
-function blobAt(repo: string, rev: string, path: string): string | null {
+export function blobAt(repo: string, rev: string, path: string): string | null {
   const r = run("git", ["-C", repo, "cat-file", "blob", `${rev}:${path}`], { env: UNSET_GIT });
   if (r.code !== 0) return null;
   return r.out;
@@ -1140,14 +1147,16 @@ interface LoggedApproval {
   run: string;
 }
 
-/** The user's word per switch-off identity, from the run's record: the line must
- * sit in the run's actions and the project's ledger alike, be the postmaster's
- * word for this run, and open with approved or refused plus the user's words.
- * Anything else is ignored with a warning, never silently obeyed and never
- * fatal to the listing. Where the record holds both words for one identity,
- * refused wins: a refusal stands until the entry itself changes. */
-function approvals(
+/** The user's word per identity for one approval action, from the run's
+ * record: the line must sit in the run's actions and the project's ledger
+ * alike, be the postmaster's word for this run, and open with approved or
+ * refused plus the user's words. Anything else is ignored with a warning,
+ * never silently obeyed and never fatal to the listing. Where the record
+ * holds both words for one identity, refused wins: a refusal stands until
+ * the entry itself changes. */
+export function readApprovals(
   dispatch: string,
+  action: string,
   warn: (message: string) => void,
 ): Map<string, "approved" | "refused"> {
   const root = resolve(dispatch);
@@ -1169,25 +1178,25 @@ function approvals(
     }
     if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) continue;
     const rec = parsed as Partial<LoggedApproval>;
-    if (rec.action !== "switch-off") continue;
+    if (rec.action !== action) continue;
     if (
       typeof rec.actor !== "string" ||
       typeof rec.target !== "string" ||
       typeof rec.detail !== "string" ||
       typeof rec.run !== "string"
     ) {
-      warn(`ignoring a malformed switch-off line in ${actionPath}`);
+      warn(`ignoring a malformed ${action} line in ${actionPath}`);
       continue;
     }
     if (rec.actor !== "postmaster" || rec.run !== runId) continue;
     if (!ledgerKeys.has(line)) {
-      warn(`ignoring a switch-off line missing from the ledger in ${actionPath}`);
+      warn(`ignoring a ${action} line missing from the ledger in ${actionPath}`);
       continue;
     }
     const words = pyWords(rec.detail);
     const decision = words[0] === "approved" ? "approved" : words[0] === "refused" ? "refused" : "";
     if (decision === "" || words.length < 3) {
-      warn(`ignoring a malformed switch-off line in ${actionPath}`);
+      warn(`ignoring a malformed ${action} line in ${actionPath}`);
       continue;
     }
     if (decision === "refused" || !result.has(rec.target)) result.set(rec.target, decision);
@@ -1260,7 +1269,7 @@ export function inspectSwitchOffs(options: {
   const logged =
     options.dispatch === undefined
       ? new Map<string, "approved" | "refused">()
-      : approvals(options.dispatch, (message) => warnings.push(message));
+      : readApprovals(options.dispatch, "switch-off", (message) => warnings.push(message));
   for (const message of warnings) console.error(`switch-offs: ${message}`);
   const listedComments: SwitchOffComment[] = comments.map((entry) => ({
     id: entry.id,

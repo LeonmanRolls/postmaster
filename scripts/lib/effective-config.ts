@@ -1321,16 +1321,18 @@ export const generatedFilesOf = (repo: string, opts?: { storePath?: string }): s
 };
 
 // --- writes ----------------------------------------------------------------------------------------
-// The folder's own ignore rules: run records, drafts and local verifiers stay
-// ignored whatever the user answers. The person's settings file is never
-// ignored here: setup offers to have git ignore it, and only the user's yes
-// adds that rule (ignoreSettings).
+// The folder's own ignore rules: run records, drafts, local verifiers, the
+// experiments record and the project's notes stay ignored whatever the user
+// answers. The person's settings file is never ignored here: setup offers to
+// have git ignore it, and only the user's yes adds that rule (ignoreSettings).
 const IGNORE_RECORDS = [
   "runs/",
   "clerk/",
   "project.toml",
   "notes.md",
   "verifier/",
+  "experiments.jsonl",
+  "experiments-page.url",
   ".gitignore",
 ] as const;
 

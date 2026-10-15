@@ -1,0 +1,67 @@
+92.2.1	no	no	contract	Stale line pin in an old oracle after the change shifted a line; ticket does not reach it.
+170.2.1	no	no	input	Brief builder cuts the ticket at generated-section heading names; any reading requires not truncating requirements.
+201.2.1	yes	no	input	Ticket never says what the probe does when bwrap is in a user-writable directory; several reasonable handlings exist.
+373.2.1	no	no	state	Pre-existing pane-state reading wrongly passes a live launch as settled; any reading of the ticket requires not closing live work.
+112.4.1	unclear	no	input	Text is only the coachman's disposition fragment, not the finding; too short to tell.
+112.4.2	unclear	no	input	Text is only a disposition fragment; it does not state what the finding claims.
+112.4.3	unclear	no	input	Text is only a dismissal fragment; the finding itself is not stated.
+112.4.4	unclear	no	input	Text is only a disposition fragment referring to another finding; the claim is not stated.
+112.5.1	unclear	no	test	Text is only a disposition about a control test; the finding's claim is not stated.
+112.5.2	unclear	no	input	Text is only a dismissal fragment; the finding itself is not stated.
+163.2.1	no	no	input	Missing guard for external targets without an index or checker; one sane answer, no fixture run for them.
+163.2.2	no	no	contract	Ambiguous detector name and a path without a directory (exit 128); wording defects with one sane fix.
+163.2.3	yes	yes	other	Ticket never says which copy of the checker a re-check runs; finding reverses the fix's scored-copy choice.
+163.3.1	no	no	site	Criterion 1 says each file is covered whole; leaving the entrypoint outside the region contradicts it.
+163.4.1	no	no	site	Criterion 1 and the direction cover whole files; unmapped sentences in a listed file contradict the ticket.
+163.4.2	yes	no	contract	Ticket never says how a repeat runs when BASE lacks the checker, as on an introduction branch.
+163.5.1	no	no	state	A failed git read treated as absent fails open; any reading requires erroring, not reporting no change.
+258.3.1	no	no	input	Dispatch input interpolated into a run script is an injection hole; any reading requires binding it safely.
+237.2.1	no	no	state	Criteria 1, 13, 14 and D8 require a recorded wall that gates progress; a lost record violates them.
+237.2.2	no	no	input	Parsing flaw on paths with spaces and ticket-section lines; ticket states nothing, any reading requires correct parsing.
+237.2.3	no	no	input	D5 says unrecognised reset shapes yield no time, because a wrong time is worse than none.
+237.2.4	no	no	state	Unreadable log must not read as no walls; criteria 13 and 14 require gating, so failing open is wrong.
+217.2.1	unclear	no	input	Text holds only a target and a severity; no claim is stated.
+335.2.1	no	no	input	The code's own message says on or off; accepting a typo contradicts it, so one sane fix.
+335.2.2	no	no	input	Existing stdin handling of the dash argument regressed; ticket does not reach it, any reading requires preserving it.
+335.3.1	no	no	input	A subdirectory target misses the repository-root settings; criterion 2 requires them read, one sane answer.
+335.5.1	no	no	contract	Criterion 2 and C2 require project limits for the postmaster launch; the argument placement is a plain defect.
+335.6.1	yes	no	input	Ticket never says what a relative env_file in project settings is relative to; several reasonable bases.
+335.6.2	no	no	input	Criterion 3 requires settings that are complete; a file with only legacy facts is not, so one sane answer.
+335.7.1	yes	no	input	Ticket says complete project settings need no global config, not what happens when that path exists but is unreadable.
+335.7.2	no	no	input	The same setting resolves differently for project and run launches; one sane answer is a shared base.
+335.8.1	no	no	state	Criterion 4 requires tracked settings used only once accepted; failing open when git refuses the repository violates it.
+270.2.1	no	no	input	Locating the waybill's generated Team section is an input-shape bug; any reading requires ignoring a ticket's own heading.
+124.2.1	no	no	state	Criteria 4 and 7 require aftercare after a merge and recognising a merged pull request; re-landing is a defect.
+124.2.2	no	no	prose	Criterion 2 says the card carries the gates' results; a check letting passing results be omitted contradicts it.
+124.2.3	no	no	contract	Runbook writes omit the actor argument the script requires; a plain interface mismatch with one fix.
+124.2.4	no	no	state	The dispatcher must tell two states apart after a crash; one sane answer, nothing to choose.
+124.2.5	no	no	state	A crash before marker removal must not redo landing; the one sane answer is an idempotent resume.
+124.3.1	no	no	input	Criterion 7 states head-is-not-BASE and an empty-branch control; skipping on an empty diff contradicts it.
+124.3.2	yes	no	prose	Ticket never says which checks must pass for landing, or what a not-run journey means for journey-less tickets.
+124.3.3	no	no	input	Criterion 7 names the provider-reported squash merge as landed; an AND that stalls it contradicts the ticket.
+124.3.4	no	no	contract	Criterion 7 requires card results to match verify.sh results; written and checked shapes differing breaks that.
+124.3.5	no	no	contract	Labels must use the checkpoint's own vocabulary; outside the criteria, one sane answer.
+124.4.1	no	no	input	Criterion 7 lists an empty branch after the default moves as a control shape; skipping on it is wrong.
+124.4.2	no	no	prose	A check with no logged result cannot be a pass; criterion 7 names the shape, one sane answer.
+124.4.3	no	no	prose	Conflated terms are a wording defect with one sane fix; the ticket does not reach finding states.
+124.19.1	no	no	input	A landing script must not deadlock on a pruned branch; any reading requires handling an unresolvable head.
+124.20.1	no	no	state	A re-verify loop is a defect; any reading requires a way out when the reported head differs.
+251.2.1	no	no	contract	Criterion 7 and D20 dispatch when there is room; emitting every ready ticket past max_runs contradicts that.
+251.2.2	yes	no	contract	Ticket never says how readiness works for other-kind trackers beyond labels; several reasonable paths exist.
+251.2.3	no	no	contract	The runbook's logging step and the project logger disagree on a shape; ticket does not reach it.
+251.2.4	no	no	contract	trackers.md already requires every tracker write be logged; the code logs only one write, so it is wrong.
+251.2.5	no	no	input	Clamping a cited range past end of file and reporting same is a wrong comparison under D16.
+251.2.6	no	no	contract	Two projects' clerks must coexist; a name collision is a defect with one sane fix, not a choice.
+251.2.7	no	no	contract	C14 and C18 do not fail a premise-stop run with no dispatch; the check contradicts them.
+251.3.1	no	no	input	D2 needs a real ready mark; one label containing a comma must not count as ready.
+251.3.2	no	no	prose	Criterion 7 requires dispatch with no further word; a runbook path that never starts the watcher contradicts it.
+251.3.3	no	no	state	D4 requires the mark taken off when a clerk opens; a failed read must not skip that.
+251.3.4	yes	no	state	Ticket never says what happens to sign-off when the ticket is edited afterwards; binding, ignoring or unmarking all reasonable.
+251.4.1	no	no	input	A malformed marker must not read as none; failing open defeats the sign-off binding, one sane answer.
+251.4.2	yes	no	state	Ticket never says how a premise send-back works on trackers with no adapter or labels; several reasonable paths.
+251.4.3	no	no	input	A comment after sign-off must not count as a change; one sane answer, no ticket choice.
+251.5.1	no	no	contract	Mark's edit base and the adapter's comparison disagree; a plain defect with no choice to make.
+251.5.2	no	no	input	Digesting the stored body is the only sound answer; a heuristic cut binds weakly.
+251.5.3	no	no	input	Same comma-splitting label defect as the round-3 finding, at another flag; one sane answer.
+251.6.1	no	no	contract	Queue and check digest different texts, so a commented ticket falsely refuses; a plain mismatch.
+251.6.2	yes	no	state	Ticket never says how sign-off treats an edit racing the mark; verify-and-roll-back is one of several answers.

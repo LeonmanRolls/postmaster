@@ -1,0 +1,129 @@
+<title>Experiments</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@600;700&family=Red+Hat+Mono:wght@400;500&family=Red+Hat+Text:wght@400;500;600&display=swap">
+<style>
+/* Layout: one column of cards on the phone, two at 700px and up, three at 1100px. */
+:root {
+  --bg: #f5f6f8; --panel: #ffffff; --ink: #1c2230; --muted: #5a6475; --rule: #dfe3ea;
+  --accent: #1d5ca8; --accent-soft: #e5eefa; --on-accent: #ffffff;
+  --add: #e6f4ea; --add-ink: #1f6f37; --del: #fbeaea; --del-ink: #a3261a;
+  --mark: #fff1b5; --mark-edge: #d9a700; --gutter: #8b94a4;
+  --ex: #fbeedf; --ex-ink: #8f4a00; --ok: #1f6f37; --bad: #a3261a;
+  --font-ui: "Red Hat Text", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Red Hat Display", "Red Hat Text", system-ui, sans-serif;
+  --font-code: "Red Hat Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --panel: #181d26; --ink: #e3e7ee; --muted: #9aa3b2; --rule: #2a313d;
+    --accent: #8ab8f2; --accent-soft: #1d2b40; --on-accent: #10151c;
+    --add: #15301f; --add-ink: #8fd69b; --del: #3a1a1a; --del-ink: #ff9c8f;
+    --mark: #3d3412; --mark-edge: #c99c1a; --gutter: #6c7686;
+    --ex: #3a2a16; --ex-ink: #f0b46a; --ok: #8fd69b; --bad: #ff9c8f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --panel: #181d26; --ink: #e3e7ee; --muted: #9aa3b2; --rule: #2a313d;
+  --accent: #8ab8f2; --accent-soft: #1d2b40; --on-accent: #10151c;
+  --add: #15301f; --add-ink: #8fd69b; --del: #3a1a1a; --del-ink: #ff9c8f;
+  --mark: #3d3412; --mark-edge: #c99c1a; --gutter: #6c7686;
+  --ex: #3a2a16; --ex-ink: #f0b46a; --ok: #8fd69b; --bad: #ff9c8f;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 15px; line-height: 1.5; margin: 0; }
+.app { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding-inline: 16px; padding-block: 14px 110px; max-width: 1600px; margin: 0 auto; }
+.top { display: grid; gap: 4px; }
+.eyebrow { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ex-ink); }
+h1 { margin: 0; font-family: var(--font-display); font-size: 21px; line-height: 1.25; text-wrap: balance; }
+.meta { margin: 0; color: var(--muted); font-size: 13.5px; }
+.deck { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.deck > * { min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 12px; margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.card .due { display: inline-block; margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ex-ink); background: var(--ex); border-radius: 8px; padding: 4px 10px; }
+.card h2 { margin: 0 0 8px; font-family: var(--font-display); font-size: 17px; line-height: 1.3; text-wrap: balance; }
+.card dl { margin: 0; display: grid; gap: 6px; }
+.card dl > div { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 8px; }
+.card dt { color: var(--muted); font-size: 13px; }
+.card dd { margin: 0; font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+.card dd a { color: var(--accent); overflow-wrap: anywhere; }
+.empty { color: var(--muted); }
+@media (min-width: 700px) { .deck { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 1100px) { .deck { grid-template-columns: 1fr 1fr 1fr; } }
+</style>
+<div class="app">
+  <div class="top">
+    <p class="eyebrow">Postmaster</p>
+    <h1>Experiments</h1>
+    <p class="meta">What this project is trying, and when to look.</p>
+  </div>
+  <div id="app"><p class="empty">Loading.</p></div>
+</div>
+<script>
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function text(v) { return typeof v === "string" ? v : ""; }
+function day(s) { return /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(s) ? s : ""; }
+function isDue(r, today) { return r.state === "running" && day(r.look) !== "" && r.look <= today; }
+function evidenceCell(ev) {
+  if (ev === null || ev === undefined || ev === "") return "";
+  var e = String(ev);
+  if (e.slice(0, 7) === "http://" || e.slice(0, 8) === "https://") {
+    return '<div><dt>Evidence</dt><dd><a href="' + esc(e) + '">' + esc(e) + "</a></dd></div>";
+  }
+  return "<div><dt>Evidence</dt><dd>" + esc(e) + "</dd></div>";
+}
+function card(r, today) {
+  var due = isDue(r, today);
+  var levels = Array.isArray(r.levels) ? r.levels.map(String) : [];
+  var h = '<article class="card' + (due ? " due" : "") + '">';
+  if (due) h += '<p class="due">Due</p>';
+  h += "<h2>" + esc(text(r.question)) + "</h2><dl>";
+  h += "<div><dt>Levels</dt><dd>" + levels.map(esc).join(", ") + "</dd></div>";
+  h += "<div><dt>Started</dt><dd>" + esc(text(r.started)) + "</dd></div>";
+  h += "<div><dt>Measuring</dt><dd>" + esc(text(r.measure)) + "</dd></div>";
+  h += "<div><dt>Look</dt><dd>" + esc(text(r.look)) + "</dd></div>";
+  h += "<div><dt>State</dt><dd>" + (r.state === "concluded" ? "Concluded" : "Running") + "</dd></div>";
+  if (r.state === "concluded" && r.result !== null && r.result !== undefined) {
+    h += "<div><dt>Result</dt><dd>" + esc(String(r.result)) + "</dd></div>";
+  }
+  h += evidenceCell(r.evidence === undefined ? null : r.evidence);
+  return h + "</dl></article>";
+}
+function draw(mount, rows) {
+  if (rows.length === 0) {
+    mount.innerHTML = '<p class="empty">No experiments to show.</p>';
+    return;
+  }
+  var today = new Date().toISOString().slice(0, 10);
+  var rank = function (r) { return r.state === "concluded" ? 2 : (isDue(r, today) ? 0 : 1); };
+  var ordered = rows.slice().sort(function (a, b) {
+    var ra = rank(a), rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    if (ra === 2) {
+      var ea = text(a.ended), eb = text(b.ended);
+      if (ea !== eb) return eb < ea ? -1 : 1;
+      return 0;
+    }
+    var la = day(a.look), lb = day(b.look);
+    if (la !== lb) return la < lb ? -1 : 1;
+    return 0;
+  });
+  mount.innerHTML = '<div class="deck">' + ordered.map(function (r) { return card(r, today); }).join("") + "</div>";
+}
+async function boot() {
+  var mount = document.getElementById("app");
+  var db = null;
+  try { db = window.claude && typeof window.claude.use === "function" ? await window.claude.use("db") : null; } catch (e) { db = null; }
+  if (!db) { mount.innerHTML = '<p class="empty">No experiments to show.</p>'; return; }
+  db.collection("experiments").onSnapshot(function (s) {
+    draw(mount, s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }));
+  }, function () {
+    mount.innerHTML = '<p class="empty">No experiments to show.</p>';
+  });
+}
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+</script>

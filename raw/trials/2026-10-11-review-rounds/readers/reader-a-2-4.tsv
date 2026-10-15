@@ -1,0 +1,29 @@
+179.2.1	no	no	input	Criterion 6 requires every criterion checked; hiding criteria is wrong against ticket-check's reading.
+179.2.2	no	no	input	Criteria 5 and 7 allow a free-text not-shown reason; slashes in it are not paths.
+179.2.3	no	no	input	Marker inside a fence is plain text; one sane reading, wrong against criterion 6.
+179.2.4	no	no	input	Not-shown mark belongs to the entry's own line; continuation-line match is a parser bug.
+179.2.5	no	no	input	Oracle ticket-check ends the section at part-naming headings; script reads criteria from another part.
+179.3.1	no	no	input	Unclosed opener hides later criteria; oracle reads text, criterion 6 needs every criterion checked.
+179.3.2	no	no	input	Criteria 5 and 6 require evidence that exists under verify directory; second citation unchecked.
+179.3.3	no	no	input	Entry rule must match the criteria indent rule; indented entry falsely reports missing evidence.
+179.3.4	no	no	input	Oracle has a fenced-item rule; fence body must not count, one sane reading.
+179.4.1	no	no	input	Oracle ends the section at a bare hash heading; plain divergence with one sane answer.
+179.4.2	yes	no	contract	Ticket never says where the final check transcript is cited when every criterion is not-shown.
+18.2.1	no	no	input	Criterion 2: a project must never name a credential; bare and camelCase names slip through.
+18.2.2	no	no	input	Criterion 3 exports each lane's own session; a decoy match exports another thread's.
+18.2.3	no	no	input	Session identity must come from the top-level id; nested id winning is a plain bug.
+18.2.4	yes	no	input	Ticket never says what happens when several records match a thread: newest, refuse, or all.
+18.2.5	no	no	test	Self-test must not depend on inherited environment; any reading requires a hermetic test.
+18.3.1	no	no	input	Criterion 2 never allows a credential name; secretKey is plainly one and slips through.
+18.3.2	no	no	state	Pre-existing launch line; any reading needs the flow's event-stream path protected from env overrides.
+18.3.3	no	no	input	Code contradicts its own documented boundary; stale sentence or wrong comparison, either way a fix.
+18.3.4	no	no	input	Criterion 3 exports the lane's own session; suffix match on another thread's record is wrong.
+18.4.1	yes	no	input	Ticket never says whether an explicitly empty --project falls back to discovery or is refused.
+110.2.1	no	no	input	Verifying a decoy repo is wrong under any reading; a missing environment guard.
+110.2.2	yes	no	state	Ticket never says the helper's exit when the gate passes but cleanup partly fails.
+110.2.3	no	no	prose	A failed install hidden behind a green gate is wrong under any reading.
+110.3.1	yes	no	other	Ticket never names where a scratch checkout lives; tmpdir versus repo parent are both reasonable.
+110.3.2	no	no	contract	verify.sh pm() already defines the package-manager order; install detection ignoring it is a plain gap.
+110.4.1	no	no	site	Missing guard; verify.sh already bounds gates at 1800s, so mirroring it is the sane answer.
+110.4.2	no	no	contract	Install and gate must use the same package manager; lockfile decides, one sane answer.
+324.2.1	no	no	input	Criterion 5 forbids verifiers for surfaces not given; an unknown folder passing contradicts it.

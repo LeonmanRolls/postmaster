@@ -1,5 +1,5 @@
 // Ambient declarations for the Bun and Node standard APIs the scripts use.
-// Development dependencies are only typescript and @biomejs/biome, so these live here.
+// No installed library declares these standard APIs, so they live here.
 
 type BufferEncoding =
   | "utf8"
@@ -149,6 +149,9 @@ declare const Bun: {
   TOML: {
     parse(text: string): Record<string, unknown>;
     stringify(data: Record<string, unknown>): string;
+  };
+  JSONC: {
+    parse(text: string): unknown;
   };
   file(path: string | URL): {
     exists(): Promise<boolean>;

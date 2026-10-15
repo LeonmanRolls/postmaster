@@ -5,19 +5,23 @@
 //   run log-action --project <repo> clerk ticket-edit <target> [detail...]
 //   run log-action --project <repo> postmaster dispatch clerk [detail...]
 //   run log-action --project <repo> postmaster ticket-check <target> [detail...]
+//   run log-action --project <repo> postmaster experiment <id> [detail...]
 //   run log-action <dispatch-dir> <actor> tool-fault <postmaster-file> --ran <what ran>
 //                 --failed <what failed> --error <the error, or none> --diagnosis <why>
 //                 --fix <the fix proposed> [--workaround <what was done instead>] [--control <kind>]
 //
 //   actor    postmaster | coachman | lane:<name>
 //   action   a verb from a fixed set, enforced, so the log is computable:
-//            dispatch resume refuse harvest synthesize review-launch review-harvest finding apply
+//            dispatch resume refuse harvest synthesize review-launch review-harvest review-finish
+//            finding finding-also apply
 //            escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment
 //            gate verify merge teardown degrade handoff-accept handoff stage premises
-//            tool-fault note wall told carry reach take-in switch-off
+//            tool-fault note wall told carry reach take-in switch-off experiment library
 //   target   what the action was done to: a lane, a ticket id, a branch, a path, a round
 //   detail   free text; everything after the target, joined by spaces. A finding's opens with its
-//            class, gating or style, so the style findings can be told apart.
+//            class, gating or style, so the style findings can be told apart, and a
+//            finding-also's opens the same way, naming a later report of that finding.
+//            A review-finish names its lens and round, `<lens> round <n>`.
 //            A wall's opens with `<role> <lens> <round> <reset> <the provider's first line>`,
 //            a told's with the same role/lens/round of the wall it marks, a wall ruling with
 //            `wall go-on`, and a carry's with `wall go-on` too, so the wall lines of a run
@@ -30,6 +34,14 @@
 // decision, approved or refused, then the entry and the user's words. The run's
 // actions.jsonl and the project's ledger each hold the same line, and
 // `run landing switch-offs` reads approved lines back to clear the branch.
+//
+// A library is the user's word on one library a run adds (`run landing
+// libraries` lists them and prints each identity). Its target is that
+// identity, `library:<16 hex>`, enforced; its detail opens with the
+// decision, approved or refused, then the entry and the user's words. The
+// run's actions.jsonl and the project's ledger each hold the same line,
+// and `run libraries record` and `run landing libraries` read approved
+// lines back before an install and at landing.
 //
 // A tool-fault is postmaster itself misbehaving: a script, a runbook step or a harness adapter.
 // Its target is the postmaster file, relative to the checkout this script is in or absolute,
@@ -48,10 +60,10 @@
 // to learn from it; it reads these lines.
 //
 //   exit 0  written to both files
-//   exit 1  usage, an action outside the set, a finding with no class, a premises result with
-//           no verified commit or base, a switch-off with a target or detail out of shape,
-//           a tool-fault missing a field or naming no postmaster file, or a file
-//           could not be appended
+//   exit 1  usage, an action outside the set, a finding or finding-also with no class,
+//           a premises result with no verified commit or base, a switch-off or library
+//           with a target or detail out of shape, a tool-fault missing a field or naming
+//           no postmaster file, or a file could not be appended
 import {
   appendFileSync,
   existsSync,
@@ -64,9 +76,10 @@ import { basename, dirname, join, resolve } from "node:path";
 import { toolRoot } from "./lib/paths.ts";
 import { argvDecoded } from "./lib/proc.ts";
 import { pyWords } from "./lib/text.ts";
+import { isSymlink } from "./lib/effective-config.ts";
 
 const VERBS =
-  " dispatch resume refuse harvest synthesize review-launch review-harvest finding apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment reach gate verify merge teardown degrade handoff-accept handoff stage premises tool-fault note wall told carry take-in switch-off ";
+  " dispatch resume refuse harvest synthesize review-launch review-harvest review-finish finding finding-also apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment reach gate verify merge teardown degrade handoff-accept handoff stage premises tool-fault note wall told carry take-in switch-off experiment library ";
 const CONTROLS = join(toolRoot(import.meta), "skills/postmaster/controls.md");
 
 // JSON string escaping: drop control chars, escape separators. Bytes that
@@ -263,10 +276,10 @@ function logAction(
     console.error(`log-action: '${action}' is not an action in the set:${VERBS}`);
     return 1;
   }
-  if (action === "finding") {
+  if (action === "finding" || action === "finding-also") {
     const firstWord = detail.split(" ")[0] ?? "";
     if (firstWord !== "gating" && firstWord !== "style") {
-      console.error("log-action: a finding's detail opens with its class, gating or style");
+      console.error(`log-action: a ${action}'s detail opens with its class, gating or style`);
       return 1;
     }
   }
@@ -303,6 +316,25 @@ function logAction(
     if (words.length < 3) {
       console.error(
         "log-action: a switch-off's detail carries the decision, then the entry and the user's words",
+      );
+      return 1;
+    }
+  }
+  if (action === "library") {
+    if (!/^library:[0-9a-f]{16}$/u.test(target)) {
+      console.error(
+        "log-action: a library's target is its identity from run landing libraries, library:<16 hex>",
+      );
+      return 1;
+    }
+    const words = pyWords(detail);
+    if (words[0] !== "approved" && words[0] !== "refused") {
+      console.error("log-action: a library's detail opens with its decision, approved or refused");
+      return 1;
+    }
+    if (words.length < 3) {
+      console.error(
+        "log-action: a library's detail carries the decision, then the entry and the user's words",
       );
       return 1;
     }
@@ -346,14 +378,24 @@ function logAction(
 
   const line = `{"ts":"${ts}","project":"${jsonStr(project)}","run":"${jsonStr(runName)}","actor":"${jsonStr(actor)}","action":"${jsonStr(action)}","target":"${jsonStr(finalTarget)}","detail":"${jsonStr(finalDetail)}"${faultJson}}`;
 
+  const actionsPath = join(dispatchReal, "actions.jsonl");
+  if (isSymlink(actionsPath)) {
+    console.error(`log-action: ${actionsPath} must be a file inside the run, not a symlink`);
+    return 1;
+  }
+  const runsLedger = join(dirname(dispatchReal), "ledger.jsonl");
+  if (isSymlink(runsLedger)) {
+    console.error(`log-action: ${runsLedger} must be a file inside the project, not a symlink`);
+    return 1;
+  }
   try {
-    appendFileSync(join(dispatchReal, "actions.jsonl"), `${line}\n`);
+    appendFileSync(actionsPath, `${line}\n`);
   } catch {
     console.error(`log-action: cannot append to ${dispatchReal}/actions.jsonl`);
     return 1;
   }
   try {
-    appendFileSync(join(dirname(dispatchReal), "ledger.jsonl"), `${line}\n`);
+    appendFileSync(runsLedger, `${line}\n`);
   } catch {
     console.error("log-action: cannot append to the project ledger");
     return 1;
@@ -361,7 +403,7 @@ function logAction(
   return 0;
 }
 
-function logProjectEvent(
+export function logProjectEvent(
   repo: string,
   actor: string,
   action: string,
@@ -372,9 +414,10 @@ function logProjectEvent(
   const edit = actor === "clerk" && action === "ticket-edit" && target !== "";
   const dispatch = actor === "postmaster" && action === "dispatch" && target === "clerk";
   const check = actor === "postmaster" && action === "ticket-check" && target !== "";
-  if (!note && !edit && !dispatch && !check) {
+  const experiment = actor === "postmaster" && action === "experiment" && target !== "";
+  if (!note && !edit && !dispatch && !check && !experiment) {
     console.error(
-      "usage: run log-action --project <repo> clerk note <target> | clerk ticket-edit <target> [detail...] | postmaster dispatch clerk [detail...] | postmaster ticket-check <target> [detail...]",
+      "usage: run log-action --project <repo> clerk note <target> | clerk ticket-edit <target> [detail...] | postmaster dispatch clerk [detail...] | postmaster ticket-check <target> [detail...] | postmaster experiment <id> [detail...]",
     );
     return 1;
   }
@@ -383,16 +426,40 @@ function logProjectEvent(
     const root = resolve(repo);
     if (!statSync(root).isDirectory()) throw new Error("not a directory");
     project = basename(root);
-    const runs = join(root, ".postmaster", "runs");
+    const pm = join(root, ".postmaster");
+    const runs = join(pm, "runs");
+    for (const part of [pm, runs]) {
+      if (isSymlink(part)) {
+        console.error(`log-action: ${part} must be a directory inside the project, not a symlink`);
+        return 1;
+      }
+    }
     mkdirSync(runs, { recursive: true });
     const ledger = join(runs, "ledger.jsonl");
     const ts = new Date().toISOString().replace(/\.[0-9]+Z$/u, "Z");
     const runName = actor === "postmaster" ? "postmaster" : "booking-clerk";
     const line = `{"ts":"${ts}","project":"${jsonStr(project)}","run":"${runName}","actor":"${actor}","action":"${action}","target":"${jsonStr(target)}","detail":"${jsonStr(detailParts.join(" "))}"}`;
+    const logDir = join(runs, "postmaster");
+    const actions = join(logDir, "actions.jsonl");
     if (actor === "postmaster") {
-      const logDir = join(runs, "postmaster");
+      if (isSymlink(logDir)) {
+        console.error(
+          `log-action: ${logDir} must be a directory inside the project, not a symlink`,
+        );
+        return 1;
+      }
       mkdirSync(logDir, { recursive: true });
-      appendFileSync(join(logDir, "actions.jsonl"), `${line}\n`);
+      if (isSymlink(actions)) {
+        console.error(`log-action: ${actions} must be a file inside the project, not a symlink`);
+        return 1;
+      }
+    }
+    if (isSymlink(ledger)) {
+      console.error(`log-action: ${ledger} must be a file inside the project, not a symlink`);
+      return 1;
+    }
+    if (actor === "postmaster") {
+      appendFileSync(actions, `${line}\n`);
     }
     appendFileSync(ledger, `${line}\n`);
   } catch {
@@ -408,7 +475,7 @@ if (import.meta.main) {
   if (argv[0] === "--project") {
     if (argv.length < 5) {
       console.error(
-        "usage: run log-action --project <repo> clerk note <target> | clerk ticket-edit <target> [detail...] | postmaster dispatch clerk [detail...] | postmaster ticket-check <target> [detail...]",
+        "usage: run log-action --project <repo> clerk note <target> | clerk ticket-edit <target> [detail...] | postmaster dispatch clerk [detail...] | postmaster ticket-check <target> [detail...] | postmaster experiment <id> [detail...]",
       );
       process.exit(1);
     }
@@ -425,7 +492,9 @@ if (import.meta.main) {
     }
     if (
       argv[2] === "postmaster" &&
-      ((argv[3] === "dispatch" && argv[4] === "clerk") || argv[3] === "ticket-check")
+      ((argv[3] === "dispatch" && argv[4] === "clerk") ||
+        argv[3] === "ticket-check" ||
+        argv[3] === "experiment")
     ) {
       process.exit(
         logProjectEvent(
@@ -438,7 +507,7 @@ if (import.meta.main) {
       );
     }
     console.error(
-      "usage: run log-action --project <repo> clerk note <target> | clerk ticket-edit <target> [detail...] | postmaster dispatch clerk [detail...] | postmaster ticket-check <target> [detail...]",
+      "usage: run log-action --project <repo> clerk note <target> | clerk ticket-edit <target> [detail...] | postmaster dispatch clerk [detail...] | postmaster ticket-check <target> [detail...] | postmaster experiment <id> [detail...]",
     );
     process.exit(1);
   }
