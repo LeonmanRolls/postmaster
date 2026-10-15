@@ -1,0 +1,41 @@
+[
+  {
+    "file": "scripts/lib/effective-config.ts",
+    "line": 659,
+    "line_end": 662,
+    "target": "scripts/lib/effective-config.ts:659",
+    "severity": "not provided",
+    "summary": "AGENTS.md` and `settings.example.toml` both say `projects_roots` always comes from the global config. But `validateCommon` allows it in local files ( ), `stripLegacy` doesn't drop it, and `mergeTables` replaces the global list wholesale. Empirically verified with a two-line fixture. Contained today (`find-projects.ts` reads global directly), but the effective config and `run.json` carry the wrong value. No test covers which wins. Fix: strip/refuse the key locally, or correct the docs.",
+    "body": "**2. Low, message-only — `plane.ts` blames `settings.toml` for global-config values**\n`scripts/plane.ts:1039` swaps the error source whenever a local file exists, even when it's pending-acceptance or holds no tracker keys. `front-door.ts:147` gates correctly on `projectAlone`; plane should match.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  },
+  {
+    "file": "scripts/plane.ts",
+    "line": 1039,
+    "line_end": "not provided",
+    "target": "scripts/plane.ts:1039",
+    "severity": "not provided",
+    "summary": "swaps the error source whenever a local file exists, even when it's pending-acceptance or holds no tracker keys. `front-door.ts:147` gates correctly on `projectAlone`; plane should match.",
+    "body": "**3. Low, message-only — `launch.ts` still names the global config path under `--project`**\nSame attribution bug plane was fixed for: failure messages point at `config.toml` when the bad value came from the project's settings file (`scripts/launch.ts:129,145,175` and `:1348-1357`).",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  },
+  {
+    "file": "skills/postmaster/SKILL.md",
+    "line": 259,
+    "line_end": 261,
+    "target": "skills/postmaster/SKILL.md:259",
+    "severity": "not provided",
+    "summary": "adds `--project` to `launch` but not the wrapping `host run`, so project `[limits]` overrides don't apply to the postmaster's own launch. Lane/coachman launches are fine (they pass `--run`).",
+    "body": "**5. Low, edge case — `usable` accepts any non-empty local file**\nWith no global config, a settings file holding only `[project] risk_surfaces` makes the loader proceed and print `{}` (`effective-config.ts:1108-1117`). Clear \"no config\" diagnostics are lost; downstream still fails safely. Check `stripped` instead of `local`.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  }
+]

@@ -1,12 +1,21 @@
 // Decide whether the review loop runs another round, from the round's finding, apply,
 // launch and degrade lines. The runbook calls this rather than counting findings itself.
 //
-//   run review-decide <dispatch> <round>
+//   run review-decide <dispatch> <round> [--cause]
 //
 //   round    the round that just finished, a whole number of 1 or more
 //
+// With --cause the decision prints as `<RUN|STOP|RULING> <cause>` instead of
+// its sentence, for a caller that must tell the two rulings apart without
+// matching words: `RULING rise` is a round that found more serious defects
+// than the round before, `RULING no-working-reviewer` two rounds running
+// without a working reviewer for a gating lens.
+//
 // Reads <dispatch>/actions.jsonl. A finding is a `finding` line whose detail opens with its class,
-// `gating` or `style`, then its severity (P1, P2 or P3), its round (r1, r2, ...) and the rest. An
+// `gating` or `style`, then its severity (P1, P2 or P3), its round (r1, r2, ...) and the rest. A
+// `finding-also` line is a later report of that finding in its round, opening the same way; it
+// names the later reviewer without a second counted line, and faults unless its target has a
+// finding line of its round opening with the same class and severity. An
 // apply is an `apply` line whose detail names the finding targets it fixes, as whitespace-separated
 // bare targets; it counts for round r when any target it names has a finding line of round r. A
 // round's serious count is the number of its finding lines that open `gating P1 r<n>` or
@@ -33,12 +42,13 @@
 //   exit 1  usage, a round below 1, a missing or unreadable action log, a line that is
 //           not JSON or not an action object, an action object with no action, a finding whose
 //           detail does not open with its class, a finding with no readable severity or round,
-//           two findings sharing one target in one round, or an apply naming no target or a
+//           two findings sharing one target in one round, a finding-also line with no finding
+//           line of its round or one opening otherwise, or an apply naming no target or a
 //           target with no finding line
 import { readFileSync, statSync } from "node:fs";
 import { D_CLASS, digitValue, END_OF_STRING, pySplitLines, pyTrim, pyWords } from "./lib/text.ts";
 
-const USAGE = "usage: run review-decide <dispatch> <round>";
+const USAGE = "usage: run review-decide <dispatch> <round> [--cause]";
 
 function die(msg: string): never {
   console.error(`review-decide: ${msg}`);
@@ -185,11 +195,14 @@ function decStr(d: string): string {
   return out.replace(/^0+/u, "") || "0";
 }
 
-function decide(dispatch: string, roundS: string): void {
+function decide(dispatch: string, roundS: string, causeOnly: boolean): void {
   const digits = pyIntDigits(roundS);
   if (digits === null || !ROUND_NUM_RE.test(digits)) {
     die(`round is a whole number of 1 or more: ${roundS}`);
   }
+  const say = (first: string, cause: string, line: string): void => {
+    console.log(causeOnly ? `${first} ${cause}` : line);
+  };
   const r = digits;
   const path = `${dispatch}/actions.jsonl`;
   const lines = readActions(path);
@@ -199,7 +212,9 @@ function decide(dispatch: string, roundS: string): void {
   const degrades = new Map<string, Set<string>>();
   const roundsSeen = new Map<string, Set<string>>();
   const seenPairs = new Set<string>();
+  const findingsAt = new Map<string, { cls: string; sev: string }>();
   const applies: Array<{ n: number; targets: string[] }> = [];
+  const alsos: Array<{ n: number; target: string; cls: string; sev: string; rnd: string }> = [];
   const faults: string[] = [];
   lines.forEach((line, idx) => {
     const n = idx + 1;
@@ -263,7 +278,33 @@ function decide(dispatch: string, roundS: string): void {
         roundsSeen.set(target, set);
       }
       set.add(rndN);
+      findingsAt.set(pair, { cls, sev });
       findings.push({ sev, rnd: rndN, cls });
+    } else if (action === "finding-also") {
+      const words = pyWords(pyStr(rec.detail, !("detail" in rec)));
+      if (words.length === 0 || (words[0] !== "gating" && words[0] !== "style")) {
+        faults.push(
+          `actions.jsonl line ${n}: a finding-also line whose detail opens with ${words.length > 0 ? `"${words[0]}"` : "nothing"}, not gating or style`,
+        );
+        return;
+      }
+      const cls = words[0]!;
+      const sev = words.length > 1 ? words[1]! : "";
+      const rnd = words.length > 2 ? words[2]! : "";
+      if (sev !== "P1" && sev !== "P2" && sev !== "P3") {
+        faults.push(
+          `actions.jsonl line ${n}: a finding-also line with severity ${sev || "none"}, not P1, P2 or P3`,
+        );
+        return;
+      }
+      const m = ROUND_RE.exec(rnd);
+      if (!m) {
+        faults.push(
+          `actions.jsonl line ${n}: a finding-also line with round ${rnd || "none"}, not rN`,
+        );
+        return;
+      }
+      alsos.push({ n, target: pyStr(rec.target, !("target" in rec)), cls, sev, rnd: m[1]! });
     } else if (action === "apply") {
       applies.push({ n, targets: pyWords(pyStr(rec.detail, !("detail" in rec))) });
     } else if (action === "review-launch" || action === "degrade") {
@@ -307,6 +348,18 @@ function decide(dispatch: string, roundS: string): void {
       }
     }
   }
+  for (const { n, target, cls, sev, rnd } of alsos) {
+    const found = findingsAt.get(`${target}\0${rnd}`);
+    if (!found) {
+      faults.push(
+        `actions.jsonl line ${n}: a finding-also line for ${target} in round r${rnd}, which has no finding line there`,
+      );
+    } else if (found.cls !== cls || found.sev !== sev) {
+      faults.push(
+        `actions.jsonl line ${n}: a finding-also line for ${target} in round r${rnd} opening ${cls} ${sev}, not the finding's ${found.cls} ${found.sev}`,
+      );
+    }
+  }
   if (faults.length > 0) die(faults.join("; "));
 
   const appliedIn = (roundNum: string): boolean =>
@@ -332,11 +385,15 @@ function decide(dispatch: string, roundS: string): void {
   if (r === "1") {
     const lacking1 = lacking("1");
     if (lacking1.length > 0) {
-      console.log(`RUN 2: round 1 had no working reviewer for ${lacking1.join(" and ")}`);
-    } else {
-      console.log(
-        appliedIn("1") ? "RUN 2: round 1 applied a fix" : "STOP 1: round 1 applied no fixes",
+      say(
+        "RUN",
+        "no-working-reviewer",
+        `RUN 2: round 1 had no working reviewer for ${lacking1.join(" and ")}`,
       );
+    } else if (appliedIn("1")) {
+      say("RUN", "applied", "RUN 2: round 1 applied a fix");
+    } else {
+      say("STOP", "no-fixes", "STOP 1: round 1 applied no fixes");
     }
     return;
   }
@@ -346,7 +403,9 @@ function decide(dispatch: string, roundS: string): void {
   if (lackingPrev.length > 0 && lackingR.length > 0) {
     const same =
       lackingPrev.length === lackingR.length && lackingPrev.every((l, i) => l === lackingR[i]);
-    console.log(
+    say(
+      "RULING",
+      "no-working-reviewer",
       same
         ? `RULING ${r}: no working reviewer for ${lackingR.join(" and ")} in rounds ${prev} and ${r}; escalate with residue`
         : `RULING ${r}: no working reviewer for ${lackingPrev.join(" and ")} in round ${prev} and ${lackingR.join(" and ")} in round ${r}; escalate with residue`,
@@ -357,13 +416,23 @@ function decide(dispatch: string, roundS: string): void {
   const before = countSerious(prev);
   const next = incStr(r);
   if (count === 0 && lackingR.length > 0) {
-    console.log(`RUN ${next}: round ${r} had no working reviewer for ${lackingR.join(" and ")}`);
+    say(
+      "RUN",
+      "no-working-reviewer",
+      `RUN ${next}: round ${r} had no working reviewer for ${lackingR.join(" and ")}`,
+    );
   } else if (count === 0) {
-    console.log(`STOP ${r}: round ${r} logged no P1 or P2 finding`);
+    say("STOP", "clean", `STOP ${r}: round ${r} logged no P1 or P2 finding`);
   } else if (count <= before) {
-    console.log(`RUN ${next}: round ${r} logged no more P1 or P2 findings than round ${prev}`);
+    say(
+      "RUN",
+      "converging",
+      `RUN ${next}: round ${r} logged no more P1 or P2 findings than round ${prev}`,
+    );
   } else {
-    console.log(
+    say(
+      "RULING",
+      "rise",
       `RULING ${r}: round ${r} logged more P1 or P2 findings than round ${prev}; escalate with residue`,
     );
   }
@@ -371,7 +440,8 @@ function decide(dispatch: string, roundS: string): void {
 
 const argv = process.argv.slice(2);
 
-if (argv.length !== 2 || argv[0] === "" || argv[1] === "") {
+const causeOnly = argv.length === 3 && argv[2] === "--cause";
+if ((argv.length !== 2 && !causeOnly) || argv[0] === "" || argv[1] === "") {
   console.error(USAGE);
   process.exit(1);
 }
@@ -382,4 +452,4 @@ try {
   isDir = false;
 }
 if (!isDir) die(`no dispatch directory at ${argv[0]}`);
-decide(argv[0]!, argv[1]!);
+decide(argv[0]!, argv[1]!, causeOnly);

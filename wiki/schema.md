@@ -1,7 +1,7 @@
 ---
 title: How the wiki is kept
 type: schema
-updated: 2026-09-22
+updated: 2026-10-13
 ---
 
 # How the wiki is kept
@@ -119,19 +119,19 @@ exactly that: read the catalog, not the corpus.
 **A coachman is pointed at a concept by its waybill**, where one bears on its ticket, rather
 than reading the wiki at large.
 
-**A lane does not read the wiki at all.** Its context is the ticket, the project's docs and
-its runbook. The reason is contamination, not economy: these pages hold claims about which
-lane's mechanism tends to survive synthesis and which findings get corroborated, and a lane
-that has read them is no longer an independent measurement of them. Corroboration means two
-lanes found something without seeing each other; if both have read a page saying what tends
-to be found, the standing on that page is circular. Blinkers apply to knowledge, not only to
-each other's worktrees.
+**A lane may read the wiki.** Its context is the ticket, the project's docs and its runbook, and
+the wiki is part of the project's documentation: reviewers use it to check a change against what
+the pages say. What must not happen is a contaminated measurement that nobody knows about. These
+pages hold claims about which lane's mechanism tends to survive synthesis and which findings get
+corroborated, and a lane that has read a page's claim is no longer an independent measurement of
+it. Corroboration means two lanes found something without seeing each other; if both have read a
+page saying what tends to be found, the standing on that page is circular.
 
-That instruction cannot hold on its own, and this page does not pretend it can. When the
-target is this repository the wiki is inside the lane's own worktree and nothing prevents it
-being read. So it is measured rather than assumed: a lane's exported harness session records
-what it read, a run record says whether any lane touched `wiki/` or `raw/`, and a concept
-resting on a run with a contaminated lane says so and is weaker for it.
+So it is measured, not prohibited. A lane's harness stream records what it read; a run record says
+whether any lane read `wiki/` or `raw/`, and the page behind a claim where one is cited; a concept
+resting on a run whose lanes read that page says so and is weaker for it. A scan of 558 reviewer
+streams from run 300 on (2026-10-13) found a direct read of a wiki or raw page in 70 and a listing
+or search in 99 more, which is why a ban was not kept: it was an instruction nothing enforced.
 
 **Nobody reads `raw/` to make a claim.** It is evidence for checking one.
 

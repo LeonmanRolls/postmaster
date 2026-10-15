@@ -1,0 +1,54 @@
+[
+  {
+    "file": "scripts/lib/switch-offs.ts",
+    "line": 434,
+    "line_end": 435,
+    "target": "scripts/lib/switch-offs.ts:434",
+    "severity": "P1",
+    "summary": "Include the full Biome-suppressed node in the approval identity",
+    "body": "Biome’s `biome-ignore` suppresses the next syntax node, but this identity hashes only its next physical line. If an approved directive precedes a multiline node, changing code later within that node leaves the ID unchanged, so the landing check accepts the old approval for changed, still-suppressed code. Include the full covered node in the identity or invalidate approval when any covered code changes.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "scripts/lib/switch-offs.ts",
+    "line": 422,
+    "line_end": 423,
+    "target": "scripts/lib/switch-offs.ts:422",
+    "severity": "P2",
+    "summary": "Match block enables to the rules they re-enable",
+    "body": "An `eslint-disable` for rules `a, b` followed by `eslint-enable a` leaves rule `b` disabled, but this stack pops the whole block at that enable. The identity then excludes code after the enable; adding code still suppressed by `b` leaves the approved ID unchanged and the check can report clear. Track which rules remain disabled before ending the block’s covered scope.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "skills/postmaster/postmaster.md",
+    "line": 566,
+    "line_end": 568,
+    "target": "skills/postmaster/postmaster.md:566",
+    "severity": "P2",
+    "summary": "Check legacy landing runs for switch-offs",
+    "body": "This check is added to contract-2 Stage F, but runs without `coachman_contract` 2 follow Legacy Stage F, which still grants or withholds without running `landing switch-offs` or asking for approval. Such a run can therefore land a newly added suppression without the user’s word, contrary to the stated behavior for runs dispatched before this check existed. Add the check to the legacy landing path as well.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  },
+  {
+    "file": "skills/postmaster/coachman.md",
+    "line": 1049,
+    "line_end": 1051,
+    "target": "skills/postmaster/coachman.md:1049",
+    "severity": "P2",
+    "summary": "Validate the card’s switch-off section against the final branch",
+    "body": "The coachman is told to paste this section, but landing does not verify it: the existing card check validates only the `card-block`, and no new check compares `## Switch-offs` with the current command output. A card that omits or has a stale list can still pass landing, so the ship card may not show the final branch’s entries as required. Add and run a deterministic card-section check; this also follows [AGENTS.md:219-220].",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "codex"
+  }
+]

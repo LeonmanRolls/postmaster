@@ -5,6 +5,8 @@ const LANG: Record<string, string> = {
   ".sh": "bash",
   ".ts": "typescript",
   ".js": "javascript",
+  ".tsx": "typescript",
+  ".jsx": "javascript",
   ".md": "markdown",
   ".json": "json",
   ".jsonl": "json",

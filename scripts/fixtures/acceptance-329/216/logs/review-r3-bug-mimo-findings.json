@@ -1,0 +1,28 @@
+[
+  {
+    "file": "scripts/scrub-core.ts",
+    "line": 517,
+    "line_end": "not provided",
+    "target": "scripts/scrub-core.ts:517",
+    "severity": "not provided",
+    "summary": "reads the variable at module load into `DISABLED`, and `add()` skips disabled rules. `scripts/raw-promote-main.ts` imports that scanner unchanged, so a leftover env value turns the scrub into a straight copy.",
+    "body": "Repro:",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  },
+  {
+    "file": "scripts/scrub-rewrite.ts",
+    "line": 196,
+    "line_end": "not provided",
+    "target": "scripts/scrub-rewrite.ts:196",
+    "severity": "not provided",
+    "summary": "Leftover `/*split*/` comments in `originalCommitMetadata` ( ) look like debug residue.",
+    "body": "**Highest priority is (1):** it is the same class of gap round 1 already named, still live on the publish path.",
+    "evidence": "not provided",
+    "confidence": "not provided",
+    "category": "not provided",
+    "source": "mimo"
+  }
+]

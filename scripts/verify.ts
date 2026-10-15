@@ -496,29 +496,47 @@ function writeSpec(spec: string, dispatch: string, journey: string): Check[] {
   return checks;
 }
 
-function armWt(wt: string, dispatch: string): { top: string; spec: string; checks: Check[] } {
-  const top = topOf(wt);
-  const spec = join(top, SPEC);
-  const checks = writeSpec(spec, dispatch, join(spec, "journey"));
+/**
+ * Ignore one worktree-relative directory in the repository's common exclude,
+ * so every worktree ignores it. Idempotent: a line already there stays.
+ */
+export function ensureCommonExclude(top: string, entry: string): void {
   const common = git(top, "rev-parse", "--git-common-dir") || ".git";
   const commonPath = common.startsWith("/") ? common : join(top, common);
   const exclude = join(commonPath, "info", "exclude");
   const lines = existsSync(exclude) ? readFileSync(exclude, "utf-8").split("\n") : [];
-  if (!lines.includes(`${SPEC}/`)) {
+  if (!lines.includes(`${entry}/`)) {
     mkdirSync(dirname(exclude), { recursive: true });
     const existing = existsSync(exclude) ? readFileSync(exclude, "utf-8") : "";
     const prefix = existing && !existing.endsWith("\n") ? "\n" : "";
-    appendFileSync(exclude, `${prefix + SPEC}/\n`);
+    appendFileSync(exclude, `${prefix + entry}/\n`);
   }
+}
+
+function armWt(wt: string, dispatch: string): { top: string; spec: string; checks: Check[] } {
+  const top = topOf(wt);
+  const spec = join(top, SPEC);
+  const checks = writeSpec(spec, dispatch, join(spec, "journey"));
+  ensureCommonExclude(top, SPEC);
   return { top, spec, checks };
+}
+
+/**
+ * The files a `status --porcelain` run sees that its commit does not hold,
+ * outside the armed spec dir. Pure: the dirt check `verify run`, the round's
+ * cut and its mid-round gate share, so a reused pass and a fresh run test
+ * the same clean tree.
+ */
+export function uncommittedFiles(porcelain: string): string[] {
+  return porcelain
+    .split("\n")
+    .filter((l) => l.slice(3) && !l.slice(3).replace(/^"|"$/gu, "").startsWith(`${SPEC}/`))
+    .map((l) => l.slice(3));
 }
 
 function uncommitted(top: string): string[] {
   const r = run("git", ["-C", top, "status", "--porcelain", "--untracked-files=all"]);
-  return r.out
-    .split("\n")
-    .filter((l) => l.slice(3) && !l.slice(3).replace(/^"|"$/gu, "").startsWith(`${SPEC}/`))
-    .map((l) => l.slice(3));
+  return uncommittedFiles(r.out);
 }
 
 function listedFiles(files: string[]): string {
