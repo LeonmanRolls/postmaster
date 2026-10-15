@@ -1444,10 +1444,13 @@ describe("new: a fresh repo outside every other, with its ticket in its own stor
     expect(isSymlink).toBe(true);
   }, 30000);
   test("it commits as this checkout does", () => {
+    // Read under the HOME the fresh repo was made with, so an identity set only in the runner's
+    // own global git config does not count as the checkout's.
+    const made = { env: { HOME: join(tmp, "home") } };
     const destEmail = run("git", ["-C", dest, "config", "--local", "user.email"]).out.trim();
-    const toolEmail = run("git", ["-C", TOOL, "config", "user.email"]).out.trim();
+    const toolEmail = run("git", ["-C", TOOL, "config", "user.email"], made).out.trim();
     const destName = run("git", ["-C", dest, "config", "--local", "user.name"]).out.trim();
-    const toolName = run("git", ["-C", TOOL, "config", "user.name"]).out.trim();
+    const toolName = run("git", ["-C", TOOL, "config", "user.name"], made).out.trim();
     expect(destEmail).toBe(toolEmail);
     expect(destName).toBe(toolName);
   }, 30000);
