@@ -16,7 +16,9 @@ packages included) and `scripts/run code-index` (the project's own exports): eac
 the draft's words and a map of every name, under a key of the draft's words. `ticket-capabilities --candidates` refuses
 a menu made from an older draft and a custom part with no `Searched:` line. The user's ruling: the clerk must know
 every function available while it plans, and the ticket lists none of them. The clerk runbook and the template carry
-the step. Standing unchanged: `claimed`, with no record behind it.
+the step. The menu of the libraries is made for every library the project declares (`api-index --all`): a directory
+with the names near the draft, every function and method, and a file for each library's own menu. Standing unchanged:
+`claimed`, with no record behind it.
 
 ## [2026-10-15] ingest | capabilities are checked before a ticket picks a design
 

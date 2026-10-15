@@ -23,6 +23,7 @@
 //   exit 2  usage
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import { expandPattern } from "./lib/glob-paths.ts";
 import { scanLines } from "./lib/api-extract.ts";
 import {
   type IndexEntry,
@@ -129,33 +130,6 @@ function walk(path: string, out: string[]): void {
     if (SKIP_DIRS.has(name)) continue;
     walk(join(path, name), out);
   }
-}
-
-/** The paths a pattern names, one `*` per path segment at most matching any run of characters but a slash. */
-export function expandPattern(repo: string, pattern: string): string[] {
-  let bases = [""];
-  for (const segment of pattern.split("/").filter((s) => s !== "")) {
-    const next: string[] = [];
-    if (!segment.includes("*")) {
-      for (const b of bases) next.push(join(b, segment));
-    } else {
-      const re = new RegExp(
-        `^${segment.replace(/[.+?^${}()|[\]\\]/gu, "\\$&").replace(/\*/gu, "[^/]*")}$`,
-        "u",
-      );
-      for (const b of bases) {
-        let names: string[] = [];
-        try {
-          names = readdirSync(join(repo, b));
-        } catch {
-          continue;
-        }
-        for (const name of names.sort()) if (re.test(name)) next.push(join(b, name));
-      }
-    }
-    bases = next;
-  }
-  return bases.map((b) => join(repo, b));
 }
 
 /** The source files under the folders and globs, relative to the repo, in a stable order. */

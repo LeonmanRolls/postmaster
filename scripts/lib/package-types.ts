@@ -13,6 +13,8 @@ export interface Pkg {
   readonly name: string;
   readonly version: string;
   readonly dir: string;
+  /** What the package says it is, when its package.json has a description. */
+  readonly description?: string;
 }
 
 export function readPackage(dir: string): Pkg | null {
@@ -20,12 +22,16 @@ export function readPackage(dir: string): Pkg | null {
     const json = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as {
       name?: unknown;
       version?: unknown;
+      description?: unknown;
     };
     if (typeof json.name !== "string") return null;
     return {
       name: json.name,
       version: typeof json.version === "string" ? json.version : "unknown",
       dir,
+      ...(typeof json.description === "string" && json.description !== ""
+        ? { description: json.description }
+        : {}),
     };
   } catch {
     return null;
@@ -156,6 +162,64 @@ export function lockedVersions(lockText: string, name: string): string[] {
   return out;
 }
 
+export interface LockedDependency {
+  /** The workspace folder, such as `apps/manager`, or `.` for the root. */
+  readonly importer: string;
+  readonly kind: string;
+  readonly name: string;
+  readonly specifier: string;
+  /** The version the lockfile resolved, without the peer suffix; empty for a link to the workspace. */
+  readonly version: string;
+}
+
+const unquote = (s: string): string => s.trim().replace(/^(['"])(.*)\1$/u, "$2");
+
+/**
+ * The direct dependencies a pnpm lockfile records for each workspace folder, from its `importers`
+ * section: which version of each library the project really resolved.
+ */
+export function lockedDirect(lockText: string): LockedDependency[] {
+  const out: LockedDependency[] = [];
+  let inImporters = false;
+  let importer = "";
+  let kind = "";
+  let name = "";
+  let specifier = "";
+  const flush = (version: string): void => {
+    if (name !== "" && version !== "") {
+      const v = version.startsWith("link:") ? "" : (version.split("(")[0] ?? "");
+      out.push({ importer, kind, name, specifier, version: v });
+    }
+    name = "";
+    specifier = "";
+  };
+  for (const line of lockText.split("\n")) {
+    if (/^[^ #\t]/u.test(line)) {
+      inImporters = line.startsWith("importers:");
+      continue;
+    }
+    if (!inImporters) continue;
+    const m = /^( *)([^ \t].*?):[ \t]*(.*)$/u.exec(line);
+    if (!m || (m[2] as string).startsWith("#")) continue;
+    const indent = (m[1] as string).length;
+    const key = unquote(m[2] as string);
+    const value = unquote(m[3] as string);
+    if (indent === 2) {
+      importer = key;
+    } else if (indent === 4) {
+      kind = key;
+    } else if (indent === 6) {
+      name = key;
+      specifier = "";
+    } else if (indent === 8 && key === "specifier") {
+      specifier = value;
+    } else if (indent === 8 && key === "version") {
+      flush(value);
+    }
+  }
+  return out;
+}
+
 function packageIn(dir: string, name: string): string | null {
   const candidate = join(dir, "node_modules", name);
   try {
@@ -195,6 +259,24 @@ export function findInstalled(repo: string, name: string, from?: string): string
 
 type Runner = typeof runDefault;
 
+/**
+ * The folder an archive unpacked to inside `dest`: `package`, as npm names it, or the one folder
+ * with a package.json in it, as the packages of DefinitelyTyped name theirs (`react` for @types/react).
+ */
+function unpackedIn(dest: string): string | null {
+  let names: string[] = [];
+  try {
+    names = readdirSync(dest).sort();
+  } catch {
+    return null;
+  }
+  for (const name of ["package", ...names]) {
+    const dir = join(dest, name);
+    if (existsSync(join(dir, "package.json"))) return dir;
+  }
+  return null;
+}
+
 /** Download `name@version` with `npm pack` into `cache` and unpack it; the unpacked package folder, or null. */
 export function fetchPackage(
   spec: string,
@@ -202,8 +284,8 @@ export function fetchPackage(
   runCmd: Runner = runDefault,
 ): string | null {
   const dest = join(cache, spec.replace(/[^A-Za-z0-9._-]+/gu, "_"));
-  const unpacked = join(dest, "package");
-  if (existsSync(join(unpacked, "package.json"))) return unpacked;
+  const already = unpackedIn(dest);
+  if (already !== null) return already;
   mkdirSync(dest, { recursive: true });
   const packed = runCmd("npm", ["pack", spec, "--pack-destination", dest, "--silent"], {
     timeout: 120000,
@@ -212,5 +294,5 @@ export function fetchPackage(
   const file = basename(packed.out.trim().split("\n").pop() ?? "");
   if (file === "") return null;
   const untar = runCmd("tar", ["-xzf", join(dest, file), "-C", dest]);
-  return untar.code === 0 && existsSync(join(unpacked, "package.json")) ? unpacked : null;
+  return untar.code === 0 ? unpackedIn(dest) : null;
 }

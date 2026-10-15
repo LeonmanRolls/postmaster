@@ -9,6 +9,7 @@ import {
   familyOf,
   fetchPackage,
   findInstalled,
+  lockedDirect,
   lockedVersions,
   packageNameOf,
   readPackage,
@@ -43,6 +44,15 @@ describe("readPackage", () => {
     const dir = join(tmp, "read-a");
     put(dir, "package.json", pkgJson("lib-a", "1.2.3"));
     expect(readPackage(dir)).toEqual({ name: "lib-a", version: "1.2.3", dir });
+  });
+
+  test("a description is read when there is one", () => {
+    const dir = join(tmp, "read-desc");
+    put(dir, "package.json", pkgJson("lib-d", "1.0.0", { description: "Does a thing." }));
+    expect(readPackage(dir)?.description).toBe("Does a thing.");
+    const none = join(tmp, "read-nodesc");
+    put(none, "package.json", pkgJson("lib-e", "1.0.0", { description: "" }));
+    expect(readPackage(none)).toEqual({ name: "lib-e", version: "1.0.0", dir: none });
   });
 
   test("a version that is missing reads as unknown", () => {
@@ -198,6 +208,94 @@ describe("lockedVersions", () => {
   });
 });
 
+describe("lockedDirect", () => {
+  const LOCK = [
+    "lockfileVersion: '9.0'",
+    "",
+    "importers:",
+    "",
+    "  .:",
+    "    devDependencies:",
+    "      typescript:",
+    "        specifier: 'catalog:'",
+    "        version: 5.9.2",
+    "",
+    "  apps/web:",
+    "    dependencies:",
+    "      '@pkg/shared':",
+    "        specifier: workspace:*",
+    "        version: link:../../packages/shared",
+    "      viem:",
+    "        specifier: 'catalog:'",
+    "        version: 2.52.2(typescript@5.9.2)(zod@4.0.0)",
+    "    devDependencies:",
+    "      vitest:",
+    "        specifier: ^4",
+    "        version: 4.1.11(@types/node@22.0.0)",
+    "",
+    "  packages/shared:",
+    "    dependencies:",
+    "      lodash:",
+    "        specifier: ^4.17.5",
+    "        version: 4.17.21",
+    "",
+    "packages:",
+    "",
+    "  not-a-direct@1.0.0:",
+    "    resolution: {integrity: sha512-x}",
+    "",
+  ].join("\n");
+
+  test("reads each importer's dependencies with the version the lockfile resolved", () => {
+    expect(lockedDirect(LOCK)).toEqual([
+      {
+        importer: ".",
+        kind: "devDependencies",
+        name: "typescript",
+        specifier: "catalog:",
+        version: "5.9.2",
+      },
+      {
+        importer: "apps/web",
+        kind: "dependencies",
+        name: "@pkg/shared",
+        specifier: "workspace:*",
+        version: "",
+      },
+      {
+        importer: "apps/web",
+        kind: "dependencies",
+        name: "viem",
+        specifier: "catalog:",
+        version: "2.52.2",
+      },
+      {
+        importer: "apps/web",
+        kind: "devDependencies",
+        name: "vitest",
+        specifier: "^4",
+        version: "4.1.11",
+      },
+      {
+        importer: "packages/shared",
+        kind: "dependencies",
+        name: "lodash",
+        specifier: "^4.17.5",
+        version: "4.17.21",
+      },
+    ]);
+  });
+
+  test("stops at the next section and reads nothing from the package table", () => {
+    expect(lockedDirect(LOCK).some((d) => d.name === "not-a-direct")).toBe(false);
+  });
+
+  test("a lockfile with no importers, or none at all, has no dependencies", () => {
+    expect(lockedDirect("lockfileVersion: '9.0'\n")).toEqual([]);
+    expect(lockedDirect("")).toEqual([]);
+  });
+});
+
 describe("findInstalled", () => {
   beforeAll(() => {
     const root = join(tmp, "repo");
@@ -270,6 +368,26 @@ describe("fetchPackage", () => {
     ]);
     expect(fetchPackage("lib-f@2.0.0", cache, fake)).toBe(join(dest, "package"));
     expect(calls).toHaveLength(2);
+  });
+
+  test("an archive that unpacks to a folder named for the package is found", () => {
+    const cache = join(tmp, "cache-types");
+    const fake = (cmd: string, args: string[]): RunResult => {
+      if (cmd === "npm") return ok("types-react-19.2.7.tgz\n");
+      put(
+        args[args.indexOf("-C") + 1] as string,
+        "react/package.json",
+        pkgJson("@types/react", "19.2.7"),
+      );
+      return ok();
+    };
+    const dest = join(cache, "_types_react_19.2.7");
+    expect(fetchPackage("@types/react@19.2.7", cache, fake)).toBe(join(dest, "react"));
+    // the second call finds it without a download
+    const never = (): RunResult => {
+      throw new Error("downloaded again");
+    };
+    expect(fetchPackage("@types/react@19.2.7", cache, never)).toBe(join(dest, "react"));
   });
 
   test("a scoped name is made safe for a folder", () => {

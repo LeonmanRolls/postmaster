@@ -129,21 +129,27 @@ already uses do for it, and what the project's own code already offers. Do this 
 the change touches, for each one a decision would wrap, replace or work around, and for the
 project folders the change touches and the packages it shares.
 
-1. Make the menus from the draft as it stands: one for each library, and one for the project's own
-   code. Write each to a file in the draft's folder.
+1. Make the menus from the draft as it stands: one for every library the project uses, and one for
+   the project's own code. Write each to a file in the draft's folder.
 
    ```sh
-   <tool>/scripts/run api-index <repo> <package> --from <app-folder> --match <draft> --out <menu>
-   <tool>/scripts/run code-index <repo> <folder-or-glob>... --match <draft> --out <menu>
+   <tool>/scripts/run api-index <repo> --all --match <draft> --out <stack-menu>
+   <tool>/scripts/run code-index <repo> <folder-or-glob>... --match <draft> --out <code-menu>
    ```
 
-   A menu holds the entries nearest the draft's words, each with its signature and doc comment,
-   and then a map of every name in the index, by file and owner. `api-index` reads the installed
-   package, and the packages of its family that its declarations import; `code-index` reads every
-   export of the folders. Read every menu whole, the map too: while you plan, you must know every
-   function, setting and helper that is available. The ticket does not list them. Make the menus
-   again after any edit that adds or removes a word of the draft, and once more before sign-off:
-   the check refuses a menu made from an older draft.
+   `api-index --all` reads every library the manifests declare, at the version the lockfile
+   resolved. The first run downloads the libraries the project has not installed and can take
+   minutes: give it the longest timeout, and run it again if it stops, which picks up where it
+   left off. Its file has three parts: a directory of every library, with the names in each that
+   are near the draft; every function and method of every library; and the names nearest the draft
+   across all of them. The own menu of each library, with the entries nearest the draft and then a
+   map of every name, is a file in the folder beside it, named in the directory. `code-index` reads
+   every export of the folders you give it: the ones the change touches and the packages it shares.
+   Read the stack menu whole and the code menu whole, then the own menu of every library that shows
+   names near the draft and of every library the change touches or a decision would wrap or replace.
+   While you plan, you must know every function, setting and helper that is available. The ticket
+   does not list them. Make the menus again after any edit that adds or removes a word of the
+   draft, and once more before sign-off: the check refuses a menu made from an older draft.
 2. Read the vendor's own documentation for the feature, opened in a browser, and the installed
    version's declaration of the names on the menu that are near what the ticket needs. A search
    result is not a source.
@@ -162,7 +168,7 @@ project folders the change touches and the packages it shares.
    Then run
 
    ```sh
-   <tool>/scripts/run ticket-capabilities <draft> --candidates <menu> [--candidates <menu>]...
+   <tool>/scripts/run ticket-capabilities <draft> --candidates <stack-menu> --candidates <code-menu>
    ```
 
    once with every menu. It must exit 0. A change that touches nothing outside the repository says

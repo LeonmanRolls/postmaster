@@ -338,7 +338,20 @@ export function leafOf(symbol: string): string {
   return parts[parts.length - 1] ?? symbol;
 }
 
-const cell = (s: string): string => s.replace(/[\t\n\r]+/gu, " ").trim();
+/** A text as one cell of a tab-separated line: no tab or line break in it. */
+export const cell = (s: string): string => s.replace(/[\t\n\r]+/gu, " ").trim();
+
+/** One ranked entry as a line of a menu: symbol, kind, signature, doc, where, matched words. */
+export function rowOf(entry: IndexEntry, matched: readonly string[] = []): string {
+  return [
+    cell(entry.symbol),
+    entry.kind,
+    cell(entry.signature),
+    cell(entry.doc),
+    `${entry.file}:${entry.line}`,
+    matched.join(" "),
+  ].join("\t");
+}
 
 export interface Header {
   /** A line of text to print first, such as which package and version. */
@@ -352,6 +365,59 @@ export interface Header {
 // A function, method or hook is written with a call mark; anything else by its bare name.
 const CALLABLE = new Set(["function", "method", "hook"]);
 const mark = (name: string, kind: string): string => (CALLABLE.has(kind) ? `${name}()` : name);
+
+/**
+ * The entries as words for a line of text, grouped by owner in the order the owners first appear:
+ * `Owner{member, method(), nested.member}` for an owner with members, the bare name (with `()` for
+ * a function) for anything else. The members of an owner are separate words, so a long list wraps.
+ */
+export function ownerWords(entries: readonly IndexEntry[]): string[] {
+  const owners: string[] = [];
+  const heads = new Map<string, IndexEntry>();
+  const members = new Map<string, string[]>();
+  for (const e of entries) {
+    const dot = e.symbol.indexOf(".");
+    const owner = dot < 0 ? e.symbol : e.symbol.slice(0, dot);
+    if (!heads.has(owner) && !members.has(owner)) owners.push(owner);
+    if (dot < 0) {
+      if (!heads.has(owner)) heads.set(owner, e);
+    } else {
+      const list = members.get(owner) ?? [];
+      const name = mark(e.symbol.slice(dot + 1), e.kind);
+      if (!list.includes(name)) list.push(name);
+      members.set(owner, list);
+    }
+  }
+  const words: string[] = [];
+  for (const owner of owners) {
+    const head = heads.get(owner);
+    const label = head === undefined ? owner : mark(owner, head.kind);
+    const list = members.get(owner);
+    if (list === undefined) {
+      words.push(label);
+    } else {
+      words.push(`${label}{${list[0]}`, ...list.slice(1));
+      words[words.length - 1] += "}";
+    }
+  }
+  return words;
+}
+
+/** Words as lines of at most `width` characters, comma separated, each line indented two spaces. */
+export function wrapWords(words: readonly string[], width: number): string[] {
+  const out: string[] = [];
+  let line = " ";
+  words.forEach((word, i) => {
+    const piece = i < words.length - 1 ? `${word},` : word;
+    if (line.length > 1 && line.length + 1 + piece.length > width) {
+      out.push(line);
+      line = " ";
+    }
+    line += ` ${piece}`;
+  });
+  if (line.length > 1) out.push(line);
+  return out;
+}
 
 /**
  * Every name in the index, grouped by the file that declares it and, within a file, by owner:
@@ -372,46 +438,7 @@ export function overview(entries: readonly IndexEntry[], width = 150): string[] 
   const out: string[] = [];
   for (const file of [...byFile.keys()].sort()) {
     const inFile = [...(byFile.get(file) as IndexEntry[])].sort((a, b) => a.line - b.line);
-    const owners: string[] = [];
-    const heads = new Map<string, IndexEntry>();
-    const members = new Map<string, string[]>();
-    for (const e of inFile) {
-      const dot = e.symbol.indexOf(".");
-      const owner = dot < 0 ? e.symbol : e.symbol.slice(0, dot);
-      if (!heads.has(owner) && !members.has(owner)) owners.push(owner);
-      if (dot < 0) {
-        if (!heads.has(owner)) heads.set(owner, e);
-      } else {
-        const list = members.get(owner) ?? [];
-        const name = mark(e.symbol.slice(dot + 1), e.kind);
-        if (!list.includes(name)) list.push(name);
-        members.set(owner, list);
-      }
-    }
-    // One word at a time, so that an owner with two hundred members wraps like everything else.
-    const words: string[] = [];
-    for (const owner of owners) {
-      const head = heads.get(owner);
-      const label = head === undefined ? owner : mark(owner, head.kind);
-      const list = members.get(owner);
-      if (list === undefined) {
-        words.push(label);
-      } else {
-        words.push(`${label}{${list[0]}`, ...list.slice(1));
-        words[words.length - 1] += "}";
-      }
-    }
-    out.push(file);
-    let line = " ";
-    words.forEach((word, i) => {
-      const piece = i < words.length - 1 ? `${word},` : word;
-      if (line.length > 1 && line.length + 1 + piece.length > width) {
-        out.push(line);
-        line = " ";
-      }
-      line += ` ${piece}`;
-    });
-    out.push(line);
+    out.push(file, ...wrapWords(ownerWords(inFile), width));
   }
   return out;
 }
@@ -430,18 +457,7 @@ export function formatList(
   out.push(`# entries in the index: ${header.total}; listed: ${rows.length}`);
   if (header.vocabularyKey !== undefined) out.push(`# draft-vocabulary ${header.vocabularyKey}`);
   out.push("# symbol\tkind\tsignature\tdoc\twhere\tmatched");
-  for (const { entry, matched } of rows) {
-    out.push(
-      [
-        cell(entry.symbol),
-        entry.kind,
-        cell(entry.signature),
-        cell(entry.doc),
-        `${entry.file}:${entry.line}`,
-        (matched ?? []).join(" "),
-      ].join("\t"),
-    );
-  }
+  for (const { entry, matched } of rows) out.push(rowOf(entry, matched));
   if (names !== undefined) {
     out.push("#");
     out.push(

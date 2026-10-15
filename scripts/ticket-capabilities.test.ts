@@ -526,6 +526,7 @@ describe("the menus the index commands make", () => {
   }
 
   function library(): void {
+    put("package.json", JSON.stringify({ name: "flow", dependencies: { "fake-sdk": "^3.0.0" } }));
     put(
       "node_modules/fake-sdk/package.json",
       JSON.stringify({ name: "fake-sdk", version: "3.0.0", types: "index.d.ts" }),
@@ -589,6 +590,27 @@ describe("the menus the index commands make", () => {
       expect(got.status).toBe(0);
     });
   }
+
+  test("the stack menu made by api-index --all is read as this draft's", () => {
+    library();
+    const draftPath = join(tmp, `flow-draft-${seq++}.md`);
+    writeFileSync(draftPath, draft("\n"));
+    const out = join(tmp, `flow-stack-${seq++}.tsv`);
+    const r = spawnSync(SELF, ["api-index", repo(), "--all", "--match", draftPath, "--out", out], {
+      encoding: "utf8",
+      timeout: 30000,
+    });
+    expect(r.status).toBe(0);
+    expect(readFileSync(out, "utf8")).toContain("fake-sdk");
+    const got = check(draftPath, out);
+    expect(got.stdout).toContain("1 menus made from this draft");
+    expect(got.status).toBe(0);
+    writeFileSync(
+      draftPath,
+      draft("\n").replace("and persisted.", "and persisted, with a toggle."),
+    );
+    expect(check(draftPath, out).status).toBe(1);
+  });
 
   test("the menu holds every name, also those the ranking left out", () => {
     library();
