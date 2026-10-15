@@ -16,11 +16,11 @@ The flow runs on macOS. What still differs from Linux, and what you see for it:
 
 - **Launches run without memory or process limits.** Caps need Linux with systemd, so a Mac
   launch says `launch running uncapped (no supported per-launch limits available)` and runs
-  as it is. [#140](https://github.com/brindlewick/postmaster/issues/140) plans to cap them
+  as it is. [#29](https://github.com/LeonmanRolls/postmaster/issues/29) plans to cap them
   there.
 - **Whether Muse and MiMo keep each lane's data apart is not known.** Only a Mac with those
   agents logged in can show it, so until
-  [#205](https://github.com/brindlewick/postmaster/issues/205) runs that trial there, nothing
+  [#50](https://github.com/LeonmanRolls/postmaster/issues/50) runs that trial there, nothing
   here claims they do or do not.
 - **Without `flock`, two runs adding a waiting question at once can rarely lose one entry.**
   macOS ships no flock, and the waiting list then falls back to its lock-file guard. Installing

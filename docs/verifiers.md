@@ -4,7 +4,7 @@ Setting up a project offers to make its verifiers, based on
 [pstack](https://github.com/cursor/plugins/tree/23e4138daa01c42d4969f7a5465f82704e64f798/pstack)'s
 create- and maintain-verification skills: each verifier is a small folder that tells an agent
 arriving cold how to start one surface of the project, drive it the way a user does, and keep
-proof. See [#273](https://github.com/brindlewick/postmaster/issues/273).
+proof. See [#67](https://github.com/LeonmanRolls/postmaster/issues/67).
 
 ## Where the flow uses them
 
