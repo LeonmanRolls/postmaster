@@ -1,12 +1,23 @@
 ---
 title: Log
 type: schema
-updated: 2026-10-13
+updated: 2026-10-15
 ---
 
 # Log
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
+
+## [2026-10-15] update | the review loop has had no round cap since 9 October
+
+The README's flow links the review-loop page, and that page still said a cap of three rounds ends
+the loop. Since #316, merged on 9 October, the loop goes on while a round logs no more verified P1
+or P2 findings than the one before, a rise stops it for a ruling, and there is no cap, as
+`scripts/review-decide.ts` says and the review-rounds trial recorded. Changed [the review
+loop](concepts/review-loop.md), [when a review loop should stop](concepts/review-convergence.md)
+and the index to say so, citing the trial's loop-rule results. The review-loop page also said a
+run has three legs; since the two-leg change it has at most two, as the config example says, and
+the page now says that. No standing changed.
 
 ## [2026-10-13] update | lanes may read the wiki; contamination is recorded, not prohibited
 
