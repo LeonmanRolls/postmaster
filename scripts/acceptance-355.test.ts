@@ -22,7 +22,6 @@ import {
   CLERK_BASE_FAILURE,
   changeFile,
   flat,
-  ISSUE_273_URL,
   POSTMASTER_OFFER,
   PSTACK_URL,
   plantMulti,
@@ -454,20 +453,22 @@ describe("C5: the README says setup makes verifiers", () => {
     expect(count).toBeGreaterThanOrEqual(1);
   });
 
-  test("the README links pstack's folder and #273 and says setup makes verifiers", () => {
+  // The README was rewritten as a short hub: its Verifiers section names pstack's folder and
+  // says setup offers to make verifiers, and no longer links the issue, whose old home was an
+  // account GitHub banned.
+  test("the README links pstack's folder and says setup offers to make verifiers", () => {
     const text = readme();
     expect(text).toContain(PSTACK_URL);
-    expect(text).toContain(ISSUE_273_URL);
-    expect(flat(text)).toContain(flat("Setting up a project makes its verifiers"));
+    expect(flat(text)).toContain(flat("Setting up a project offers to make its verifiers"));
   });
 
-  test("the paragraph sits after the Wiki section", () => {
+  test("the paragraph sits in the Verifiers section, before Getting started", () => {
     const text = readme();
-    const wiki = text.indexOf("## Wiki");
-    const marker = text.indexOf("makes its verifiers");
+    const section = text.indexOf("## Verifiers");
+    const marker = text.indexOf("offers to make its verifiers");
     const getting = text.indexOf("## Getting started");
-    expect(wiki).toBeGreaterThan(-1);
-    expect(marker).toBeGreaterThan(wiki);
+    expect(section).toBeGreaterThan(-1);
+    expect(marker).toBeGreaterThan(section);
     expect(getting).toBeGreaterThan(marker);
   });
 });
