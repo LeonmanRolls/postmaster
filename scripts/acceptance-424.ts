@@ -311,8 +311,9 @@ const GIT_ENV = {
  * shared, with a local main cut from the clone's own head, so probe
  * branches land against the commit they start from. It must not depend
  * on a ref only a full clone has: CI checks out detached with no main
- * and no origin refs. Forced, so it also holds where main is already
- * checked out. */
+ * and no origin refs. Detached first and then forced, so it also holds
+ * where main is the branch the repository has checked out: git refuses to
+ * move the branch a clone has checked out, even forced. */
 export function makeClone(): string {
   const dir = mkdtempSync(join(tmpdir(), "postmaster-424-clone-"));
   const clone = spawnSync("git", ["clone", "--shared", "-q", repoRoot(), dir], {
@@ -320,6 +321,11 @@ export function makeClone(): string {
     encoding: "utf8",
   });
   if (clone.status !== 0) throw new Error(`probe-424: git clone failed: ${clone.stderr}`);
+  const detach = spawnSync("git", ["-C", dir, "checkout", "-q", "--detach"], {
+    env: GIT_ENV,
+    encoding: "utf8",
+  });
+  if (detach.status !== 0) throw new Error(`probe-424: cannot detach: ${detach.stderr}`);
   const main = spawnSync("git", ["-C", dir, "branch", "-q", "-f", "main", "HEAD"], {
     env: GIT_ENV,
     encoding: "utf8",
