@@ -358,11 +358,13 @@ const mark = (name: string, kind: string): string => (CALLABLE.has(kind) ? `${na
  * `Owner{member, method(), nested.member}`. A function, method or hook ends in `()`. The lines
  * are wrapped at `width` characters, indented under the file's name, so that a long list of
  * settings is read in pages. It is the whole API in a few pages: no signature or doc for each
- * name, only which names there are and what each belongs to.
+ * name, only which names there are and what each belongs to. A re-export is left out: its name is
+ * listed where it is declared.
  */
 export function overview(entries: readonly IndexEntry[], width = 150): string[] {
   const byFile = new Map<string, IndexEntry[]>();
   for (const e of entries) {
+    if (e.kind === "re-export") continue;
     const list = byFile.get(e.file);
     if (list === undefined) byFile.set(e.file, [e]);
     else list.push(e);

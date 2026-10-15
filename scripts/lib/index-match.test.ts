@@ -289,6 +289,15 @@ describe("overview", () => {
     for (let i = 0; i < 60; i++) expect(text).toContain(`setting_number_${i}`);
   });
 
+  test("a re-export is left out, and a file of only re-exports has no line", () => {
+    const lines = overview([
+      at("Widget", "class", "x.d.ts", 1),
+      at("Widget", "re-export", "x.d.ts", 9),
+      at("Barrel", "re-export", "index.ts", 1),
+    ]);
+    expect(lines).toEqual(["x.d.ts", "  Widget"]);
+  });
+
   test("an index with nothing in it has no lines", () => {
     expect(overview([])).toEqual([]);
   });
