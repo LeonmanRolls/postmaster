@@ -32,7 +32,7 @@ import { scriptsDir } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
 import { PY_DOT, PY_S_CLASS, pySplitLines, pyTrim } from "./lib/text.ts";
 
-const LENSES = ["style", "bug", "security"] as const;
+const LENSES = ["style", "bug", "security", "design"] as const;
 type Lens = (typeof LENSES)[number];
 
 interface CmdResult {

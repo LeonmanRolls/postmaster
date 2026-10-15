@@ -178,7 +178,7 @@ describe("positive controls", () => {
   });
 
   test("the lenses are the review stage's, in order", () => {
-    check(run(SELF, ["reviewers", "lenses"]), 0, "style\nbug\nsecurity");
+    check(run(SELF, ["reviewers", "lenses"]), 0, "style\nbug\nsecurity\ndesign");
   });
 });
 

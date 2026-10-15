@@ -372,7 +372,7 @@ describe("positive controls: a ticket's section", () => {
     checkIs(
       runSelf("resolve", lines("default", "", "\t---")),
       2,
-      '"---" is not a turnpike; the section holds only default, none, or names from: style, bug, security',
+      '"---" is not a turnpike; the section holds only default, none, or names from: style, bug, security, design',
     );
   });
 

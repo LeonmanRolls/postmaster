@@ -502,8 +502,8 @@ function nameCmd(dispatch: string, ...args: string[]): string {
     return spec as Record<string, unknown>;
   };
   const needLens = (lens: string): string => {
-    if (lens !== "style" && lens !== "bug" && lens !== "security")
-      die("review lens must be style, bug or security");
+    if (lens !== "style" && lens !== "bug" && lens !== "security" && lens !== "design")
+      die("review lens must be style, bug, security or design");
     return lens;
   };
   const turnpikeLegs = (): string[][] => {
@@ -6904,7 +6904,10 @@ export function runWorktreePaths(givenDispatch: string): string[] {
       if (
         Array.isArray(pair) &&
         pair.length === 2 &&
-        (pair[0] === "style" || pair[0] === "bug" || pair[0] === "security") &&
+        (pair[0] === "style" ||
+          pair[0] === "bug" ||
+          pair[0] === "security" ||
+          pair[0] === "design") &&
         isPathComponent(pair[1])
       )
         reviewers.add(`${pair[0]}\t${pair[1]}`);

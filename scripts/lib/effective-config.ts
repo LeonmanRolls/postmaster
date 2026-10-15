@@ -672,7 +672,7 @@ export const validateCommon = (data: Rec, label: string, local: boolean): Rec =>
     }
     if (Object.hasOwn(roles, "lens_reviewers")) {
       const lenses = asTable(roles.lens_reviewers, `${label}.roles.lens_reviewers`);
-      const allowedLenses = new Set(["style", "bug", "security"]);
+      const allowedLenses = new Set(["style", "bug", "security", "design"]);
       for (const [lens, lensNames] of Object.entries(lenses)) {
         if (!allowedLenses.has(lens)) {
           fail(`${label}.roles.lens_reviewers names an unknown lens: ${lens}`);

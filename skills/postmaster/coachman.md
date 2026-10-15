@@ -184,7 +184,8 @@ turnpike's step in this runbook; a listed turnpike with no step here cannot run:
 **A leg starts by accepting the hand-off.** Read `brief.md`, this runbook, and the previous
 leg's hand-off, which the leg prompt names; log `handoff-accept`; then act. A decision the
 hand-off marks `do-not-reopen` is reopened only by logging a `note` that says why, before
-anything else.
+anything else. Only a detail is marked so, such as a name, a wording or a value; an architecture is
+never marked, and the design lens may challenge one.
 
 **A leg ends by writing its hand-off, and nothing else counts as ending.** `handoff-<n>.md`
 is current state only, in exactly these sections, none empty; `<tool>/scripts/run handoff-check`
@@ -192,7 +193,7 @@ must exit 0 before the marker is touched:
 
 ```
 ## Decisions
-Every decision this leg took, one per line, with its reason, marked do-not-reopen where it is settled; every deviation from a written rule whose label gates, as `deviation <rule id> at <file:line>: <the reason the comment at that line gives>`; every do-not-reopen decision from earlier hand-offs carried forward verbatim; and always the oracle decision, blind acceptance tests written as the first commit or not written and why.
+Every decision this leg took, one per line, with its reason, marked do-not-reopen where it is a settled detail (a name, a wording, a value), never an architecture; every deviation from a written rule whose label gates, as `deviation <rule id> at <file:line>: <the reason the comment at that line gives>`; every do-not-reopen decision from earlier hand-offs carried forward verbatim; and always the oracle decision, blind acceptance tests written as the first commit or not written and why.
 ## Deferred findings
 Every finding not applied, with its lens and originating round where known, its disposition and reason (the review leg restates these to its reviewers; the last leg carries them to the ship card, the style ones to its Style residue and the rest to its open findings).
 ## Verified by execution
@@ -822,14 +823,14 @@ for the review leg, exactly those: a turnpike the waybill does not name never ru
 names is never skipped. If the script exits 2, or lists no review leg, escalate with its
 output. Each round runs every lens still open, on one snapshot, every lane the waybill names for
 that lens as its own process in its own scratch: every lens in round 1, then the gating lenses
-alone from round 2. A lens's lanes are its own `<lens> reviewers:` line in the waybill where it
+alone from round 2 (the style and design lenses run in round 1 only). A lens's lanes are its own `<lens> reviewers:` line in the waybill where it
 has one, and the `reviewers:` line otherwise; `<tool>/scripts/run reviewers lanes <dispatch>/brief.md
 <lens>` prints them.
 [Why the lenses run as one loop](../../wiki/concepts/review-loop.md)
 
 Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
 
-1. **Prepare each open lens from its entry below.** The style brief and security brief,
+1. **Prepare each open lens from its entry below.** The style, security and design briefs,
    `review-<lens>-brief.md` in the dispatch dir, carry their diff scope (synthesis worktree,
    `git diff <BASE>...HEAD`); the project profile plus the lens's specific pointers from it;
    findings already known (the hand-off's deferred findings and implementation divergences) so
@@ -879,6 +880,21 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
      report with `<tool>/scripts/run review-findings`; missing fields such as severity stay
      `not provided`.
      [Why a lane may review through its harness's own skill](../../wiki/concepts/own-review-skills.md)
+   - **Design lens** (round 1 only; its findings need a ruling): whether the change builds what a
+     library, SDK or service the project already uses, or the repository itself, already offers. Its
+     brief carries the ticket's `### Existing capabilities` section and decisions, the change's
+     footprint as `<tool>/scripts/run footprint <repo> <BASE> HEAD` prints it (context for the
+     reviewer, never a gate), and the least-code ladder: for each requirement, take the first
+     rung that meets it, (1) a setting of a library the project already uses, (2) a function
+     already in the repository, (3) a thin wrapper over one of those, (4) new code. A finding names
+     a mechanism, which is a file, module, hook, store or dependency with callers, and never an
+     identifier, a line or a comment; names the higher rung and the code it would delete; shows by a
+     documentation link, the installed version's types or a probe that the rung meets every criterion
+     of the ticket; and never drops a requirement, a test, a type or an error path. Naming and
+     readability rules outrank it. Launch: from its brief. A finding that swaps a mechanism for a
+     library's setting, or changes stored state, an interface or a dependency, needs the user's
+     ruling: escalate it with the card (step 4). One that swaps for a function already in the
+     repository with the same behavior is applied like any gating finding.
    - **Security lens** (gating): general exploit hunting plus the project's specific surfaces
      as the waybill names them: how it binds and authenticates, what it allowlists, how it
      handles secrets, what it spawns and with what arguments, what it serves from disk.

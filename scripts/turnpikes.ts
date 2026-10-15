@@ -32,7 +32,8 @@ import { NAME_CLASS, PY_S_CLASS, pyLower, pyTrim, pyWords } from "./lib/text.ts"
 export const TABLE = `# name     set      leg     what it checks
 style      default  review  idiom, naming, abstraction and consistency with the project's own conventions
 bug        default  review  correctness, logic, and whether the tests are adequate
-security   default  review  exploit paths through the project's risk surfaces`;
+security   default  review  exploit paths through the project's risk surfaces
+design     -        review  whether the change builds what a library or the repository already offers`;
 
 export const CURRENT_LEGS: Array<[number, string]> = [
   [1, "synthesis"],

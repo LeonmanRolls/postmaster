@@ -316,13 +316,20 @@ function decide(dispatch: string, roundS: string): void {
       ({ sev, rnd, cls }) => rnd === roundNum && (sev === "P1" || sev === "P2") && cls === "gating",
     ).length;
   // The gating lenses with no working reviewer in a round, sorted: every launched
-  // lane degraded. Style is never gating; a lens with no launch had no reviewer
-  // to lose.
+  // lane degraded. Style is never gating, and design runs in round 1 alone, so neither forces
+  // another round; a lens with no launch had no reviewer to lose.
   const lacking = (roundNum: string): string[] => {
     const out: string[] = [];
     for (const [key, lanes] of launches) {
       const [lens = "", rnd = ""] = key.split("\0");
-      if (rnd !== roundNum || lens === "style" || lens === "" || lanes.size === 0) continue;
+      if (
+        rnd !== roundNum ||
+        lens === "style" ||
+        lens === "design" ||
+        lens === "" ||
+        lanes.size === 0
+      )
+        continue;
       const down = degrades.get(key) ?? new Set<string>();
       if ([...lanes].every((lane) => down.has(lane)) && !out.includes(lens)) out.push(lens);
     }

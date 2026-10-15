@@ -397,7 +397,7 @@ function resolveLenses(
     res.code = 1;
     return null;
   }
-  const names = review.slice(2).filter((n) => a.round === "1" || n !== "style");
+  const names = review.slice(2).filter((n) => a.round === "1" || (n !== "style" && n !== "design"));
   const pairs: Array<[string, string[]]> = [];
   for (const lens of names) {
     const r = deps.tool("reviewers", ["lanes", join(a.dispatch, "brief.md"), lens]);
