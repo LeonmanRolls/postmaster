@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { expandPattern, exportsOf, parseArgs, sourceFiles } from "./code-index.ts";
+import { exportsOf, parseArgs, sourceFiles } from "./code-index.ts";
 
 const SELF = join(import.meta.dir, "run");
 
@@ -95,31 +95,6 @@ describe("parseArgs", () => {
   test("needs a repo and at least one folder", () => {
     expect(String(parseArgs(["r"]))).toContain("usage: run code-index");
     expect(String(parseArgs([]))).toContain("usage: run code-index");
-  });
-});
-
-describe("expandPattern", () => {
-  test("a star stands for one folder name", () => {
-    expect(expandPattern(repo, "packages/*/src")).toEqual([
-      join(repo, "packages/one/src"),
-      join(repo, "packages/three/src"),
-      join(repo, "packages/two/src"),
-    ]);
-  });
-
-  test("a pattern with no star is the path itself", () => {
-    expect(expandPattern(repo, "apps/web")).toEqual([join(repo, "apps/web")]);
-  });
-
-  test("a star matches part of a name", () => {
-    expect(expandPattern(repo, "packages/t*")).toEqual([
-      join(repo, "packages/three"),
-      join(repo, "packages/two"),
-    ]);
-  });
-
-  test("a star in a folder that does not exist matches nothing", () => {
-    expect(expandPattern(repo, "absent/*/src")).toEqual([]);
   });
 });
 

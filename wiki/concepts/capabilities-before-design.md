@@ -42,6 +42,13 @@ a few reads. After the build it costs a rework.
   flags. Nothing asked it to list the block, and a block of two thousand names is not read whole
   by choice. A menu of the declared API, ranked against the draft's own words and followed by a map
   of every name, puts those names in front of it while it plans.
+- **The libraries to read are a guess too.** The clerk opens the libraries it thinks the change
+  touches. The full map of every library a project declares is far more than a clerk can read: the
+  maps of eighty-eight libraries came to about 390,000 tokens, most of it icon sets and one chain
+  library. The names of every function and method of all of them came to about 38,000. So the menu
+  of the whole stack is a directory of every library with the names in each that are near the
+  draft, those function names, and the nearest names across all of them; each library's full map is
+  a file of its own, read for the libraries the directory shows are near the draft.
 - **Knowing is enough; the ticket lists nothing from the menu.** The user asked that the clerk
   know every function available during planning, not repeat them: a requirement to name each
   listed name in the ticket would cost hundreds of names per ticket and would be answered by
@@ -81,7 +88,9 @@ a line in each decision's `Instead of`. `scripts/run ticket-capabilities` checks
 form, and `scripts/run ticket-parts` prints a note, never a finding, when a ticket lacks it, so a
 ticket written before the section stays ready.
 
-`scripts/run api-index` reads every exported name and setting of a package, and of the packages of
+`scripts/run api-index --all` reads every library the manifests of the project declare, at the
+version the lockfile resolved, through the `@types` package where a library has no types of its own.
+`scripts/run api-index` reads every exported name and setting of one package, and of the packages of
 its family that its declarations import, from the installed copy or the version the lockfile pins.
 `scripts/run code-index` reads every export of the project folders a change touches. Each saves a
 menu: the entries nearest the draft's words, with signature and doc comment, then a map of every

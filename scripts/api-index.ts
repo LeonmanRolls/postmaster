@@ -4,6 +4,7 @@
 //
 //   run api-index <repo> <package> [--dir <folder>] [--from <folder>] [--version <v>]
 //                 [--match <draft>] [--max <n>] [--out <file>]
+//   run api-index <repo> --all [--dev] [--from <folder>] --match <draft> [--max <n>] --out <file>
 //
 // The package is looked for in the project's installed packages, from `--from` (a folder of the
 // project, the app that uses it) up to the root and through its apps and packages. A project
@@ -26,16 +27,28 @@
 // Lines are tab separated: symbol, kind, signature, doc, where, matched. `--out` writes them to a
 // file and prints one summary line; without it they are printed.
 //
+// With `--all` the command reads every library the project uses, so that the clerk need not guess
+// which ones matter: the dependencies, peer and optional dependencies of the root and of every
+// workspace folder (`--dev` adds the devDependencies), at the version the lockfile resolved for the
+// project (see scripts/lib/stack.ts). A library with no declaration files of its own is read
+// through the `@types` package the project declares for it. The file `--out` names holds the
+// stack menu (see scripts/lib/stack-menu.ts): a directory of every library, every function and
+// method of every library, and the names nearest the draft across them all; the own menu of each
+// library, with its map of every name, is a file in the folder beside it. The first run downloads
+// the libraries the project has not installed and can take minutes; a second run uses what the
+// first one fetched.
+//
 //   exit 0  printed or written
-//   exit 1  the package could not be found or downloaded, or has no declaration files
+//   exit 1  the package could not be found or downloaded, or has no declaration files; with
+//           `--all`, no library was found
 //   exit 2  usage
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { extractEntries } from "./lib/api-extract.ts";
 import {
   type IndexEntry,
-  formatList,
   draftText,
+  formatList,
   rank,
   vocabulary,
   vocabularyKey,
@@ -50,13 +63,18 @@ import {
   typeEntries,
   typeGraph,
 } from "./lib/package-types.ts";
+import { type Library, formatStack, rankAcross } from "./lib/stack-menu.ts";
+import { declaredDependencies } from "./lib/stack.ts";
 
 const USAGE =
-  "usage: run api-index <repo> <package> [--dir <folder>] [--from <folder>] [--version <v>] [--match <draft>] [--max <n>] [--out <file>]";
+  "usage: run api-index <repo> <package> [--dir <folder>] [--from <folder>] [--version <v>] [--match <draft>] [--max <n>] [--out <file>]\n       run api-index <repo> --all [--dev] [--from <folder>] --match <draft> [--max <n>] --out <file>";
 
 interface Options {
   readonly repo: string;
+  /** The package to read; empty with `--all`. */
   readonly name: string;
+  readonly all: boolean;
+  readonly dev: boolean;
   readonly dir?: string;
   readonly from?: string;
   readonly version?: string;
@@ -68,9 +86,15 @@ interface Options {
 export function parseArgs(argv: readonly string[]): Options | string {
   const pos: string[] = [];
   const flags = new Map<string, string>();
+  let all = false;
+  let dev = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i] as string;
-    if (["--dir", "--from", "--version", "--match", "--max", "--out"].includes(a)) {
+    if (a === "--all") {
+      all = true;
+    } else if (a === "--dev") {
+      dev = true;
+    } else if (["--dir", "--from", "--version", "--match", "--max", "--out"].includes(a)) {
       const v = argv[i + 1];
       if (v === undefined || v.startsWith("--")) return `${a} needs a value`;
       flags.set(a, v);
@@ -81,12 +105,21 @@ export function parseArgs(argv: readonly string[]): Options | string {
       pos.push(a);
     }
   }
-  if (pos.length !== 2) return USAGE;
+  if (pos.length !== (all ? 1 : 2)) return USAGE;
+  if (dev && !all) return "--dev goes with --all";
+  if (all && (flags.has("--dir") || flags.has("--version"))) {
+    return "--all reads every library: --dir and --version name one";
+  }
+  if (all && (!flags.has("--match") || !flags.has("--out"))) {
+    return "--all needs --match <draft> and --out <file>";
+  }
   const max = Number(flags.get("--max") ?? "60");
   if (!Number.isInteger(max) || max < 1) return "--max is a whole number of at least 1";
   return {
     repo: resolve(pos[0] as string),
-    name: pos[1] as string,
+    name: all ? "" : (pos[1] as string),
+    all,
+    dev,
     dir: flags.get("--dir"),
     from: flags.get("--from"),
     version: flags.get("--version"),
@@ -229,17 +262,28 @@ export function dedupe(entries: readonly IndexEntry[]): IndexEntry[] {
   return [...kept.values()];
 }
 
-function main(argv: string[]): number {
-  const o = parseArgs(argv);
-  if (typeof o === "string") {
-    console.error(o === USAGE ? o : `api-index: ${o}\n${USAGE}`);
-    return 2;
-  }
-  const first = locate(o, o.name);
-  if (typeof first === "string") {
-    console.error(`api-index: ${first}`);
-    return 1;
-  }
+export interface PackageIndex {
+  /** One entry for each symbol and kind. */
+  readonly entries: IndexEntry[];
+  /** The package and the packages of its family that were read with it. */
+  readonly packages: Pkg[];
+  readonly files: number;
+  readonly problems: string[];
+}
+
+/**
+ * Read a package and the packages of its family that its declarations import. The string is why a
+ * package could not be found. A package with no declaration files is returned with no entries.
+ * `skip` names packages to leave out of the family because they are read on their own.
+ */
+export function indexPackage(
+  o: Pick<Options, "repo" | "from" | "dir" | "version">,
+  name: string,
+  spec?: string,
+  skip: ReadonlySet<string> = new Set(),
+): PackageIndex | string {
+  const first = locate(o, name, spec);
+  if (typeof first === "string") return first;
   const family = familyOf(first.pkg.name);
   const done = new Map<string, Pkg>([[first.pkg.name, first.pkg]]);
   const queue: Pkg[] = [first.pkg];
@@ -266,7 +310,7 @@ function main(argv: string[]): number {
       deps = {};
     }
     for (const bare of got.bare) {
-      if (done.has(bare) || familyOf(bare) !== family) continue;
+      if (done.has(bare) || skip.has(bare) || familyOf(bare) !== family) continue;
       const sibling = siblingOf(pkg.dir, bare) ?? findInstalled(o.repo, bare, o.from);
       const next = locate(
         { ...o, version: undefined, dir: sibling ?? undefined, from: undefined },
@@ -282,27 +326,40 @@ function main(argv: string[]): number {
       queue.push(next.pkg);
     }
   }
-  if (all.length === 0) {
-    console.error(`api-index: ${problems.join("; ") || `no declarations found for ${o.name}`}`);
+  return { entries: dedupe(all), packages: [...done.values()], files, problems };
+}
+
+const describePackages = (packages: readonly Pkg[]): string =>
+  packages.map((p) => `${p.name}@${p.version}`).join(", ");
+
+function readDraft(path: string, who: string): string | number {
+  try {
+    return readFileSync(path, "utf8");
+  } catch (e) {
+    console.error(`${who}: cannot read ${path}: ${e instanceof Error ? e.message : String(e)}`);
+    return 2;
+  }
+}
+
+function mainOne(o: Options): number {
+  const got = indexPackage(o, o.name);
+  if (typeof got === "string") {
+    console.error(`api-index: ${got}`);
     return 1;
   }
-  const entries = dedupe(all);
-  const packages = [...done.values()].map((p) => `${p.name}@${p.version}`).join(", ");
-  const title = `api-index ${packages} (${files} declaration files)`;
+  if (got.entries.length === 0) {
+    console.error(`api-index: ${got.problems.join("; ") || `no declarations found for ${o.name}`}`);
+    return 1;
+  }
+  const { entries, packages, files, problems } = got;
+  const title = `api-index ${describePackages(packages)} (${files} declaration files)`;
   let rows: Array<{ entry: IndexEntry; matched?: readonly string[] }> = entries.map((entry) => ({
     entry,
   }));
   let key: string | undefined;
   if (o.match !== undefined) {
-    let draft: string;
-    try {
-      draft = readFileSync(o.match, "utf8");
-    } catch (e) {
-      console.error(
-        `api-index: cannot read ${o.match}: ${e instanceof Error ? e.message : String(e)}`,
-      );
-      return 2;
-    }
+    const draft = readDraft(o.match, "api-index");
+    if (typeof draft === "number") return draft;
     const vocab = vocabulary(draftText(draft));
     key = vocabularyKey(vocab);
     rows = rank(entries, vocab, o.max).map((c) => ({ entry: c.entry, matched: c.matched }));
@@ -320,9 +377,93 @@ function main(argv: string[]): number {
   mkdirSync(dirname(resolve(o.out)), { recursive: true });
   writeFileSync(o.out, text);
   console.log(
-    `api-index: ${packages}: ${entries.length} entries${o.match !== undefined ? `, ${rows.length} candidates` : ""}, written to ${o.out}`,
+    `api-index: ${describePackages(packages)}: ${entries.length} entries${o.match !== undefined ? `, ${rows.length} candidates` : ""}, written to ${o.out}`,
   );
   return 0;
+}
+
+/** The folder beside a menu file that holds the own menu of each library: `menu.tsv` has `menu.libs`. */
+export function libsFolderOf(out: string): string {
+  return `${out.replace(/\.[^./]+$/u, "")}.libs`;
+}
+
+/** A library's name as a file name: `@tanstack/react-query` is `@tanstack__react-query`. */
+export const fileNameOf = (name: string): string => `${name.replace(/\//gu, "__")}.tsv`;
+
+function mainAll(o: Options): number {
+  const draft = readDraft(o.match as string, "api-index");
+  if (typeof draft === "number") return draft;
+  const vocab = vocabulary(draftText(draft));
+  const key = vocabularyKey(vocab);
+  const stack = declaredDependencies(o.repo, o.dev);
+  if (stack.libraries.length === 0) {
+    console.error(`api-index: no libraries declared in the manifests under ${o.repo}`);
+    return 1;
+  }
+  const names = new Set(stack.libraries.map((l) => l.name));
+  const out = resolve(o.out as string);
+  const folder = libsFolderOf(out);
+  mkdirSync(folder, { recursive: true });
+  const libs: Library[] = [];
+  stack.libraries.forEach((d, i) => {
+    console.error(`api-index: [${i + 1}/${stack.libraries.length}] ${d.name}`);
+    const where = { repo: o.repo, from: o.from, version: d.version };
+    let got = indexPackage(where, d.name, d.spec, names);
+    if (typeof got !== "string" && got.entries.length === 0) {
+      const types = stack.typesFor.get(d.name);
+      const typed =
+        types === undefined
+          ? undefined
+          : indexPackage({ ...where, version: types.version }, types.name, types.spec, names);
+      if (typed !== undefined && typeof typed !== "string" && typed.entries.length > 0) {
+        got = { ...typed, packages: [...got.packages, ...typed.packages] };
+      }
+    }
+    if (typeof got === "string") {
+      libs.push({ name: d.name, packages: [], entries: [], note: got });
+    } else if (got.entries.length === 0) {
+      libs.push({
+        name: d.name,
+        packages: got.packages,
+        entries: [],
+        note: "no declaration files",
+      });
+    } else {
+      const menuFile = relative(dirname(out), join(folder, fileNameOf(d.name)));
+      const rows = rank(got.entries, vocab, o.max).map((c) => ({
+        entry: c.entry,
+        matched: c.matched,
+      }));
+      const title = `api-index ${describePackages(got.packages)} (${got.files} declaration files)`;
+      writeFileSync(
+        join(folder, fileNameOf(d.name)),
+        formatList({ title, vocabularyKey: key, total: got.entries.length }, rows, got.entries),
+      );
+      libs.push({ name: d.name, packages: got.packages, entries: got.entries, menuFile });
+    }
+  });
+  const { rows, hits } = rankAcross(libs, vocab);
+  const title = `api-index --all ${o.repo}`;
+  writeFileSync(out, formatStack({ title, vocabularyKey: key }, libs, hits, rows));
+  const read = libs.filter((l) => l.entries.length > 0);
+  if (read.length === 0) {
+    console.error("api-index: no library had declaration files");
+    return 1;
+  }
+  const missing = libs.filter((l) => l.entries.length === 0).map((l) => l.name);
+  console.log(
+    `api-index: ${libs.length} libraries, ${read.length} read (${read.reduce((n, l) => n + l.entries.length, 0)} names)${missing.length > 0 ? `, ${missing.length} without declarations: ${missing.join(", ")}` : ""}; menu written to ${out}, own menus in ${folder}`,
+  );
+  return 0;
+}
+
+function main(argv: string[]): number {
+  const o = parseArgs(argv);
+  if (typeof o === "string") {
+    console.error(o === USAGE ? o : `api-index: ${o}\n${USAGE}`);
+    return 2;
+  }
+  return o.all ? mainAll(o) : mainOne(o);
 }
 
 if (import.meta.main) {
