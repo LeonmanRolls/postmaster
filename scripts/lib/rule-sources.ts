@@ -51,7 +51,9 @@ const WILDCARD_RE = /[*?[\]{}!]/u;
 const FENCE_RE = /^(```|~~~)/u;
 const HEADING_RE = /^(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$/u;
 const TITLE_LABEL_RE = /[ \t]*\(([\p{L}-]+)\)[ \t]*$/u;
-const TIER_LINE_RE = /^[ \t]*(?:Tier|Severity):[ \t]*\**([\p{L}-]+)/iu;
+// The tier a section states, in a line of its own or at the end of a paragraph: `Tier: Default.`
+const TIER_RE = /(?:^|[ \t.(])(?:Tier|Severity):[ \t]*\**([\p{L}-]+)/iu;
+const TIER_TEXT_RE = /[ \t]*(?:Tier|Severity):[ \t]*\**[\p{L}-]+\**(?:[ \t]*\([^)]*\))?\.?/giu;
 
 const isTable = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
@@ -130,7 +132,7 @@ const slug = (title: string): string =>
 
 /** Read a markdown file in which each heading at decl.level is a rule. Headings inside a fenced
  * block are examples. The label is the trailing (Word) of the heading, else the first
- * `Tier: Word` line in the section. */
+ * `Tier: Word` stated anywhere in the section, in a line of its own or at the end of a paragraph. */
 export function readHeadingRules(text: string, decl: Declaration): Read {
   const lines = text.split("\n");
   const heads: Array<{ at: number; level: number; title: string }> = [];
@@ -151,11 +153,11 @@ export function readHeadingRules(text: string, decl: Declaration): Read {
     const body = lines.slice(h.at + 1, end);
     const inTitle = TITLE_LABEL_RE.exec(h.title);
     const title = (inTitle ? h.title.slice(0, inTitle.index) : h.title).trim();
-    const tier = body.map((l) => TIER_LINE_RE.exec(l)).find((m) => m !== null);
+    const tier = body.map((l) => TIER_RE.exec(l)).find((m) => m !== null);
     const label = inTitle ? inTitle[1] : tier ? tier[1] : "";
     const paragraph = body
-      .filter((l) => !TIER_LINE_RE.test(l))
       .join("\n")
+      .replace(TIER_TEXT_RE, "")
       .split(/\n[ \t]*\n/u)
       .map((p) => p.trim())
       .find((p) => p !== "" && !p.startsWith("```"));

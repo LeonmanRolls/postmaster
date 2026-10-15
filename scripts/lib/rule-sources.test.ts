@@ -190,6 +190,24 @@ describe("a markdown rule file", () => {
     expect(read.rules[1].at).toBe("acme/style.md:11");
   });
 
+  test("a tier stated at the end of a paragraph is the label, and is not in the text", () => {
+    const md = [
+      "### Use design tokens",
+      "",
+      "Use tokens, not arbitrary values.",
+      "",
+      "How to apply: ask for a token first. Tier: Default (tool-enforced where configured).",
+      "",
+      "### No label here",
+      "",
+      "Plain.",
+    ].join("\n");
+    const read = readHeadingRules(md, HEAD_DECL);
+    expect(read.rules.map((r) => r.label)).toEqual(["Default", ""]);
+    expect(read.rules[0].gate).toBe(true);
+    expect(read.rules[0].text).toBe("Use design tokens. Use tokens, not arbitrary values.");
+  });
+
   test("a file with no heading at the level is a problem", () => {
     const none = readHeadingRules("# Only a title\n\ntext", HEAD_DECL);
     expect(none.rules).toEqual([]);
