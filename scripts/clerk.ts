@@ -332,6 +332,28 @@ function writeBrief(repo: string, id: string): Brief {
           ...staleOut.split("\n"),
           "```",
         ];
+  // The project's notes for the clerk, copied in: what to read first and which docs to check. A
+  // notes file with a problem is told to the clerk, who tells the user; it never stops the clerk.
+  const notesRun = runScript("project-notes", ["clerk", repo]);
+  const notesText = notesRun.out.replace(/\n+$/u, "");
+  const notesBlock =
+    notesRun.code !== 0
+      ? [
+          "## Project notes",
+          "",
+          `The project's notes file has a problem. Tell the user before drafting: ${notesRun.err.trim()}`,
+          "",
+        ]
+      : notesText === ""
+        ? []
+        : [
+            "## Project notes",
+            "",
+            `Written for this project by its people and the postmaster. Follow them while you prepare the ticket. \`${cite(["project-notes", "clerk", repo, "--area", "<glob>"])}\` prints them for one area of the project.`,
+            "",
+            notesText,
+            "",
+          ];
   const lines = [
     `# Brief: booking clerk for ${session}`,
     "",
@@ -367,6 +389,7 @@ function writeBrief(repo: string, id: string): Brief {
     ...verifiersBlock,
     ...(staleBlock.length > 0 ? ["", ...staleBlock] : []),
     "",
+    ...notesBlock,
   ];
   if (ticket.title) lines.push(`## The ticket as read`, "", `Title: ${ticket.title}`, "");
   writeFileSync(briefPath, lines.join("\n"));

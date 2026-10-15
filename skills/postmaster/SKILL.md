@@ -171,6 +171,13 @@ context start blind, and that has silently handicapped a lane before. Ask the us
 the project's risk surfaces (what it binds, allowlists, spawns and serves) where the docs do
 not say; the security lens reviews against them.
 
+**Project notes.** `<tool>/scripts/run project-notes check <target>` reads the project's
+`.postmaster/notes.md`, if it has one, and says what each part of the flow would receive. When the
+project has no notes and discovery printed `rule_sources`, `instruction_files_above` or `sources`,
+offer to write them with the user, as the setup section of `<tool>/AGENTS.md` says. When a run teaches a fact
+about the project that the notes do not hold, propose a line for them, route it, and write it on the
+user's yes.
+
 ### Optional project settings
 
 `.postmaster/project.toml` is the shared file a project may choose to commit. It declares
@@ -364,6 +371,9 @@ tracker: <kind, and how a ticket is read and written>
 risk surfaces: <what the project binds, allowlists, spawns, serves; from its docs or the user>
 checks: <as `run verify record` printed them: each check's name, where it came from, its command and what it shows>
 
+## Project notes
+<pasted whole from `<tool>/scripts/run project-notes show <dispatch> waybill-section`: this project's notes for the run, and the written rules its code follows; the whole section is left out when the command prints nothing>
+
 ## Team
 mode: <synthesis | single-thread>           (pasted whole from the `mode:` line `<tool>/scripts/run run-meta mode <dispatch>` printed: the run's mode; under single-thread the coachman writes the change itself, so this section names no workhorse lane)
 workhorses: <lane>=<harness>/<model>/<effort>, <lane>=…   (synthesis mode only; the line is left out in single-thread mode, so nothing downstream finds a workhorse lane to run)
@@ -383,6 +393,13 @@ postmaster ruling channel: resume the coachman's thread (harnesses.md) with the 
 coachman contract fixture: pending (the postmaster sets yes or no at the final card)
 contract fixture check: - (the postmaster records the command, commit and score at the final card)
 ```
+
+The project notes come from the project's `.postmaster/notes.md`, routed by the postmaster to the part
+of the flow each note is for (`notes.md` is read by `<tool>/scripts/run project-notes`; the setup
+step below says how it is written). `<tool>/scripts/run project-notes bundle <repo> <dispatch> --area
+<glob>` copies what the notes name into the run before the waybill is written, and
+`<tool>/scripts/run project-notes verify-waybill <dispatch>` must exit 0 after it: the section is in the
+waybill word for word. A project with no notes file has no section.
 
 The postmaster's own session continues to use the main checkout it found from the skill. The
 waybill's `tool:` path is the run's pinned checkout; coachman launches, resumes and takeovers

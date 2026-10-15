@@ -6,11 +6,16 @@
 // defaults rather than the resolved checks, so a project that declares its checks still
 // names them; a fixture copy names none, since it is never offered verifiers.
 // verifiers= names the verifier folders already at the repo top, or nothing.
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { homedir } from "node:os";
+import { resolve } from "node:path";
 import { tryJsonFile } from "./lib/data.ts";
+import { effectiveConfigForProject, expandUser } from "./lib/effective-config.ts";
 import { isFixtureCopy } from "./lib/fixture-mark.ts";
 import { beside, toolRoot } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
+import { findRuleSources, instructionFilesAbove, ruleSourceLine } from "./lib/rule-discovery.ts";
+import { appliesTo, readSources } from "./lib/sources.ts";
 import { orderKinds, presentVerifierFolders, surfaceKind, type Surface } from "./verifier.ts";
 import { discover } from "./verify.ts";
 
@@ -32,6 +37,10 @@ if (T === undefined || T === "") {
   console.error("usage: run discover-project <path>");
   process.exit(1);
 }
+
+// The project as the caller named it, absolute, before the cd: a source's applies_to may be written
+// with the path as given or with the real one.
+const GIVEN = resolve(T);
 
 // The tracker kind, before the cd, so a relative path or config is read from the caller's directory.
 const kindRun = run(beside(import.meta, "run"), ["tracker-kind", T]);
@@ -213,6 +222,33 @@ console.log(`tracker=${kind}`);
 console.log(`tracker_prefix=${trackerPrefix}`);
 for (const l of settings.out.replace(/\n$/u, "").split("\n")) console.log(l);
 console.log(`ambient_context=${existsSync("AGENTS.md") ? "AGENTS.md" : "NONE"}`);
+// Where the project keeps its written rules, found by convention, and what the machine knows that
+// may belong with them. Discovery only proposes: the project's notes decide what a run reads.
+const workflowNames = ((): string[] => {
+  try {
+    return readdirSync(".github/workflows");
+  } catch {
+    return [];
+  }
+})();
+console.log(ruleSourceLine(findRuleSources((p) => existsSync(p), workflowNames)));
+console.log(
+  `instruction_files_above=${instructionFilesAbove(ABS, homedir(), (f) => existsSync(f)).join(" ")}`,
+);
+console.log(`notes=${existsSync(".postmaster/notes.md") ? ".postmaster/notes.md" : "NONE"}`);
+const proposedSources = ((): string[] => {
+  try {
+    const resolved = effectiveConfigForProject(ABS);
+    const read = readSources(resolved.config?.sources, expandUser);
+    const glob = (pattern: string, path: string): boolean => new Bun.Glob(pattern).match(path);
+    return read.sources
+      .filter((s) => appliesTo(s, ABS, expandUser, glob) || appliesTo(s, GIVEN, expandUser, glob))
+      .map((s) => s.name);
+  } catch {
+    return [];
+  }
+})();
+console.log(`sources=${proposedSources.join(" ")}`);
 for (const l of checks) {
   const f = l.split("\t");
   if (f.length >= 4) console.log(`check.${f[0]}=${f[1]}: ${f[3]}`);

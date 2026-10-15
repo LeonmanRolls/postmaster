@@ -197,7 +197,15 @@ waits in the ready queue until the watcher sees room under `team.max_runs`.
    `ship.merge_authority`, either overridden only where the user said so for this run, the
    dispatch path and the run's pinned tool — `<tool>/scripts/run run-meta path <dispatch>`,
    the checkout step 7 cut, which the template names as `tool:` and the coachman uses as
-   its `<tool>`. Then `<tool>/scripts/run turnpikes legs <dispatch> --expect '<that
+   its `<tool>`. Then the project notes: `<tool>/scripts/run project-notes bundle <repo> <dispatch>
+   --area <glob>`, once for each glob of where the ticket's work is, such as `apps/portal/**`
+   (decided from the ticket and the tracker's project; no `--area` when the work spans the
+   project), copies what the notes name into the run, and `<tool>/scripts/run project-notes show
+   <dispatch> waybill-section` prints the waybill's `## Project notes` section, pasted whole after
+   the project profile; nothing prints when the project has no notes, and the waybill has no such
+   section. A refusal from `bundle` lists what is wrong with the notes: tell the user, and
+   dispatch without notes only on their word. After the waybill is written,
+   `<tool>/scripts/run project-notes verify-waybill <dispatch>` must exit 0. Then `<tool>/scripts/run turnpikes legs <dispatch> --expect '<that
    turnpikes: line>'` exits 0 and
    prints the legs for the `turnpikes:` line step 1 printed, before anything is launched.
    Record `coachman contract fixture: pending` and `contract fixture check: -`; no

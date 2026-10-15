@@ -33,6 +33,10 @@ the brief created by your own `/clerk` entry use the same command and instructio
 
 ## Prepare the ticket
 
+The brief's `## Project notes`, when it has the section, are this project's own instructions for
+the clerk: follow them, and open the pages they name when they apply to the ticket's area. Where
+the section says its notes file has a problem, tell the user in your first message.
+
 The ticket is one document with two parts. The user signs off everything above `## For the agents`.
 Write that plain part for someone who does not know the code: the problem, acceptance criteria,
 decisions, out of scope, direction, and turnpikes. Do not put a file, function, command, flag, line
@@ -116,7 +120,9 @@ already uses do for it. Do this for each one the change touches, and for each on
 wrap, replace or work around.
 
 1. Read the vendor's own documentation for the feature, opened in a browser, and the installed
-   version's types or source for its settings and methods. A search result is not a source.
+   version's types or source for its settings and methods. A search result is not a source. Where
+   the project notes name a wiki or standards page for the area, read it too: the project may
+   already have decided how it uses the library.
 2. List what it already offers for each thing the ticket needs: keeping a setting or a choice,
    remembering state, sending or blocking a request, clearing data, and the like.
 3. Where a criterion is a guarantee the documentation only implies, run the library against it

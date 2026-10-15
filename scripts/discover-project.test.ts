@@ -168,3 +168,77 @@ describe("install line: one manager for install and gate", () => {
     });
   });
 });
+
+describe("where the project keeps its written rules", () => {
+  test("rule_sources names the conventional files found, with what each usually is", () => {
+    withTempDir((tmp) => {
+      const d = join(tmp, "rules");
+      mkdirSync(join(d, ".greptile"), { recursive: true });
+      mkdirSync(join(d, ".github", "workflows"), { recursive: true });
+      pkg(d);
+      touch(d, "STYLEGUIDE.md");
+      touch(d, "REVIEW.md");
+      touch(d, "biome.json");
+      writeFileSync(join(d, ".greptile", "config.json"), "{}");
+      touch(join(d, ".github", "workflows"), "ci.yml");
+      touch(join(d, ".github", "workflows"), "claude-review.yml");
+      const r = run(self, ["discover-project", d]);
+      expect(r.code).toBe(0);
+      expect(lineOf(r.out, "rule_sources")).toBe(
+        "styleguide:STYLEGUIDE.md review-bot:REVIEW.md review-bot:.greptile/config.json linter:biome.json review-bot:.github/workflows/claude-review.yml",
+      );
+    });
+  });
+
+  test("a project with none prints an empty rule_sources, and no notes", () => {
+    withTempDir((tmp) => {
+      const d = join(tmp, "bare");
+      mkdirSync(d);
+      pkg(d);
+      const r = run(self, ["discover-project", d]);
+      expect(lineOf(r.out, "rule_sources")).toBe("");
+      expect(lineOf(r.out, "notes")).toBe("NONE");
+      expect(lineOf(r.out, "sources")).toBe("");
+    });
+  });
+
+  test("an instruction file in a folder above the project is named", () => {
+    withTempDir((tmp) => {
+      const family = join(tmp, "family");
+      const d = join(family, "shop");
+      mkdirSync(d, { recursive: true });
+      pkg(d);
+      writeFileSync(join(family, "CLAUDE.md"), "Read the family wiki.");
+      const r = run(self, ["discover-project", d]);
+      expect(lineOf(r.out, "instruction_files_above")).toContain(join(family, "CLAUDE.md"));
+    });
+  });
+
+  test("a notes file is reported when the project has one", () => {
+    withTempDir((tmp) => {
+      const d = join(tmp, "noted");
+      mkdirSync(join(d, ".postmaster"), { recursive: true });
+      pkg(d);
+      writeFileSync(join(d, ".postmaster", "notes.md"), "<!-- route: clerk -->\nA note.");
+      expect(lineOf(run(self, ["discover-project", d]).out, "notes")).toBe(".postmaster/notes.md");
+    });
+  });
+
+  test("a registered source whose applies_to matches the project is proposed", () => {
+    withTempDir((tmp) => {
+      const family = join(tmp, "family");
+      const d = join(family, "shop");
+      mkdirSync(d, { recursive: true });
+      pkg(d);
+      const config = join(tmp, "config.toml");
+      writeFileSync(
+        config,
+        `[sources.family-wiki]\npath = "${join(tmp, "wiki")}"\napplies_to = ["${family}/*"]\n[sources.other]\npath = "${tmp}"\napplies_to = ["/nowhere/*"]\n`,
+      );
+      const r = run(self, ["discover-project", d], {
+        env: { ...process.env, POSTMASTER_CONFIG: config },
+      });
+      expect(lineOf(r.out, "sources")).toBe("family-wiki");
+    });
+  });
+});

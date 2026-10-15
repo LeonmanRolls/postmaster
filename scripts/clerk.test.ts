@@ -163,6 +163,48 @@ describe("brief", () => {
     expect(labelsLine).not.toContain("ready");
   });
 
+  test("brief copies the project's notes for the clerk into a Project notes section", () => {
+    const repo = localRepo();
+    const id = localTicket(repo, "Fix the list");
+    const cfg = stubConfig(mkdtempSync(join(tmpdir(), "clerk-cfg-")));
+    mkdirSync(join(repo, ".postmaster"), { recursive: true });
+    writeFileSync(
+      join(repo, ".postmaster", "notes.md"),
+      "<!-- route: clerk -->\nRead the shop wiki index before you draft.\n\n<!-- route: waybill -->\nServe the app on port 4300.\n",
+    );
+    const r = sh(SELF, ["clerk", "brief", repo, id], { POSTMASTER_CONFIG: cfg });
+    expect(r.code).toBe(0);
+    const brief = readFileSync(join(repo, ".postmaster", "clerk", `${id}.brief.md`), "utf8");
+    expect(brief).toContain("## Project notes");
+    expect(brief).toContain("Read the shop wiki index before you draft.");
+    expect(brief).toContain("project-notes");
+    expect(brief).not.toContain("Serve the app on port 4300.");
+  });
+
+  test("brief has no Project notes section for a project with none", () => {
+    const repo = localRepo();
+    const id = localTicket(repo, "Fix the list");
+    const cfg = stubConfig(mkdtempSync(join(tmpdir(), "clerk-cfg-")));
+    expect(sh(SELF, ["clerk", "brief", repo, id], { POSTMASTER_CONFIG: cfg }).code).toBe(0);
+    const brief = readFileSync(join(repo, ".postmaster", "clerk", `${id}.brief.md`), "utf8");
+    expect(brief).not.toContain("## Project notes");
+  });
+
+  test("brief tells the clerk about a notes file with a problem and still writes", () => {
+    const repo = localRepo();
+    const id = localTicket(repo, "Fix the list");
+    const cfg = stubConfig(mkdtempSync(join(tmpdir(), "clerk-cfg-")));
+    mkdirSync(join(repo, ".postmaster"), { recursive: true });
+    writeFileSync(join(repo, ".postmaster", "notes.md"), "<!-- route: cook -->\ntext\n");
+    const r = sh(SELF, ["clerk", "brief", repo, id], { POSTMASTER_CONFIG: cfg });
+    expect(r.code).toBe(0);
+    const brief = readFileSync(join(repo, ".postmaster", "clerk", `${id}.brief.md`), "utf8");
+    expect(brief).toContain(
+      "The project's notes file has a problem. Tell the user before drafting:",
+    );
+    expect(brief).toContain('"cook" is not a part of the flow');
+  });
+
   test("brief for a subdir lists the project's checks and verifiers from its top", () => {
     const repo = localRepo();
     const id = localTicket(repo, "Fix the list");
