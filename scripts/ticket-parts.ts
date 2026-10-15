@@ -39,9 +39,10 @@
 // criteria, decisions and technical notes; each criterion or decision long enough to be more
 // than one idea (the limits are below); when more than five criteria are counted, a note
 // saying so and what to do instead; and, when the agents' part has no ### Existing capabilities
-// section, a note to write it and run ticket-capabilities. A ticket from before that section
-// stays ready, so it is a note and never a finding. The last criterion is not counted when it asks for a fixture
-// run; the counts note still counts every criterion.
+// section, a note to write it and run ticket-capabilities; and, when a check has no "Kept by:"
+// clause naming what runs it from now on, one note listing those checks. A ticket from before
+// either stays ready, so each is a note and never a finding. The last criterion is not counted
+// when it asks for a fixture run; the counts note still counts every criterion.
 //
 // The ticket reads one file and contacts nothing.
 //
@@ -204,6 +205,7 @@ const TAG_RE = /\(((?:[CD][0-9]+)(?:[ \t]*,[ \t]*[CD][0-9]+)*)\)/gu;
 const TAG_ONE_RE = /\(((?:[CD][0-9]+)(?:[ \t]*,[ \t]*[CD][0-9]+)*)\)/u;
 const BULLET_RE = /^[-*][ \t]+/u;
 const CHECK_LABEL_RE = /^(?:[-*]|[0-9]+\.)[ \t]+\**C([0-9]+)(?![\p{L}\p{N}])/u;
+const KEPT_BY_RE = /Kept by:/iu;
 
 // The items that start at column 0 with startRe, from line index `from` up to `to`: each runs until
 // the next list marker or heading at column 0.
@@ -325,12 +327,15 @@ export function analyze(text: string, final: boolean): Report | null {
     add(verified.at + 1, "part", '"### Verified at" needs a commit of 7 to 40 hex characters');
 
   // The checks: one for each criterion, labelled C1 to CN, in order.
+  const unkept: number[] = [];
   if (checks && N > 0) {
-    const labels: Array<{ line: number; id: number }> = [];
+    const labels: Array<{ line: number; id: number; at: number }> = [];
+    const starts: number[] = [];
     let k = 0;
     for (let i = checks.at + 1; i < checks.end; i++) {
       if (isFenced(i) || !ANY_MARKER_RE.test(lines[i])) continue;
       k += 1;
+      starts.push(i);
       const m = CHECK_LABEL_RE.exec(lines[i]);
       if (!m) {
         add(
@@ -340,7 +345,12 @@ export function analyze(text: string, final: boolean): Report | null {
         );
         continue;
       }
-      labels.push({ line: i + 1, id: Number(m[1]) });
+      labels.push({ line: i + 1, id: Number(m[1]), at: i });
+    }
+    // A check says what keeps it, in its own words after "Kept by:"; its text runs to the next item.
+    for (const l of labels) {
+      const next = starts.find((s) => s > l.at) ?? checks.end;
+      if (!KEPT_BY_RE.test(lines.slice(l.at, next).join(" "))) unkept.push(l.id);
     }
     const seen = new Map<number, number>();
     let clean = true;
@@ -423,6 +433,11 @@ export function analyze(text: string, final: boolean): Report | null {
   if (!sub(/^existing capabilities$/iu)) {
     notes.push(
       'no "### Existing capabilities" section: write it and run ticket-capabilities before sign-off',
+    );
+  }
+  if (unkept.length > 0) {
+    notes.push(
+      `no "Kept by:" in ${unkept.map((c) => `C${c}`).join(", ")}: name the command or CI job that runs each check from now on, or manual and why`,
     );
   }
   const counted = N - (isFixtureLine(criteria[N - 1]) ? 1 : 0);

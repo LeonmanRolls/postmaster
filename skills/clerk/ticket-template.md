@@ -69,7 +69,9 @@ default
 ### Checks
 
 - **C1** <The check for criterion 1: the command and input, or the steps through the user surface>
-  → <the expected output and exit status>. **At the base:** <what it shows today.>
+  → <the expected output and exit status>. **At the base:** <what it shows today.> **Kept by:** <the
+  command or CI job that runs it from now on; `a new job, <name>, added in this change`; or `manual`
+  and why.>
 
 ### Technical notes
 
@@ -127,7 +129,9 @@ repository, the single line "None: nothing outside the repository is involved.">
   `C2` for the second, in order, one for each. The lanes organise their work and their evidence
   around them, and the lane summary check requires one piece of evidence per criterion. A check
   shows the criterion working the way it will really be used. **At the base** exposes a check that
-  passes before any work is done, or that would also pass for a workaround.
+  passes before any work is done, or that would also pass for a workaround. **Kept by** names what
+  runs the check after the change merges: an existing command or CI job, a new job the change adds,
+  or `manual` with the reason. A check nothing keeps proves the criterion once.
 - **Decisions** are the choices the ticket makes so that the run need not ask. Each is one idea: one
   choice, the reason, and what it beat, a sentence each. The user reviews each one marked
   `(proposed)`, which are the writer's choices. A decision they gave themselves is marked

@@ -585,6 +585,63 @@ describe("the existing capabilities note", () => {
   });
 });
 
+describe("the Kept by note", () => {
+  const C1 = "- **C1** Run it and see one. **At the base:** nothing.";
+  const C2 = "- **C2** Run it and see two. **At the base:** nothing.";
+  const NOTE_BOTH =
+    'no "Kept by:" in C1, C2: name the command or CI job that runs each check from now on, or manual and why';
+  const kept = (line: string, by: string): string => `${line} **Kept by:** ${by}`;
+
+  test("checks with no clause are listed in one note, and the ticket still fits", () => {
+    const out = cli(FIT);
+    expect(out.code).toBe(0);
+    expect(out.findings).toEqual([]);
+    expect(out.notes).toContain(NOTE_BOTH);
+  });
+
+  test("a clause on every check removes the note", () => {
+    const both = edit(
+      edit(FIT, C1, kept(C1, "the e2e job")),
+      C2,
+      kept(C2, "manual, a one-off migration"),
+    );
+    const out = cli(both);
+    expect(out.code).toBe(0);
+    expect(out.notes.some((n) => n.startsWith('no "Kept by:"'))).toBe(false);
+  });
+
+  test("only the checks without a clause are named", () => {
+    const one = edit(FIT, C1, kept(C1, "the unit test job"));
+    expect(cli(one).notes).toContain(
+      'no "Kept by:" in C2: name the command or CI job that runs each check from now on, or manual and why',
+    );
+  });
+
+  test("the clause may sit on a continuation line of its check", () => {
+    const wrapped = edit(
+      FIT,
+      C1,
+      `${C1}\n  **Kept by:** a new job, consent-e2e, added in this change`,
+    );
+    const out = cli(edit(wrapped, C2, kept(C2, "the unit test job")));
+    expect(out.notes.some((n) => n.startsWith('no "Kept by:"'))).toBe(false);
+  });
+
+  test("a clause on one check does not count for the next", () => {
+    const next = edit(FIT, C1, kept(C1, "the e2e job"));
+    expect(cli(next).notes.filter((n) => n.startsWith('no "Kept by:"'))).toHaveLength(1);
+  });
+
+  test("the label is read in any case", () => {
+    const lower = edit(
+      edit(FIT, C1, `${C1} kept by: the e2e job`),
+      C2,
+      `${C2} KEPT BY: the e2e job`,
+    );
+    expect(cli(lower).notes.some((n) => n.startsWith('no "Kept by:"'))).toBe(false);
+  });
+});
+
 describe("the notes", () => {
   const words = (n: number): string => Array(n).fill("word").join(" ");
 

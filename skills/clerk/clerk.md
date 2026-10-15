@@ -90,9 +90,12 @@ shapes, say so to the user in plain words and propose the bounded form.
 Verify every premise in the notes at the stated base, and name that base under **Verified at** in
 the agents' part: each file, function, flag, line range and count exists and says what the notes
 say. Write one check for each criterion in the agents' part, labelled `- **C1**` to `- **CN**` in
-order, run it at the base, and put what it showed after **At the base**. If the base does not have
-the stated behavior, or a check cannot tell the fix from a workaround, change the ticket and tell
-the user what changed and why. The user reviews the plain part once; do not ask them to review the
+order, run it at the base, and put what it showed after **At the base**. Then name what keeps it
+after **Kept by**: the command or CI job that runs the check from now on (read the project's package
+scripts and CI workflows to find it), `a new job, <name>, added in this change` where nothing runs
+it, or `manual` with the reason. A check nothing keeps proves the criterion once. If the base does
+not have the stated behavior, or a check cannot tell the fix from a workaround, change the ticket
+and tell the user what changed and why. The user reviews the plain part once; do not ask them to review the
 code details separately.
 
 Where a criterion drives a surface that has a verifier, write its check through that verifier:
