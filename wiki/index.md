@@ -126,6 +126,10 @@ Why the design is shaped as it is.
   documentation and the installed version, and the library's own way is an alternative in every decision that adds
   custom code. A decision taken on reasoning after one run that built a second consent mechanism beside the one its
   SDK already had; no standing rests on a record yet.
+- [A project's notes are copied into the part of the flow each is for](concepts/project-notes.md): **claimed**.
+  One plain-language file per project, routed by the postmaster to the clerk, the waybill, the lane that writes
+  the code and the review lenses, with the project's written rules and the wikis it names, so that no lane
+  has to find them. A decision taken on reasoning after one run; no standing rests on a record yet.
 - [Tickets and acceptance criteria that a run can finish](concepts/ticket-and-criteria-design.md):
   **claimed**. The template's four shapes that cannot be finished restate an old idea, the verifiable
   requirement, and each bounded form has older names and some support. The reading asks for the

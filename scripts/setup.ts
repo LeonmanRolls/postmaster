@@ -421,6 +421,10 @@ limits.reviewer.memory_max? (default)         reviewer memory cap override
 limits.reviewer.tasks_max? (default)          reviewer process cap override`
         : ""
     }
+sources?                   (none)             knowledge sources (wikis, standards), names comma separated; then per source:
+source.<name>.path                            the folder on this machine
+source.<name>.about?       (none)             what is in it
+source.<name>.applies_to?  (none)             path patterns of the repos it is proposed for, comma separated
 tracker                    github             github, plane, local or other
 confine                    off                lane confinement, on or off (see run probe-confine)
 plane.url                  https://api.plane.so   plane only
@@ -1040,6 +1044,46 @@ let TRACKER_EXTRA = "";
 if (PWS) TRACKER_EXTRA = `url = "${PURL}"\nworkspace = "${PWS}"\nenv_file = "${PENV}"`;
 if (OTHER) TRACKER_EXTRA = `name = "${OTHER}"`;
 
+// Knowledge sources: wikis, knowledge bases and standards pages the person keeps on this machine.
+// Each is registered once by name; a project's notes name it as source:<name>/<path>, so the notes
+// carry no machine path.
+console.log("");
+console.log("== Knowledge sources: wikis and standards the flow may draw on. ==");
+const SOURCES = ask(
+  PROJECT !== ""
+    ? "Source names to set, comma separated (blank for none)"
+    : "Knowledge source names, comma separated (blank for none)",
+  "",
+  "sources?",
+  opts,
+);
+let SOURCE_BLOCKS = "";
+for (const name of SOURCES.split(",")
+  .map((x) => x.trim())
+  .filter((x) => x !== "")) {
+  if (!/^[A-Za-z0-9._-]+$/u.test(name)) {
+    die(`setup: a source name is letters, digits, dot, underscore or dash: '${name}'`, 1);
+  }
+  const path = ask(`  ${name}: the folder on this machine`, "", `source.${name}.path`, opts);
+  if (path === "") die(`setup: source '${name}' needs a folder: answer source.${name}.path`, 1);
+  const about = ask(
+    `  ${name}: what is in it (blank to say nothing)`,
+    "",
+    `source.${name}.about?`,
+    opts,
+  );
+  const applies = ask(
+    `  ${name}: path patterns of the repos it is proposed for, comma separated (blank for none)`,
+    "",
+    `source.${name}.applies_to?`,
+    opts,
+  );
+  let block = `[sources.${name}]\npath = ${JSON.stringify(path)}`;
+  if (about !== "") block += `\nabout = ${JSON.stringify(about)}`;
+  if (applies !== "") block += `\napplies_to = ${tomlList(applies)}`;
+  SOURCE_BLOCKS += `\n${block}\n`;
+}
+
 if (PROJECT !== "") {
   const IGNORE_RAW = ask(
     "Have git ignore the project's settings (yes/no)",
@@ -1107,6 +1151,7 @@ if (PROJECT !== "") {
   if (CPM !== "") shipParts.push(`checkpoint_mode = "${CPM}"`);
   if (GIVEN.has("review_link")) shipParts.push(`review_link = "${RL}"`);
   if (shipParts.length > 0) sections.push(`[ship]\n${shipParts.join("\n")}\n`);
+  if (SOURCE_BLOCKS !== "") sections.push(`${SOURCE_BLOCKS.trim()}\n`);
 
   if (sections.length === 0) {
     if (IGNORE === "yes" && existsSync(PROJECT_SETTINGS)) {
@@ -1367,7 +1412,7 @@ ${STORIES !== "" ? `stories = "${STORIES}"\n` : ""}
 merge_authority = "${MA}"
 checkpoint_mode = "${CPM}"
 review_link = "${RL}"
-`;
+${SOURCE_BLOCKS}`;
 
 if (DRY === 1) {
   console.log(OUT.replace(/\n+$/u, ""));

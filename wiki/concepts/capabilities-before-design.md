@@ -62,7 +62,10 @@ a line in each decision's `Instead of`. `scripts/run ticket-capabilities` checks
 form, and `scripts/run ticket-parts` prints a note, never a finding, when a ticket lacks it, so a
 ticket written before the section stays ready.
 
-Not changed, and open: a design lens among the review turnpikes, and the coachman's use of
-"do-not-reopen" on architecture. Both sit in the coachman contract, so each needs a fixture run
-that scores clean. Related: [a ticket's shape](ticket-shape.md),
-[the turnpikes](turnpikes.md).
+The review loop gains a design lens, opt-in through a project's default turnpikes, that applies a
+ladder to the change: a library's setting, then a function the repository already has, then a thin
+wrapper, then new code. Its finding names a mechanism and never an identifier, and a swap for a
+library's setting goes to the user for a ruling. Only a detail is marked do-not-reopen in a hand-off,
+never an architecture. Both sit in the coachman contract, so each needs a fixture run that scores
+clean. Related: [a ticket's shape](ticket-shape.md), [the turnpikes](turnpikes.md),
+[a project's notes](project-notes.md).

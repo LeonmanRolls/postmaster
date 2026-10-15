@@ -8,6 +8,14 @@ updated: 2026-10-15
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
 
+## [2026-10-15] ingest | a project's notes are routed and copied into the flow
+
+At the user's request, after a run's reviewers never opened the wiki that held the stricter form of the rules a
+review bot then enforced. Wrote [the page](concepts/project-notes.md) at standing `claimed`, with no record behind
+it, and added `scripts/run project-notes`, the knowledge-sources step of setup, a gate on written rules, style batches,
+grading by the criterion a finding breaks, a design lens, a drift review after a clean merge, and a takeover that names
+its agent. No standing changed.
+
 ## [2026-10-15] ingest | capabilities are checked before a ticket picks a design
 
 At the user's request, after a run built a consent mechanism beside the one its analytics SDK already offered and a

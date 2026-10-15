@@ -176,3 +176,15 @@ the ship card counts them, and aftercare sorts them; `skills/postmaster/postmast
 sort to the user after the merge. `scripts/run style-findings` lists a run's style findings,
 shows what the gate runs and checks the sort, and `scripts/run log-action` refuses a `finding`
 line that does not open with its class, `gating` or `style`.
+
+## A rule that gates is fixed in the loop (`unverified`)
+
+A style finding that cites a written rule whose label gates, with no comment at the line saying why, is
+a gating finding and is fixed in round 1; every other style finding stays in the Style residue. The
+style lens reads a project's rules in batches, each lane answering every rule in its batches with a
+finding or a line saying the rule is clean, because one reader holding fifty rules over fifty files
+missed some. A defect that makes an acceptance criterion or a stated guarantee false is P2 at least,
+whatever the channel it harms through, because a lane's P2 was once lowered to P3 on the ground that
+only one channel carried the data, and from round 2 only P1 and P2 are fixed. After a merge that took
+in commits, an independent lane reads what main changed against the lines the branch added, since a
+clean merge can leave a style class unrendered or a helper's meaning changed.

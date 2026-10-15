@@ -160,3 +160,11 @@ checkpoint_mode = "autonomous"
 # Optional. A template for the review link the ship card carries, with {path} replaced by the
 # absolute path of the synthesis worktree. Leave empty to ship the path alone.
 review_link = ""
+
+# Knowledge sources: wikis, knowledge bases and standards pages kept on this machine, registered once by
+# name. A project's .postmaster/notes.md names one as source:<name>/<path>, so the notes carry no machine
+# path; applies_to says which repos it is proposed for. scripts/run setup asks for them.
+# [sources.company-wiki]
+# path = "~/Code/company/wiki"
+# about = "Coding standards, review specs and domain knowledge"
+# applies_to = ["~/Code/company/*"]
