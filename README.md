@@ -66,7 +66,7 @@ Every action is logged as it happens, and every run can be traced from ticket to
 
 ## Getting started
 
-Clone this repo, open your agent in it, and say hi. Any first message starts the flow, and `AGENTS.md` tells the agent what to do, so there is no command to learn. The first question is which project to work on: postmaster itself or another. Setup then asks one question at a time (which agents fill which role, where tickets live, who gives the merge word), and the postmaster starts.
+Clone this repo, open your agent in it, and say hi. Any first message starts the flow, and `AGENTS.md` tells the agent what to do, so there is no command to learn. There are two ways to start: say hi in a session in the postmaster project, or run the postmaster command in a session already in the project you want to work on. Either way the first question is which project to work on: postmaster itself or another. Setup then asks one question at a time (which agents fill which role, where tickets live, who gives the merge word), and the postmaster starts. The first start in a new folder may ask whether to trust it.
 
 The rest is in short pages:
 
