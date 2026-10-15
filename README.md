@@ -1,5 +1,7 @@
 # postmaster
 
+> TL;DR: clone the repo, open your agent in it (Claude is recommended), and say hi.
+
 Inspired by Anthropic's [AI-native SDLC playbook](https://claude.com/resources/articles/the-ai-native-sdlc-playbook) and pstack's verification skills, [create-verification-skill](https://github.com/cursor/plugins/blob/23e4138daa01c42d4969f7a5465f82704e64f798/pstack/skills/create-verification-skill/SKILL.md) and [maintain-verification-skill](https://github.com/cursor/plugins/blob/23e4138daa01c42d4969f7a5465f82704e64f798/pstack/skills/maintain-verification-skill/SKILL.md).
 
 Postmaster takes a ticket and brings back a reviewed, verified change, with the evidence that it works. Most of its effort goes into two places: deciding exactly what to build before any code is written, and proving that it works once the code is there. Writing the code is the smallest slice.
