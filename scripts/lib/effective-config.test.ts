@@ -793,6 +793,20 @@ describe("Review round 2 regressions", () => {
     expect(runCli(["project-settings", "effective", repo], env).code).toBe(0);
   }, 60000);
 
+  test("a sources table is accepted, and a source with no path is refused", () => {
+    const { repo, config } = scratch();
+    const env = envFor(config);
+    writeSettings(
+      repo,
+      '[sources.acme-wiki]\npath = "~/Code/acme/wiki"\nabout = "standards"\napplies_to = ["~/Code/acme/*"]\n',
+    );
+    expect(runCli(["project-settings", "effective", repo], env).code).toBe(0);
+    writeSettings(repo, '[sources.acme-wiki]\nabout = "standards"\n');
+    const bad = runCli(["project-settings", "effective", repo], env);
+    expect(bad.code).toBe(1);
+    expect(bad.err).toContain("sources.acme-wiki.path must be a folder on this machine");
+  }, 60000);
+
   test("effective reads a piped machine config from stdin", () => {
     const { repo } = scratch();
     writeSettings(repo, '[lanes.luna]\nmodel = "gpt-other"\n');

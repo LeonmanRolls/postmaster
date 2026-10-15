@@ -34,6 +34,7 @@ import { basename, dirname, join, relative } from "node:path";
 import { parseTomlText } from "./data.ts";
 import { scriptsDir } from "./paths.ts";
 import { mkstempSync, run } from "./proc.ts";
+import { readSources } from "./sources.ts";
 import {
   BOUND_L,
   BOUND_R,
@@ -563,6 +564,7 @@ export const GLOBAL_KEYS = new Set([
   "review",
   "planning",
   "ship",
+  "sources",
 ]);
 
 const CONFIG_TABLE_KEYS = new Set([
@@ -574,6 +576,7 @@ const CONFIG_TABLE_KEYS = new Set([
   "review",
   "planning",
   "ship",
+  "sources",
 ]);
 
 export const validateCommon = (data: Rec, label: string, local: boolean): Rec => {
@@ -687,6 +690,10 @@ export const validateCommon = (data: Rec, label: string, local: boolean): Rec =>
     if (Object.hasOwn(data, "projects_roots")) {
       const roots = data.projects_roots;
       if (!Array.isArray(roots)) fail(`${label}.projects_roots must be a list of roots`);
+    }
+    if (Object.hasOwn(data, "sources")) {
+      const read = readSources(data.sources, expandUser);
+      if (read.problems.length > 0) fail(`${label}.${read.problems[0]}`);
     }
     if (Object.hasOwn(data, "confine")) {
       if (data.confine !== "on" && data.confine !== "off")
