@@ -24,6 +24,10 @@
 //     [--folder <dir>] [--correct]
 //   run verifier upkeep-prompt <repo> [--headless] [--folder <dir>] [--correct]
 //   run verifier upkeep-report <repo> --run <dispatch> --report <file> [--folder <dir>]
+//   run verifier record <repo> <dispatch>
+//   run verifier arm <worktree> <dispatch>
+//   run verifier changes <worktree> <dispatch> [--freeze]
+//   run verifier keep <repo> --run <dispatch> --at <commit>
 //
 //   surface    one or more of cli, web, library, backend, cli-examples,
 //              browser-suite, web-journey, library-tests, each a kind or
@@ -97,6 +101,36 @@
 //   upkeep-report  read a finished UPKEEP.md, refuse it unless it drives every
 //              feature page, and print the same stale, unchecked and summary lines
 //              upkeep prints, logged as printed; a corrected claim counts as held
+//   record     copy the repo's .postmaster/verifier/ into the run's record as
+//              verifier-at-dispatch/, the folder as the run was dispatched on.
+//              Prints recorded .postmaster/verifier (<n> files), no local
+//              verifiers when the repo holds none, or already recorded; left
+//              alone on a second call. The postmaster runs this at dispatch (#478)
+//   arm        place the run's recorded copy at .postmaster/verifier/ in the
+//              worktree, and ignore that directory in the repository's common
+//              exclude, so the copy reads inside the worktree and git shows
+//              nothing. Prints armed <top>: <n> files in <dir>, or no verifiers
+//              recorded when the record holds none, the exclude still added.
+//              The coachman arms every workhorse copy and the synthesis
+//              worktree (#478)
+//   changes    compare the worktree's copy with the record's copy and print the
+//              run's verifier changes as the ## Verifier changes card section:
+//              each changed page with its diff, each added and removed file.
+//              Prints verifiers unchanged on one line when nothing differs.
+//              With --freeze also snapshot the worktree's copy as
+//              verifier-final/, the copy keep reads once the worktree is gone.
+//              The coachman freezes at the ship card and pastes the section (#478)
+//   keep       keep the run's frozen changes in the project's folder: save the
+//              folder as it was as verifier-before-keep/, then merge each file
+//              the run changed, added or removed three ways against the
+//              project's file, and confirm each changed or added verifier at
+//              the merge commit in the index. Prints kept .postmaster/verifier
+//              with one added:/changed:/removed: line per applied file and one
+//              confirmed <seg> at <sha> per touched verifier, or nothing to
+//              keep when the run changed nothing. A change that clashes with
+//              one kept since the run started stays as the project has it and
+//              prints as not kept: <file> (<reason>). The postmaster runs this
+//              after the landing, before the stale query (#478)
 //   --handover the session's HANDOVER.md, with one ## Verifier: section per verifier
 //              carrying a Folder: line and a Proof: line (the proof file's absolute
 //              path alone, or none with the reason). Proven means the file exists
@@ -105,7 +139,8 @@
 //              unchecked claim, a Corrected: line on each claim a correcting pass
 //              mended, and the unasked questions where the pass ran headless
 //   --folder   the verifiers' folder, relative to the repo top (default verify-<slug>;
-//              the pass takes every shape the repo holds: verify-<slug>/, verifier/, or both)
+//              the pass takes every shape the repo holds: verify-<slug>/, verifier/,
+//              .postmaster/verifier/, or all of them)
 //   --landing  local or pull-request (default pull-request with an origin remote)
 //   --timeout  seconds to wait for the session (make, upkeep), or to run the project's
 //              checks for (check, land); past it the branch lands nothing and the
@@ -114,14 +149,19 @@
 //              land need a whole number of seconds past zero
 //   --word      the user gave the merge word for this landing, so a local landing
 //              merges without consulting merge authority (setup's launch-card yes)
-//   --at       the commit stale compares each confirmation against (default HEAD)
+//   --at       the commit stale compares each confirmation against (default HEAD),
+//              or the merge commit keep confirms each changed verifier at
+//   --freeze   changes also snapshots the worktree's copy as verifier-final/
+//   --run      the run's dispatch directory (make, check, land, upkeep, keep)
 //
 //   --repository  make commits the verifiers on a branch for check and land, as
 //           before; without it they are kept under .postmaster/verifier/ instead
-//   exit 0  prompt, list or stale printed; make: HANDOVER.md validated, the interactive session
-//           left open in its tab, the headless one ended with no wall;
+//   exit 0  prompt, list, stale, record, arm or changes printed; make: HANDOVER.md
+//           validated, the interactive session left open in its tab, the headless
+//           one ended with no wall;
 //           check: the branch lands; land: merged, or the pull request waits for the word;
-//           upkeep, upkeep-report: every claim holds or is corrected
+//           upkeep, upkeep-report: every claim holds or is corrected;
+//           keep: every change applied, or nothing to keep
 //   exit 1  make failed: the launch would not start, the session was still running at the
 //           limit, both roles walled, the handover, commit, verifier, upkeep line or
 //           index entry is missing, a verifier was made for an unlisted surface,
@@ -132,21 +172,27 @@
 //           upkeep, upkeep-report: a claim is left uncorrected or unchecked, the report
 //           is missing or malformed, or the pass failed as make fails;
 //           upkeep --correct: as above, or the branch reaches past the folders,
-//           or a verifier is left unconfirmed
+//           or a verifier is left unconfirmed;
+//           keep: a change clashes with one kept since the run started, the run
+//           never froze its copy, or the keep was not logged
 //   exit 2  usage: an unknown command or surface, a missing argument, a bad flag or
 //           timeout, a path that is not a git repository or not its top, a repo holding
-//           no commit or no verifiers, no run at the dispatch, or a branch that is not
-//           a verifier branch
+//           no commit or no verifiers, no run at the dispatch, an unknown --at
+//           commit, or a branch that is not a verifier branch
 import { createHash } from "node:crypto";
 import {
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
+  renameSync,
   rmSync,
+  rmdirSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -157,7 +203,7 @@ import { endingWallMessage, isWallMessage } from "./launch.ts";
 import { ensureIgnore, isSymlink } from "./lib/effective-config.ts";
 import { beside, scriptsDir } from "./lib/paths.ts";
 import { run, type RunResult } from "./lib/proc.ts";
-import { RESULT_RE } from "./verify.ts";
+import { ensureCommonExclude, RESULT_RE } from "./verify.ts";
 
 const USAGE = `usage: run verifier prompt <repo> <surface>... [--headless]
        run verifier list <repo>
@@ -171,6 +217,10 @@ const USAGE = `usage: run verifier prompt <repo> <surface>... [--headless]
          [--folder <dir>] [--correct]
        run verifier upkeep-prompt <repo> [--headless] [--folder <dir>] [--correct]
        run verifier upkeep-report <repo> --run <dispatch> --report <file> [--folder <dir>]
+       run verifier record <repo> <dispatch>
+       run verifier arm <worktree> <dispatch>
+       run verifier changes <worktree> <dispatch> [--freeze]
+       run verifier keep <repo> --run <dispatch> --at <commit>
 
        each surface is a kind or kind:name: cli, web, library, backend, cli-examples,
        browser-suite, web-journey or library-tests; backend takes a name, as backend:api;
@@ -185,6 +235,14 @@ const DEFAULT_TIMEOUT = 3600;
 
 /** The local verifiers' root inside a project: every local verifier lives under it. */
 export const LOCAL_VERIFIER_ROOT = ".postmaster/verifier";
+
+/** The local shared index, beside the local verifiers' folders. */
+export const LOCAL_VERIFIER_INDEX = `${LOCAL_VERIFIER_ROOT}/README.md`;
+
+/** A folder under the local verifiers' root, read from disk rather than git. */
+export function isLocalFolder(folder: string): boolean {
+  return folder === LOCAL_VERIFIER_ROOT || folder.startsWith(`${LOCAL_VERIFIER_ROOT}/`);
+}
 
 export const SURFACES = ["cli", "web", "library", "backend"] as const;
 export type Surface = (typeof SURFACES)[number];
@@ -414,6 +472,34 @@ export interface ParsedUpkeepReport {
   folder: string | null;
 }
 
+export interface ParsedRecord {
+  cmd: "record";
+  repo: string;
+  dispatch: string;
+}
+
+export interface ParsedArm {
+  cmd: "arm";
+  wt: string;
+  dispatch: string;
+}
+
+export interface ParsedChanges {
+  cmd: "changes";
+  wt: string;
+  dispatch: string;
+  /** Set only with --freeze: snapshot the worktree's copy as verifier-final/. */
+  freeze?: boolean;
+}
+
+export interface ParsedKeep {
+  cmd: "keep";
+  repo: string;
+  dispatch: string;
+  /** The merge commit to confirm each changed verifier at. */
+  at: string;
+}
+
 export type Parsed =
   | {
       ok: true;
@@ -426,7 +512,11 @@ export type Parsed =
         | ParsedLand
         | ParsedUpkeep
         | ParsedUpkeepPrompt
-        | ParsedUpkeepReport;
+        | ParsedUpkeepReport
+        | ParsedRecord
+        | ParsedArm
+        | ParsedChanges
+        | ParsedKeep;
     }
   | { ok: false; error: string };
 
@@ -518,7 +608,11 @@ export function parseArgs(argv: string[]): Parsed {
     cmd !== "land" &&
     cmd !== "upkeep" &&
     cmd !== "upkeep-prompt" &&
-    cmd !== "upkeep-report"
+    cmd !== "upkeep-report" &&
+    cmd !== "record" &&
+    cmd !== "arm" &&
+    cmd !== "changes" &&
+    cmd !== "keep"
   ) {
     return { ok: false, error: `unknown command: ${cmd}` };
   }
@@ -545,6 +639,59 @@ export function parseArgs(argv: string[]): Parsed {
       }
     }
     return { ok: true, req: { cmd, repo, at } };
+  }
+  if (cmd === "record") {
+    const dispatch = argv[2];
+    if (repo === undefined || dispatch === undefined || argv.length !== 3) {
+      return { ok: false, error: "record takes a repo and a dispatch" };
+    }
+    return { ok: true, req: { cmd, repo, dispatch } };
+  }
+  if (cmd === "arm") {
+    const dispatch = argv[2];
+    if (repo === undefined || dispatch === undefined || argv.length !== 3) {
+      return { ok: false, error: "arm takes a worktree and a dispatch" };
+    }
+    return { ok: true, req: { cmd, wt: repo, dispatch } };
+  }
+  if (cmd === "changes") {
+    const dispatch = argv[2];
+    if (repo === undefined || dispatch === undefined) {
+      return { ok: false, error: "changes takes a worktree and a dispatch" };
+    }
+    const rest = argv.slice(3);
+    if (rest.length > 1) return { ok: false, error: "changes takes a worktree and a dispatch" };
+    if (rest.length === 1 && rest[0] !== "--freeze") {
+      return { ok: false, error: `unknown flag for changes: ${rest[0]}` };
+    }
+    const req: ParsedChanges = { cmd, wt: repo, dispatch };
+    if (rest.length === 1) req.freeze = true;
+    return { ok: true, req };
+  }
+  if (cmd === "keep") {
+    if (repo === undefined) return { ok: false, error: "keep takes a repo" };
+    let dispatch: string | null = null;
+    let at: string | null = null;
+    const rest = argv.slice(2);
+    for (let j = 0; j < rest.length; j++) {
+      const flag = rest[j] as string;
+      if (flag === "--run") {
+        const value = rest[j + 1];
+        if (value === undefined) return { ok: false, error: "keep needs --run <dispatch>" };
+        dispatch = value;
+        j++;
+      } else if (flag === "--at") {
+        const value = rest[j + 1];
+        if (value === undefined) return { ok: false, error: "keep needs --at <commit>" };
+        at = value;
+        j++;
+      } else {
+        return { ok: false, error: `unknown flag for keep: ${flag}` };
+      }
+    }
+    if (dispatch === null) return { ok: false, error: "keep needs --run <dispatch>" };
+    if (at === null) return { ok: false, error: "keep needs --at <commit>" };
+    return { ok: true, req: { cmd, repo, dispatch, at } };
   }
   if (cmd === "upkeep" || cmd === "upkeep-prompt" || cmd === "upkeep-report") {
     return parseUpkeepArgs(cmd, repo, argv.slice(2));
@@ -1268,14 +1415,24 @@ export function branchHasPath(repo: string, branch: string, path: string): boole
  * revision holds, the single front page first. A repo that holds both
  * shapes gets both: preferring one would silently drop the other's suite.
  * The pass reads the current commit; the report landing reads the compared
- * base, never the branch being judged.
+ * base, never the branch being judged. With includeLocal the local root
+ * joins when it holds a verifier dir on disk; a stray empty dir never
+ * refuses a pass over the repository's own verifiers.
  */
-export function detectFolders(repo: string, explicit: string | null, at = "HEAD"): string[] {
+export function detectFolders(
+  repo: string,
+  explicit: string | null,
+  at = "HEAD",
+  includeLocal = false,
+): string[] {
   if (explicit !== null) return [explicit];
   const folders: string[] = [];
   const single = verifyDirName(repo);
   if (branchHasPath(repo, at, `${single}/README.md`)) folders.push(single);
   if (branchHasPath(repo, at, "verifier/README.md")) folders.push("verifier");
+  if (includeLocal && scopeVdirsLocal(repo, LOCAL_VERIFIER_ROOT).length > 0) {
+    folders.push(LOCAL_VERIFIER_ROOT);
+  }
   return folders;
 }
 
@@ -1297,6 +1454,7 @@ export function isFeaturePage(vdir: string, path: string): boolean {
  * the correcting validation reads the driven one, which no later merge moves.
  */
 export function scopeVdirs(repo: string, folder: string, at = "HEAD"): string[] | null {
+  if (isLocalFolder(folder)) return scopeVdirsLocal(repo, folder);
   // -z: NUL-separated and never quoted, so non-ASCII names list as written;
   // -d lists the immediate subdirs, and a missing folder lists nothing.
   const subs = git(repo, ["ls-tree", "-z", "-d", "--name-only", at, "--", `${folder}/`]);
@@ -1311,13 +1469,60 @@ export function scopeVdirs(repo: string, folder: string, at = "HEAD"): string[] 
   return vdirs;
 }
 
+/**
+ * The folder's verifier dirs on disk: itself when it carries a front page
+ * and a non-empty features/ folder, and each subdir that does. The local
+ * twin of scopeVdirs, under the same rules; local verifiers never reach a
+ * revision, so no revision is read.
+ */
+export function scopeVdirsLocal(root: string, folder: string): string[] {
+  const vdirs: string[] = [];
+  const cands = [folder];
+  for (const name of childNames(join(root, folder))) {
+    if (isDirPath(join(root, folder, name))) cands.push(`${folder}/${name}`);
+  }
+  for (const cand of cands) {
+    if (!isFilePath(join(root, cand, "README.md"))) continue;
+    if (childNames(join(root, cand, "features")).length === 0) continue;
+    vdirs.push(cand);
+  }
+  return vdirs;
+}
+
+/**
+ * A local verifier dir's feature pages on disk, sorted: markdown under its
+ * features/ folder besides its index, nested pages counted, as
+ * committedFeaturePages counts them. Symlinks are skipped, never followed,
+ * as the verifier-tree reader skips them.
+ */
+export function localFeaturePages(root: string, vdir: string): string[] {
+  const pages: string[] = [];
+  const walk = (dir: string, prefix: string): void => {
+    for (const name of childNames(dir)) {
+      if (name === "" || name === "." || name === "..") continue;
+      const full = join(dir, name);
+      if (isSymlink(full)) continue;
+      const rel = `${vdir}/features/${prefix === "" ? name : `${prefix}/${name}`}`;
+      if (isDirPath(full)) {
+        walk(full, prefix === "" ? name : `${prefix}/${name}`);
+      } else if (isFeaturePage(vdir, rel)) {
+        pages.push(rel);
+      }
+    }
+  };
+  walk(join(root, vdir, "features"), "");
+  return pages.sort();
+}
+
 /** The folder's feature pages at the current commit, across its verifier dirs, sorted, or null when unreadable. */
 export function featurePages(repo: string, folder: string): string[] | null {
   const vdirs = scopeVdirs(repo, folder);
   if (vdirs === null) return null;
   const pages: string[] = [];
   for (const vdir of vdirs) {
-    const listed = committedFeaturePages(repo, "HEAD", vdir);
+    const listed = isLocalFolder(vdir)
+      ? localFeaturePages(repo, vdir)
+      : committedFeaturePages(repo, "HEAD", vdir);
     if (listed === null) return null;
     pages.push(...listed);
   }
@@ -2075,12 +2280,16 @@ export function bulletConfirm(text: string, vdir: string): string | null {
 
 /**
  * A verifier dir's index file: the shared index where one covers it, else its
- * own features index. The shared index covers verifier/<kind> dirs only; the
+ * own features index. The shared index covers verifier/<kind> dirs only, and
+ * the local shared index covers .postmaster/verifier/<kind> dirs only; the
  * folder itself keeps its features index like a single verifier.
  */
-export function indexFileFor(vdir: string, shared: boolean): string {
+export function indexFileFor(vdir: string, shared: boolean, localShared = false): string {
   const seg = vdir.split("/");
   if (shared && seg.length === 2 && seg[0] === "verifier") return "verifier/README.md";
+  if (localShared && seg.length === 3 && seg[0] === ".postmaster" && seg[1] === "verifier") {
+    return LOCAL_VERIFIER_INDEX;
+  }
   return `${vdir}/features/README.md`;
 }
 
@@ -2507,6 +2716,48 @@ function readUpkeepCorrectTemplate(): string {
   return readFileSync(join(scriptsDir(import.meta), "verifier-upkeep-correct-prompt.md"), "utf8");
 }
 
+/** The commit rule a pass over repository verifiers reads: byte for byte as before. */
+const REPO_UPKEEP_COMMIT_RULE =
+  "Commit the corrections and the confirmation on this branch, never UPKEEP.md:\n" +
+  "the branch carries what the pass proposes, and the report is read from this\n" +
+  "working copy. The branch must touch nothing outside the verifiers' folders.";
+
+/** The commit rule a pass over local verifiers reads: nothing is committed. */
+const LOCAL_UPKEEP_COMMIT_RULE =
+  "Commit nothing in this working copy: leave the corrections, the confirmation\n" +
+  "and UPKEEP.md uncommitted. The tool keeps the corrected verifiers from here,\n" +
+  "and reads the report from here too.";
+
+/** The commit rule a pass over both reads: the branch carries the repository half. */
+const MIXED_UPKEEP_COMMIT_RULE =
+  "Commit the corrections and the confirmation for the repository verifiers on this\n" +
+  "branch, never UPKEEP.md and never anything under .postmaster/verifier/: the branch\n" +
+  "carries what the pass proposes for them, the tool keeps the local corrections from\n" +
+  "this working copy, and the report is read from here too. The branch must touch\n" +
+  "nothing outside the repository verifiers' folders.";
+
+/** The report rule a pass over repository verifiers reads: byte for byte as before. */
+const REPO_UPKEEP_REPORT_RULE =
+  "Leave UPKEEP.md uncommitted: the report is read from this working copy, and\n" +
+  "only the verifiers' folders land from this pass.";
+
+/** The report rule a pass over local verifiers reads: the tool keeps from here. */
+const LOCAL_UPKEEP_REPORT_RULE =
+  "Leave UPKEEP.md uncommitted: the report is read from this working copy, and\n" +
+  "the tool keeps the corrected verifiers from here.";
+
+/** The report rule a pass over both reads: the branch lands, the tool keeps. */
+const MIXED_UPKEEP_REPORT_RULE =
+  "Leave UPKEEP.md uncommitted: the report is read from this working copy; the\n" +
+  "repository verifiers land from this pass and the tool keeps the local ones from here.";
+
+/** Which verifiers a correcting pass covers: repository, local, or both. */
+export function upkeepCommitVariant(folders: string[]): "repo" | "local" | "mixed" {
+  const local = folders.filter(isLocalFolder).length;
+  if (local === 0) return "repo";
+  return local === folders.length ? "local" : "mixed";
+}
+
 /** The correcting instructions: correct, prove, confirm and commit. */
 function renderUpkeepCorrectPrompt(
   repo: string,
@@ -2516,6 +2767,7 @@ function renderUpkeepCorrectPrompt(
   headless: boolean,
 ): string {
   const modes = modeBlocks(headless, "UPKEEP.md");
+  const variant = upkeepCommitVariant(folders);
   return renderTemplate(readUpkeepCorrectTemplate(), {
     REPO: repo,
     VERIFY_DIR: folders.map((f) => `${f}/`).join(" and "),
@@ -2524,6 +2776,18 @@ function renderUpkeepCorrectPrompt(
     ASK_RULE: modes.askRule,
     SECRETS_RULE: modes.secretsRule,
     UNASKED_RULE: headless ? UPKEEP_HEADLESS_UNASKED : "",
+    COMMIT_RULE:
+      variant === "local"
+        ? LOCAL_UPKEEP_COMMIT_RULE
+        : variant === "mixed"
+          ? MIXED_UPKEEP_COMMIT_RULE
+          : REPO_UPKEEP_COMMIT_RULE,
+    REPORT_RULE:
+      variant === "local"
+        ? LOCAL_UPKEEP_REPORT_RULE
+        : variant === "mixed"
+          ? MIXED_UPKEEP_REPORT_RULE
+          : REPO_UPKEEP_REPORT_RULE,
   });
 }
 
@@ -2532,7 +2796,7 @@ export function upkeepScope(
   repo: string,
   folder: string | null,
 ): { folders: string[]; pages: string[] } {
-  const found = detectFolders(repo, folder);
+  const found = detectFolders(repo, folder, "HEAD", true);
   if (found.length === 0) throw new UsageError(`no verifiers in ${repo}`);
   const pages: string[] = [];
   for (const f of found) {
@@ -2578,12 +2842,18 @@ function runListCmd(req: ParsedList): number {
  * commit, or that names a commit the repo does not hold, counts as marked,
  * since nothing shows it was confirmed.
  */
-function staleDetail(repo: string, vdir: string, shared: boolean, at: string): string | null {
-  const indexFile = indexFileFor(vdir, shared);
+function staleDetail(
+  repo: string,
+  vdir: string,
+  shared: boolean,
+  at: string,
+  localShared = false,
+): string | null {
+  const indexFile = indexFileFor(vdir, shared, localShared);
   const text = readmeText(join(repo, indexFile));
   let scope: string | null = null;
   let sha: string | null = null;
-  if (indexFile === "verifier/README.md") {
+  if (indexFile === "verifier/README.md" || indexFile === LOCAL_VERIFIER_INDEX) {
     const spans = indexBullets(text).filter((span) => spanNamesDir(span, vdir));
     if (spans.length === 0) return "unconfirmed (not in the shared index)";
     if (spans.length > 1) return "unconfirmed (ambiguous shared index entry)";
@@ -2635,14 +2905,10 @@ function runStaleCmd(req: ParsedStale): number {
     at = head.out.trim();
   }
   const shared = isFilePath(join(repo, "verifier", "README.md"));
+  const localShared = isFilePath(join(repo, LOCAL_VERIFIER_INDEX));
   const marks: string[] = [];
   for (const v of listing.verifiers) {
-    // Local verifiers read as confirmed: their staleness is #479's slice, so
-    // this slice says nothing about them, as the listing used to.
-    if (v.folder === LOCAL_VERIFIER_ROOT || v.folder.startsWith(`${LOCAL_VERIFIER_ROOT}/`)) {
-      continue;
-    }
-    const detail = staleDetail(repo, v.folder, shared, at);
+    const detail = staleDetail(repo, v.folder, shared, at, localShared);
     if (detail !== null) marks.push(`stale: ${v.folder}: ${detail}`);
   }
   if (marks.length === 0) {
@@ -3026,17 +3292,225 @@ export function untouchedCorrected(diff: string[], mended: UpkeepClaim[]): Upkee
 /**
  * The worktree paths a `git status --porcelain -z` output names outside the
  * allowed list: every other entry is a change the branch does not carry.
- * Rename entries name both sides; either side outside the list strays.
+ * Rename entries name the new path with its status and the old path as a
+ * bare token after it; the old path reads whole, so a space inside it never
+ * slices it the way the status prefix does. Either side outside the list
+ * strays.
  */
 export function strayUncommitted(out: string, allowed: string[]): string[] {
   const keep = new Set(allowed);
   const strays: string[] = [];
-  for (const part of out.split("\0")) {
+  const parts = out.split("\0");
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
     if (part === "") continue;
-    const path = part.length > 3 && part[2] === " " ? part.slice(3) : part;
-    if (!keep.has(path)) strays.push(path);
+    if (part.length > 3 && part[2] === " ") {
+      const path = part.slice(3);
+      if (!keep.has(path)) strays.push(path);
+      if (part[0] === "R" || part[0] === "C") {
+        const old = parts[i + 1];
+        if (old !== undefined && old !== "") {
+          if (!keep.has(old)) strays.push(old);
+          i++;
+        }
+      }
+    } else if (!keep.has(part)) {
+      strays.push(part);
+    }
   }
   return strays;
+}
+
+/**
+ * The worktree paths a `git status --porcelain -z` output names outside the
+ * local verifiers' folders, besides UPKEEP.md: the local twin of
+ * strayUncommitted, whose exact list fits a branch that commits. Rename
+ * entries name the new path with its status and the old path as a bare
+ * token after it, which reads whole; either side outside the folders
+ * strays.
+ */
+export function strayOutsideLocal(out: string, folders: string[]): string[] {
+  const paths: string[] = [];
+  const parts = out.split("\0");
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (part === "") continue;
+    if (part.length > 3 && part[2] === " ") {
+      const path = part.slice(3);
+      if (path !== "UPKEEP.md") paths.push(path);
+      if (part[0] === "R" || part[0] === "C") {
+        const old = parts[i + 1];
+        if (old !== undefined && old !== "") {
+          if (old !== "UPKEEP.md") paths.push(old);
+          i++;
+        }
+      }
+    } else if (part !== "UPKEEP.md") {
+      paths.push(part);
+    }
+  }
+  return outsideFolders(paths, folders);
+}
+
+/**
+ * Whether the path is the ignore file the tool copied into the working
+ * copy, byte for byte: the copy reads ignored as the project's folder
+ * does, so its presence is the tool's work, not the session's. A session
+ * edit to it reads as a stray like any other change outside the folders.
+ */
+export function toolPlacedIgnore(repo: string, wt: string, path: string): boolean {
+  if (path !== ".postmaster/.gitignore") return false;
+  let want: Buffer;
+  let got: Buffer;
+  try {
+    want = readFileSync(join(repo, ".postmaster", ".gitignore"));
+    got = readFileSync(join(wt, ".postmaster", ".gitignore"));
+  } catch {
+    return false;
+  }
+  return want.equals(got);
+}
+
+/**
+ * The verifier dirs under the local root with at least one driven page, from
+ * the scope's pages against the verifier dirs the cut froze: the disk may
+ * have moved since the scope was read, but the pages the pass drove are
+ * fixed, and the frozen dirs settle what a page string alone cannot, such as
+ * a kind named `features`. The longest match wins, so nested pages settle on
+ * their own dir.
+ */
+export function localDrivenVdirs(pages: string[], vdirs: string[]): string[] {
+  const driven = new Set<string>();
+  for (const page of pages) {
+    if (!isLocalFolder(page)) continue;
+    let best: string | null = null;
+    for (const vdir of vdirs) {
+      if (page !== vdir && !page.startsWith(`${vdir}/`)) continue;
+      if (best === null || vdir.length > best.length) best = vdir;
+    }
+    if (best !== null) driven.add(best);
+  }
+  return [...driven].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+}
+
+/**
+ * The correcting pass's local verifiers: every mended claim's page changed in
+ * the working copy, nothing changed outside the pass's folders besides the
+ * shared index a driven verifier confirms in, no driven verifier's front
+ * page removed, and every verifier the pass drove confirmed there at the
+ * driven commit. The on-disk twin of the branch validation below: the branch
+ * rules, held where the session left its work. The before tree is the cut's,
+ * not the live disk's: the disk may have moved under the pass, and a
+ * concurrent edit is neither the pass's work nor a refusal here — the keep
+ * refuses only true conflicts.
+ */
+function validateCorrectingLocalTree(
+  head: string,
+  wt: string,
+  pages: string[],
+  mended: UpkeepClaim[],
+  local: LocalCut,
+): void {
+  const wtRoot = join(wt, LOCAL_VERIFIER_ROOT);
+  const wtLink = isSymlink(join(wt, ".postmaster"))
+    ? ".postmaster"
+    : isSymlink(wtRoot)
+      ? LOCAL_VERIFIER_ROOT
+      : null;
+  if (wtLink !== null) {
+    throw new RunError(`${join(wt, wtLink)} must not be a symlink`);
+  }
+  const after = readVerifierTree(wtRoot);
+  const bad = sortedRels(after).filter((rel) => (after.get(rel) as TreeValue).kind !== "file");
+  if (bad.length > 0) {
+    throw new RunError(
+      `the pass left ${bad.join(", ")} under ${LOCAL_VERIFIER_ROOT}/: must not hold symlinks or special files`,
+    );
+  }
+  const diff = compareTrees(local.base, after);
+  const touched = new Set(
+    [...diff.added, ...diff.removed, ...diff.changed].map((rel) => `${LOCAL_VERIFIER_ROOT}/${rel}`),
+  );
+  // A scoped pass confirms its driven verifiers where their scheme says,
+  // which may be the shared index outside its folder; anything else outside
+  // the folders is work the pass was not asked for, as on a branch.
+  const driven = localDrivenVdirs(pages, local.vdirs);
+  const localShared = isFilePath(join(wt, LOCAL_VERIFIER_INDEX));
+  const indexAllowed =
+    localShared && driven.some((v) => indexFileFor(v, false, true) === LOCAL_VERIFIER_INDEX);
+  const outside = outsideFolders(
+    [...touched].filter((p) => !(indexAllowed && p === LOCAL_VERIFIER_INDEX)),
+    local.folders,
+  );
+  const reason = outsideReason(outside);
+  if (reason !== null) {
+    throw new RunError(`the pass changed files ${reason} under ${LOCAL_VERIFIER_ROOT}/`);
+  }
+  const untouched = mended.filter((c) => !touched.has(c.page));
+  if (untouched.length > 0) {
+    const first = untouched[0] as UpkeepClaim;
+    throw new RunError(
+      `the working copy leaves ${first.page} unchanged for its corrected claim ${first.name}`,
+    );
+  }
+  for (const vdir of driven) {
+    // A branch leaves a removed verifier dir to the user's review of the
+    // diff; a local keep has no diff, so removing a driven verifier's front
+    // page refuses here instead of silently unlisting it.
+    if (!isFilePath(join(wt, vdir, "README.md"))) {
+      throw new RunError(`the pass removed ${vdir}/README.md for a verifier it drove`);
+    }
+    const indexFile = indexFileFor(vdir, false, localShared);
+    const text = readmeText(join(wt, indexFile));
+    const sha =
+      indexFile === LOCAL_VERIFIER_INDEX ? bulletConfirm(text, vdir) : featuresConfirm(text);
+    if (sha === null) {
+      throw new RunError(
+        `the index for ${vdir} names no confirmed commit (expected Confirmed: ${head} in ${indexFile})`,
+      );
+    }
+    // ASCII: the driven head is a hex sha
+    if (sha !== head.toLowerCase()) {
+      throw new RunError(
+        `the index for ${vdir} records ${sha}, not the driven commit ${head} (in ${indexFile})`,
+      );
+    }
+  }
+}
+
+/**
+ * The correcting pass's deliverables: the branch carries the repository
+ * verifiers' corrections under today's rules, and the working copy carries
+ * the local ones on disk under the same rules.
+ */
+function validateCorrectingBranch(
+  repo: string,
+  head: string,
+  branch: string | null,
+  wt: string,
+  folders: string[],
+  pages: string[],
+  mended: UpkeepClaim[],
+  local: LocalCut | null,
+): void {
+  if (branch !== null) {
+    validateCorrectingRepoBranch(
+      repo,
+      head,
+      branch,
+      folders.filter((f) => !isLocalFolder(f)),
+      mended.filter((c) => !isLocalFolder(c.page)),
+    );
+  }
+  if (local !== null) {
+    validateCorrectingLocalTree(
+      head,
+      wt,
+      pages.filter(isLocalFolder),
+      mended.filter((c) => isLocalFolder(c.page)),
+      local,
+    );
+  }
 }
 
 /**
@@ -3046,7 +3520,7 @@ export function strayUncommitted(out: string, allowed: string[]): string[] {
  * driven commit, with corrections or without. A verifier dir the branch no
  * longer holds is left to the user's review of the diff.
  */
-function validateCorrectingBranch(
+function validateCorrectingRepoBranch(
   repo: string,
   head: string,
   branch: string,
@@ -3111,6 +3585,9 @@ function runUpkeep(req: ParsedUpkeep): number {
   // hold where the project stands, whatever its branches have done since.
   const head = currentHead(repo);
   pruneWorktrees(repo);
+  if (scope.folders.every(isLocalFolder)) {
+    return runLocalUpkeep(req, repo, dispatch, head, scope);
+  }
   const branch = pickUpkeepBranch((name) => branchTaken(repo, name));
   const wt = pickUpkeepWorktree(repo, existsSync);
   const added = git(repo, ["worktree", "add", wt, "-b", branch, head]);
@@ -3120,12 +3597,189 @@ function runUpkeep(req: ParsedUpkeep): number {
   const sessionStarted = { started: false };
   const cutAt = Date.now();
   try {
-    return runUpkeepLaunches(req, repo, dispatch, head, branch, wt, scope, sessionStarted, cutAt);
+    const localFolders = scope.folders.filter(isLocalFolder);
+    const local: LocalCut | null =
+      localFolders.length === 0
+        ? null
+        : {
+            base: copyLocalForPass(repo, wt),
+            folders: localFolders,
+            vdirs: localFolders.flatMap((f) => scopeVdirsLocal(repo, f)),
+          };
+    return runUpkeepLaunches(
+      req,
+      repo,
+      dispatch,
+      head,
+      branch,
+      wt,
+      scope,
+      sessionStarted,
+      cutAt,
+      local,
+    );
   } catch (e) {
     const outcome = failureOutcome(sessionStarted.started, wt, branch);
     const extra = outcome.cleanup ? removeProvisioning(repo, wt, branch) : outcome.suffix;
     if (e instanceof RunError && extra !== "") throw new RunError(`${e.message}${extra}`);
     throw e;
+  }
+}
+
+/**
+ * The local verifiers frozen when the pass was cut: the tree the working
+ * copy was copied from, the scope's local folders, and the verifier dirs
+ * those folders held. Frozen because the disk may move under a minutes-long
+ * pass while the driven scope stays fixed.
+ */
+interface LocalCut {
+  base: VerifierTree;
+  folders: string[];
+  vdirs: string[];
+}
+
+/**
+ * The local verifiers copied into the pass's working copy, so the session
+ * drives them where the prompts point: a fresh worktree at the driven commit
+ * holds no local verifiers of its own. Symlinks and special files refuse,
+ * as the keep's snapshot refuses them, and a symlinked folder on either side
+ * refuses before anything is copied. Returns the frozen tree the validation
+ * and the keep compare against.
+ */
+function copyLocalForPass(repo: string, wt: string): VerifierTree {
+  const link = localDestLink(repo, []);
+  if (link !== null) {
+    throw new RunError(`${join(repo, link)} must not be a symlink`);
+  }
+  const src = join(repo, LOCAL_VERIFIER_ROOT);
+  if (!isDirPath(src)) {
+    throw new RunError(`no local verifiers to drive in ${repo}`);
+  }
+  const tree = readVerifierTree(src);
+  const bad = sortedRels(tree).filter((rel) => (tree.get(rel) as TreeValue).kind !== "file");
+  if (bad.length > 0) {
+    throw new RunError(
+      `cannot drive ${src}: must not hold symlinks or special files: ${bad.join(", ")}`,
+    );
+  }
+  if (isSymlink(join(wt, ".postmaster"))) {
+    throw new RunError(`${join(wt, ".postmaster")} must not be a symlink`);
+  }
+  try {
+    mkdirSync(join(wt, ".postmaster"), { recursive: true });
+    cpSync(src, join(wt, LOCAL_VERIFIER_ROOT), { recursive: true });
+    // The copy reads ignored as the project's folder does, so a session's
+    // `git add -A` stages no local verifier; a tracked ignore file stays as
+    // the driven commit holds it, and a symlink is never copied.
+    const wtIgnore = join(wt, ".postmaster", ".gitignore");
+    const srcIgnore = join(repo, ".postmaster", ".gitignore");
+    if (!existsSync(wtIgnore) && !isSymlink(srcIgnore) && isFilePath(srcIgnore)) {
+      cpSync(srcIgnore, wtIgnore);
+    }
+  } catch (e) {
+    throw new RunError(
+      `the local verifiers could not be copied: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+  return tree;
+}
+
+/**
+ * The local upkeep pass: a detached working copy at the driven commit, since
+ * no branch will carry the corrections, with the local verifiers copied in.
+ * A failure past the cut leaves the copy for diagnosis, with no branch.
+ */
+function runLocalUpkeep(
+  req: ParsedUpkeep,
+  repo: string,
+  dispatch: string,
+  head: string,
+  scope: { folders: string[]; pages: string[] },
+): number {
+  const wt = pickUpkeepWorktree(repo, existsSync);
+  const added = git(repo, ["worktree", "add", "--detach", wt, head]);
+  if (added.code !== 0) {
+    throw new RunError(`the worktree would not cut: ${added.err.trim() || added.out.trim()}`);
+  }
+  const sessionStarted = { started: false };
+  const cutAt = Date.now();
+  try {
+    const base = copyLocalForPass(repo, wt);
+    const folders = scope.folders.filter(isLocalFolder);
+    const local: LocalCut = {
+      base,
+      folders,
+      vdirs: folders.flatMap((f) => scopeVdirsLocal(repo, f)),
+    };
+    return runUpkeepLaunches(
+      req,
+      repo,
+      dispatch,
+      head,
+      null,
+      wt,
+      scope,
+      sessionStarted,
+      cutAt,
+      local,
+    );
+  } catch (e) {
+    const outcome = failureOutcome(sessionStarted.started, wt, null);
+    const extra = outcome.cleanup ? removeProvisioning(repo, wt, null) : outcome.suffix;
+    if (e instanceof RunError && extra !== "") throw new RunError(`${e.message}${extra}`);
+    throw e;
+  }
+}
+
+/**
+ * The local upkeep pass's tag: local- plus the worktree's stem, so
+ * overlapping passes take distinct host handles and log names, and no local
+ * tag ever collides with a branch name a committed pass prints.
+ */
+export function localUpkeepTag(repo: string, wt: string): string {
+  const prefix = `${basename(repo)}-`;
+  const base = basename(wt);
+  const stem = base.startsWith(prefix) ? base.slice(prefix.length) : "upkeep";
+  return `local-${stem}`;
+}
+
+/**
+ * The correcting pass's uncommitted strays: on a branch, nothing besides
+ * UPKEEP.md, as before; where local verifiers are in scope, nothing outside
+ * their folders, since the session leaves the local corrections uncommitted
+ * for the keep.
+ */
+function validateUpkeepStrays(
+  wt: string,
+  branch: string | null,
+  folders: string[],
+  repo: string,
+): void {
+  const localFolders = folders.filter(isLocalFolder);
+  // Untracked files expand one by one where local verifiers are in scope, so
+  // an unignored folder reads by its files rather than refusing whole.
+  const status = git(
+    wt,
+    localFolders.length === 0
+      ? ["status", "--porcelain", "-z"]
+      : ["status", "--porcelain", "-z", "--untracked-files=all"],
+  );
+  if (status.code !== 0) throw new RunError("the pass worktree could not be read");
+  if (localFolders.length === 0 && branch !== null) {
+    const strays = strayUncommitted(status.out, ["UPKEEP.md"]);
+    if (strays.length > 0) {
+      const shown = strays.slice(0, 10).join(", ");
+      const more = strays.length > 10 ? ` and ${strays.length - 10} more` : "";
+      throw new RunError(
+        `the pass leaves uncommitted changes besides UPKEEP.md on ${branch}: ${shown}${more}`,
+      );
+    }
+    return;
+  }
+  const strays = strayOutsideLocal(status.out, localFolders);
+  const reason = outsideReason(strays.filter((p) => !toolPlacedIgnore(repo, wt, p)));
+  if (reason !== null) {
+    throw new RunError(`the pass changed files ${reason}`);
   }
 }
 
@@ -3135,23 +3789,27 @@ function runUpkeepLaunches(
   repo: string,
   dispatch: string,
   head: string,
-  branch: string,
+  branch: string | null,
   wt: string,
   scope: { folders: string[]; pages: string[] },
   sessionStarted: { started: boolean },
   cutAt: number,
+  local: LocalCut | null,
 ): number {
   // Decided by validate on either path, printed after it: the interactive path
   // logs a malformed report as the session's failure before it throws.
   let decided: UpkeepVerdict | null = null;
   let corrected = 0;
+  let keptReport: string | null = null;
   const correcting = req.correct === true;
+  const localOnly = branch === null;
+  const tag = branch ?? localUpkeepTag(repo, wt);
   const render = correcting ? renderUpkeepCorrectPrompt : renderUpkeepPrompt;
   return runSessionLaunches({
     repo,
     dispatch,
     branch,
-    tag: branch,
+    tag,
     wt,
     timeout: req.timeout,
     cutAt,
@@ -3167,22 +3825,32 @@ function runUpkeepLaunches(
       decided = judged.verdict;
       corrected = judged.mended.length;
       if (correcting) {
-        validateCorrectingBranch(repo, head, branch, scope.folders, judged.mended);
-        const status = git(wt, ["status", "--porcelain", "-z"]);
-        if (status.code !== 0) throw new RunError("the pass worktree could not be read");
-        const strays = strayUncommitted(status.out, ["UPKEEP.md"]);
-        if (strays.length > 0) {
-          const shown = strays.slice(0, 10).join(", ");
-          const more = strays.length > 10 ? ` and ${strays.length - 10} more` : "";
-          throw new RunError(
-            `the pass leaves uncommitted changes besides UPKEEP.md on ${branch}: ${shown}${more}`,
-          );
+        validateCorrectingBranch(
+          repo,
+          head,
+          branch,
+          wt,
+          scope.folders,
+          scope.pages,
+          judged.mended,
+          local,
+        );
+        validateUpkeepStrays(wt, branch, scope.folders, repo);
+        if (local !== null && !localOnly) {
+          keepLocalCorrections(repo, dispatch, wt, join(wt, "UPKEEP.md"), local);
         }
+      }
+      if (localOnly) {
+        keptReport = keepLocalUpkeep(repo, dispatch, wt, tag, correcting, local);
       }
     },
     print: ({ final, handle, promptFile }) => {
       const verdict = decided as UpkeepVerdict;
-      const lines = [`branch ${branch}`, `base ${head}`, `worktree ${wt}`];
+      const lines =
+        branch === null ? [`base ${head}`] : [`branch ${branch}`, `base ${head}`, `worktree ${wt}`];
+      if (correcting && (branch === null || local !== null)) {
+        lines.unshift(`kept ${LOCAL_VERIFIER_ROOT}`);
+      }
       if (final === null) {
         lines.push("role coachman", `handle ${handle}`);
       } else {
@@ -3190,10 +3858,11 @@ function runUpkeepLaunches(
       }
       lines.push(`prompt ${promptFile}`);
       if (final !== null) lines.push(`stream ${final.stream}`);
-      lines.push(`report ${join(wt, "UPKEEP.md")}`);
+      lines.push(`report ${branch === null ? (keptReport as string) : join(wt, "UPKEEP.md")}`);
+      const target = branch ?? tag;
       if (!correcting) {
         for (const line of [...lines, ...verdict.lines]) console.log(line);
-        for (const line of verdict.lines) logVerdict(dispatch, branch, "note", line);
+        for (const line of verdict.lines) logVerdict(dispatch, target, "note", line);
         return verdict.stale + verdict.unchecked > 0 ? 1 : 0;
       }
       const tally = `corrections: ${corrected} of ${verdict.stale} stale corrected`;
@@ -3201,11 +3870,182 @@ function runUpkeepLaunches(
       const extra = holds ? [tally, "every claim holds"] : [tally];
       for (const line of [...lines, ...verdict.lines, ...extra]) console.log(line);
       for (const line of [...verdict.lines, ...extra]) {
-        logVerdict(dispatch, branch, "note", line);
+        logVerdict(dispatch, target, "note", line);
       }
       return holds ? 0 : 1;
     },
   });
+}
+
+/** The local upkeep keep's own action line: the folders kept and where the report sits. */
+function logUpkeepKeep(dispatch: string, folders: string[], report: string): void {
+  const r = run(RUN, [
+    "log-action",
+    dispatch,
+    "coachman",
+    "note",
+    LOCAL_VERIFIER_ROOT,
+    `upkeep kept ${folders.join(", ")}; report ${report}`,
+  ]);
+  if (r.code !== 0) throw new RunError(`the keep was not logged: ${r.err.trim() || r.out.trim()}`);
+}
+
+/**
+ * Restore the snapshotted folder over the destination: remove, then copy
+ * back. "" when clean, otherwise the failures to append to the error.
+ */
+function restoreTree(src: string, dest: string): string {
+  try {
+    rmSync(dest, { recursive: true, force: true });
+    cpSync(src, dest, { recursive: true });
+    return "";
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+}
+
+/** One path the keep takes from the pass: a removal, or new bytes to write. */
+type LocalTake =
+  | { rel: string; kind: "take-remove" }
+  | { rel: string; kind: "take-add" | "take-change"; bytes: Buffer };
+
+/**
+ * Keep a correcting pass's local corrections: snapshot the project's folder
+ * as the keep found it, apply the pass's changes onto it — added, changed
+ * and removed files alike — and log the keep. A file the project changed
+ * while the pass ran keeps the project's version where the pass left it
+ * alone, and refuses the keep where the pass changed it too, so a concurrent
+ * edit is never silently reverted. A failure past the snapshot restores it,
+ * so a failed keep leaves the folder as the keep found it.
+ */
+function keepLocalCorrections(
+  repo: string,
+  dispatch: string,
+  wt: string,
+  report: string,
+  local: LocalCut,
+): void {
+  const dest = join(repo, LOCAL_VERIFIER_ROOT);
+  if (!isDirPath(dest)) {
+    throw new RunError(`${LOCAL_VERIFIER_ROOT} is not a directory: ${repo}`);
+  }
+  const link = localDestLink(repo, []);
+  if (link !== null) {
+    throw new RunError(`${join(repo, link)} must not be a symlink`);
+  }
+  const wtRoot = join(wt, LOCAL_VERIFIER_ROOT);
+  if (!isDirPath(wtRoot)) {
+    throw new RunError(`the pass left no ${LOCAL_VERIFIER_ROOT}/ in its working copy`);
+  }
+  const final = readVerifierTree(wtRoot);
+  const current = readVerifierTree(dest);
+  const takes: LocalTake[] = [];
+  const clashes: { rel: string; reason: string }[] = [];
+  const rels = new Set<string>([...local.base.keys(), ...final.keys(), ...current.keys()]);
+  const ordered = [...rels].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  for (const rel of ordered) {
+    const decision = classifyKeepFile(local.base.get(rel), final.get(rel), current.get(rel));
+    if (decision.kind === "untouched") continue;
+    if (decision.kind === "merge") {
+      clashes.push({ rel, reason: "changed on both sides" });
+      continue;
+    }
+    if (decision.kind === "clash") {
+      clashes.push({ rel, reason: decision.reason });
+      continue;
+    }
+    if (decision.kind === "take-remove") {
+      takes.push({ rel, kind: decision.kind });
+      continue;
+    }
+    const f = final.get(rel);
+    if (f === undefined || f.kind !== "file") {
+      clashes.push({ rel, reason: "not a regular file" });
+      continue;
+    }
+    takes.push({ rel, kind: decision.kind, bytes: f.bytes });
+  }
+  // A link the project grew under the pass would carry a write outside it.
+  const live = sortedRels(current).filter((rel) => (current.get(rel) as TreeValue).kind !== "file");
+  for (const take of takes) {
+    if (take.kind === "take-remove") continue;
+    const carrier = live.find((l) => take.rel === l || take.rel.startsWith(`${l}/`));
+    if (carrier !== undefined) {
+      clashes.push({ rel: take.rel, reason: `not a regular file in the project: ${carrier}` });
+    }
+  }
+  if (clashes.length > 0) {
+    const shown = clashes
+      .slice(0, 10)
+      .map((c) => `${c.rel} (${c.reason})`)
+      .join(", ");
+    const more = clashes.length > 10 ? ` and ${clashes.length - 10} more` : "";
+    throw new RunError(
+      `the keep was refused: ${shown}${more} changed while the pass ran; the folder was left alone`,
+    );
+  }
+  const before = join(dispatch, BEFORE_UPKEEP);
+  replaceTree(dest, before);
+  try {
+    const removedRels: string[] = [];
+    for (const take of takes) {
+      const target = join(dest, take.rel);
+      if (take.kind === "take-remove") {
+        rmSync(target, { force: true });
+        removedRels.push(take.rel);
+        continue;
+      }
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, take.bytes);
+    }
+    pruneEmptyDirs(dest, removedRels);
+    logUpkeepKeep(dispatch, local.folders, report);
+  } catch (e) {
+    const problems = restoreTree(before, dest);
+    const cleanup = problems === "" ? "" : `; the restore failed too: ${problems}`;
+    throw new RunError(
+      `the keep was rolled back: ${e instanceof Error ? e.message : String(e)}${cleanup}`,
+    );
+  }
+}
+
+/**
+ * Finish a local-only pass: save UPKEEP.md into the run's logs, keep the
+ * corrections where the pass corrected, and remove the working copy, so the
+ * repository shows nothing new. Returns the saved report's path.
+ */
+function keepLocalUpkeep(
+  repo: string,
+  dispatch: string,
+  wt: string,
+  tag: string,
+  correcting: boolean,
+  local: LocalCut | null,
+): string {
+  const saved = join(dispatch, "logs", `verifier-${tag}-upkeep.md`);
+  try {
+    mkdirSync(join(dispatch, "logs"), { recursive: true });
+    cpSync(join(wt, "UPKEEP.md"), saved);
+  } catch (e) {
+    throw new RunError(
+      `the report could not be saved: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+  if (correcting) {
+    if (local === null) {
+      throw new RunError(`no local verifiers were driven to keep in ${repo}`);
+    }
+    keepLocalCorrections(repo, dispatch, wt, saved, local);
+  }
+  const rm = git(repo, ["worktree", "remove", "--force", wt]);
+  if (rm.code !== 0) {
+    const done = correcting ? "the verifiers were kept" : "the report was saved";
+    throw new RunError(
+      `${done} but the worktree ${wt} could not be removed: ${rm.err.trim() || rm.out.trim() || `exit ${rm.code}`}`,
+    );
+  }
+  pruneWorktrees(repo);
+  return saved;
 }
 
 /** Seconds one send waits for the session's turn, and how many sends before make gives up. */
@@ -4653,6 +5493,655 @@ function runLandCmd(req: ParsedLand): number {
   return outcome.code;
 }
 
+/**
+ * A run's own copies of the local verifiers (#478). At dispatch the postmaster
+ * records the project's folder in the run's record; the coachman arms each
+ * workhorse copy and the synthesis worktree with it, adds to the synthesis
+ * copy whatever a criterion needs, freezes it at the ship card, and the
+ * postmaster keeps the frozen changes after the landing.
+ */
+
+/** The run record's snapshot of the project's folder at dispatch. */
+const AT_DISPATCH = "verifier-at-dispatch";
+/** The run record's snapshot of the synthesis copy at the ship card. */
+const FINAL = "verifier-final";
+/** The run record's snapshot of the project's folder before a keep. */
+const BEFORE_KEEP = "verifier-before-keep";
+/** The run record's snapshot of the project's folder before an upkeep pass keeps. */
+const BEFORE_UPKEEP = "verifier-before-upkeep";
+
+/** One entry of a verifier tree: a file's bytes, or a label for anything else. */
+export type TreeValue = { kind: "file"; bytes: Buffer } | { kind: "other"; label: string };
+
+/** A verifier tree's entries by path relative to its root. */
+export type VerifierTree = Map<string, TreeValue>;
+
+/**
+ * Read a verifier tree into memory. An absent root reads as empty; a root
+ * that is not a directory reads as empty too, and the commands refuse that
+ * separately. Symlinks and special files read as labels, never followed.
+ */
+export function readVerifierTree(root: string): VerifierTree {
+  const out: VerifierTree = new Map();
+  try {
+    if (!statSync(root).isDirectory()) return out;
+  } catch {
+    return out;
+  }
+  const walk = (dir: string, prefix: string): void => {
+    let names: string[];
+    try {
+      names = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const name of names.sort()) {
+      if (name === "" || name === "." || name === "..") continue;
+      const full = join(dir, name);
+      const rel = prefix === "" ? name : `${prefix}/${name}`;
+      let st;
+      try {
+        st = lstatSync(full);
+      } catch {
+        continue;
+      }
+      if (st.isDirectory() && !st.isSymbolicLink()) {
+        walk(full, rel);
+      } else if (st.isFile() && !st.isSymbolicLink()) {
+        try {
+          out.set(rel, { kind: "file", bytes: readFileSync(full) });
+        } catch {
+          // Raced away between the listing and the read; the next read sees it.
+        }
+      } else {
+        let label = "special";
+        if (st.isSymbolicLink()) {
+          try {
+            label = `symlink -> ${readlinkSync(full)}`;
+          } catch {
+            label = "symlink";
+          }
+        }
+        out.set(rel, { kind: "other", label });
+      }
+    }
+  };
+  walk(root, "");
+  return out;
+}
+
+/** Whether two tree entries hold the same thing. */
+function treeValueEquals(a: TreeValue, b: TreeValue): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "file" && b.kind === "file") return a.bytes.equals(b.bytes);
+  if (a.kind === "other" && b.kind === "other") return a.label === b.label;
+  return false;
+}
+
+/** The paths two trees differ on, each sorted. */
+export interface TreeDiff {
+  added: string[];
+  removed: string[];
+  changed: string[];
+}
+
+function sortedRels(tree: VerifierTree): string[] {
+  return [...tree.keys()].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+}
+
+/** Compare two verifier trees: what the second adds, removes and changes. */
+export function compareTrees(base: VerifierTree, next: VerifierTree): TreeDiff {
+  const added: string[] = [];
+  const removed: string[] = [];
+  const changed: string[] = [];
+  for (const rel of sortedRels(base)) {
+    const b = base.get(rel) as TreeValue;
+    const n = next.get(rel);
+    if (n === undefined) removed.push(rel);
+    else if (!treeValueEquals(b, n)) changed.push(rel);
+  }
+  for (const rel of sortedRels(next)) {
+    if (!base.has(rel)) added.push(rel);
+  }
+  return { added, removed, changed };
+}
+
+/** How many regular files a tree holds. */
+function countFiles(tree: VerifierTree): number {
+  let n = 0;
+  for (const v of tree.values()) {
+    if (v.kind === "file") n++;
+  }
+  return n;
+}
+
+/** The verifier segment a tree-relative path belongs to, or null at the root. */
+export function segOfRel(rel: string): string | null {
+  const slash = rel.indexOf("/");
+  return slash === -1 ? null : rel.slice(0, slash);
+}
+
+/**
+ * Replace a tree with a copy of another: copy aside, remove the destination,
+ * rename into place, so a failed copy leaves the destination as it was.
+ * Refuses symlinks and special files: a copied link would read live bytes
+ * instead of the frozen tree, in the record and in every lane's copy.
+ */
+function replaceTree(src: string, dest: string): void {
+  if (isSymlink(src)) {
+    throw new RunError(`cannot copy ${src}: the root must not be a symlink`);
+  }
+  const tree = readVerifierTree(src);
+  const bad = sortedRels(tree).filter((rel) => (tree.get(rel) as TreeValue).kind !== "file");
+  if (bad.length > 0) {
+    throw new RunError(
+      `cannot copy ${src}: must not hold symlinks or special files: ${bad.join(", ")}`,
+    );
+  }
+  const tmp = `${dest}.new-${process.pid}`;
+  rmSync(tmp, { recursive: true, force: true });
+  try {
+    cpSync(src, tmp, { recursive: true });
+  } catch (e) {
+    rmSync(tmp, { recursive: true, force: true });
+    throw new RunError(`cannot copy ${src}: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  rmSync(dest, { recursive: true, force: true });
+  try {
+    renameSync(tmp, dest);
+  } catch (e) {
+    rmSync(tmp, { recursive: true, force: true });
+    throw new RunError(`cannot place ${dest}: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+/** The dispatch holds a run, or the usage error saying it does not. */
+function runDispatch(dispatch: string, given: string): string {
+  const resolved = resolve(dispatch);
+  if (!existsSync(join(resolved, "run.json"))) {
+    throw new UsageError(`no run at the dispatch: ${given}`);
+  }
+  return resolved;
+}
+
+function runRecordCmd(req: ParsedRecord): number {
+  const repo = resolve(req.repo);
+  if (!isRepo(repo)) throw new UsageError(`not a git repository: ${req.repo}`);
+  if (!isRepoTop(repo)) throw new UsageError(`not the top of its repository: ${req.repo}`);
+  const dispatch = runDispatch(req.dispatch, req.dispatch);
+  const dest = join(dispatch, AT_DISPATCH);
+  if (existsSync(dest)) {
+    console.log("already recorded; left alone");
+    return 0;
+  }
+  const src = join(repo, LOCAL_VERIFIER_ROOT);
+  if (!existsSync(src)) {
+    console.log("no local verifiers");
+    return 0;
+  }
+  if (!isDirPath(src)) {
+    throw new UsageError(`${LOCAL_VERIFIER_ROOT} is not a directory: ${req.repo}`);
+  }
+  replaceTree(src, dest);
+  console.log(`recorded ${LOCAL_VERIFIER_ROOT} (${countFiles(readVerifierTree(dest))} files)`);
+  return 0;
+}
+
+function runArmCmd(req: ParsedArm): number {
+  const top = repoTop(resolve(req.wt));
+  if (top === null) throw new UsageError(`not a git worktree: ${req.wt}`);
+  if (git(top, ["rev-parse", "HEAD"]).code !== 0) {
+    throw new UsageError(`${req.wt} holds no commit`);
+  }
+  const dispatch = runDispatch(req.dispatch, req.dispatch);
+  ensureCommonExclude(top, LOCAL_VERIFIER_ROOT);
+  const src = join(dispatch, AT_DISPATCH);
+  const dest = join(top, LOCAL_VERIFIER_ROOT);
+  if (!existsSync(src)) {
+    console.log(`armed ${top}: no verifiers recorded`);
+    return 0;
+  }
+  if (!isDirPath(src)) throw new UsageError(`not a directory: ${src}`);
+  replaceTree(src, dest);
+  console.log(`armed ${top}: ${countFiles(readVerifierTree(dest))} files in ${dest}`);
+  return 0;
+}
+
+/** One changed file with the diff lines the section prints under it. */
+export interface ChangedFile {
+  rel: string;
+  diff: string[];
+}
+
+/**
+ * Render the run's verifier changes as the card's section: each changed page
+ * with its diff, each added and removed file. Empty groups are left out, and
+ * no change at all renders as the one line saying so.
+ */
+export function renderChangesSection(
+  changed: ChangedFile[],
+  added: string[],
+  removed: string[],
+): string {
+  if (changed.length + added.length + removed.length === 0) return "verifiers unchanged";
+  const out = ["## Verifier changes", ""];
+  if (changed.length > 0) {
+    out.push("Changed:", "");
+    for (const c of changed) {
+      out.push(`- ${c.rel}`);
+      out.push("```diff");
+      out.push(...c.diff);
+      out.push("```");
+    }
+    out.push("");
+  }
+  if (added.length > 0) {
+    out.push("Added:", "");
+    for (const rel of added) out.push(`- ${rel}`);
+    out.push("");
+  }
+  if (removed.length > 0) {
+    out.push("Removed:", "");
+    for (const rel of removed) out.push(`- ${rel}`);
+    out.push("");
+  }
+  out.pop();
+  return out.join("\n");
+}
+
+/**
+ * The hunk lines of a unified diff between two files, headers dropped. Binary
+ * files read as the one line saying so.
+ */
+function diffTreeFile(top: string, oldPath: string, newPath: string, rel: string): string[] {
+  const env: Record<string, string | undefined> = {};
+  for (const k of GIT_REDIRECT_ENV) env[k] = undefined;
+  const r = run(
+    "git",
+    [
+      "-C",
+      top,
+      "diff",
+      "--no-index",
+      "--no-color",
+      "--no-ext-diff",
+      "--unified=3",
+      "--",
+      oldPath,
+      newPath,
+    ],
+    { env },
+  );
+  if (r.code !== 0 && r.code !== 1) {
+    throw new RunError(`cannot diff ${rel}: ${r.err.trim() || r.out.trim() || `exit ${r.code}`}`);
+  }
+  const lines = r.out.split("\n");
+  const firstHunk = lines.findIndex((l) => l.startsWith("@@"));
+  if (firstHunk === -1) {
+    if (/Binary files /u.test(r.out)) return ["(binary files differ)"];
+    return [];
+  }
+  // From the first hunk on: the diff --git, index, --- and +++ headers stay
+  // behind, so a removed line starting with dashes cannot read as one.
+  return lines
+    .slice(firstHunk)
+    .filter(
+      (l) =>
+        l.startsWith("@@") ||
+        l.startsWith(" ") ||
+        l.startsWith("+") ||
+        l.startsWith("-") ||
+        l.startsWith("\\"),
+    );
+}
+
+function runChangesCmd(req: ParsedChanges): number {
+  const top = repoTop(resolve(req.wt));
+  if (top === null) throw new UsageError(`not a git worktree: ${req.wt}`);
+  const dispatch = runDispatch(req.dispatch, req.dispatch);
+  const baseRoot = join(dispatch, AT_DISPATCH);
+  const currentRoot = join(top, LOCAL_VERIFIER_ROOT);
+  if (existsSync(baseRoot) && !isDirPath(baseRoot)) {
+    throw new RunError(`not a directory: ${baseRoot}`);
+  }
+  if (existsSync(currentRoot) && !isDirPath(currentRoot)) {
+    throw new RunError(`not a directory: ${currentRoot}`);
+  }
+  if (req.freeze === true) {
+    const final = join(dispatch, FINAL);
+    if (!existsSync(currentRoot)) {
+      if (existsSync(baseRoot)) {
+        throw new RunError(
+          `no copy to freeze at ${currentRoot}: the run recorded verifiers, so re-arm the copy or empty the folder to remove them`,
+        );
+      }
+      rmSync(final, { recursive: true, force: true });
+      console.error("no copy to freeze");
+    } else {
+      replaceTree(currentRoot, final);
+      console.error(`frozen ${final} (${countFiles(readVerifierTree(final))} files)`);
+    }
+  }
+  const base = readVerifierTree(baseRoot);
+  const next = readVerifierTree(currentRoot);
+  const diff = compareTrees(base, next);
+  const changed: ChangedFile[] = diff.changed.map((rel) => {
+    const b = base.get(rel) as TreeValue;
+    const n = next.get(rel) as TreeValue;
+    if (b.kind !== "file" || n.kind !== "file") return { rel, diff: ["(not a regular file)"] };
+    return {
+      rel,
+      diff: diffTreeFile(top, join(baseRoot, rel), join(currentRoot, rel), rel),
+    };
+  });
+  console.log(renderChangesSection(changed, diff.added, diff.removed));
+  return 0;
+}
+
+/** What keep does with one tree-relative path. */
+export type KeepDecision =
+  | { kind: "untouched" }
+  | { kind: "take-add" }
+  | { kind: "take-change" }
+  | { kind: "take-remove" }
+  | { kind: "merge" }
+  | { kind: "clash"; reason: string };
+
+/**
+ * Decide one path from the folder at dispatch, the run's frozen copy and the
+ * project's file: a path the run left alone is untouched whatever the project
+ * did; a path the run changed takes the run's version when the project left
+ * it alone, merges when both changed it, and clashes when the project added
+ * or removed it too. Anything but a regular file on a changed path clashes,
+ * and keep never creates a symlink in the project.
+ */
+export function classifyKeepFile(
+  b: TreeValue | undefined,
+  f: TreeValue | undefined,
+  c: TreeValue | undefined,
+): KeepDecision {
+  const same = (x: TreeValue | undefined, y: TreeValue | undefined): boolean =>
+    x !== undefined && y !== undefined && treeValueEquals(x, y);
+  if (f === undefined && b === undefined) return { kind: "untouched" };
+  if (f === undefined) {
+    if (c === undefined) return { kind: "untouched" };
+    if (same(c, b)) return { kind: "take-remove" };
+    return { kind: "clash", reason: "changed in the project" };
+  }
+  if (b === undefined) {
+    if (c === undefined) {
+      return f.kind === "file"
+        ? { kind: "take-add" }
+        : { kind: "clash", reason: "not a regular file" };
+    }
+    if (same(c, f)) return { kind: "untouched" };
+    return { kind: "clash", reason: "added on both sides" };
+  }
+  if (treeValueEquals(f, b)) return { kind: "untouched" };
+  if (f.kind !== "file" || b.kind !== "file" || (c !== undefined && c.kind !== "file")) {
+    return { kind: "clash", reason: "not a regular file" };
+  }
+  if (c === undefined) return { kind: "clash", reason: "removed in the project" };
+  if (treeValueEquals(c, b)) return { kind: "take-change" };
+  if (treeValueEquals(c, f)) return { kind: "untouched" };
+  return { kind: "merge" };
+}
+
+/**
+ * Merge three file versions with git merge-file: the project's, the one at
+ * dispatch, the run's. Clean merges come back as bytes; anything else is a
+ * clash, binary files included. The merge runs on copies, never on the
+ * project's file.
+ */
+export function mergeFileThreeWay(
+  cur: Buffer,
+  base: Buffer,
+  other: Buffer,
+): { ok: true; merged: Buffer } | { ok: false } {
+  const tmp = mkdtempSync(join(tmpdir(), "verifier-keep-"));
+  try {
+    const curP = join(tmp, "current");
+    const baseP = join(tmp, "base");
+    const otherP = join(tmp, "other");
+    writeFileSync(curP, cur);
+    writeFileSync(baseP, base);
+    writeFileSync(otherP, other);
+    const env: Record<string, string | undefined> = {};
+    for (const k of GIT_REDIRECT_ENV) env[k] = undefined;
+    const r = run(
+      "git",
+      ["merge-file", "-L", "project", "-L", "at dispatch", "-L", "run", curP, baseP, otherP],
+      { env },
+    );
+    if (r.code !== 0) return { ok: false };
+    return { ok: true, merged: readFileSync(curP) };
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Confirm one verifier's index bullet at a commit: the bullet's Confirmed sha
+ * becomes the commit, or the label is added when the bullet names none. Null
+ * when no single bullet names the verifier, or the edit does not read back.
+ */
+export function stampConfirmed(indexText: string, seg: string, sha: string): string | null {
+  const vdir = `${LOCAL_VERIFIER_ROOT}/${seg}`;
+  const lines = indexText.split("\n");
+  const starts: number[] = [];
+  lines.forEach((line, i) => {
+    if (BULLET_START_RE.test(line) && spanNamesDir([line], vdir)) starts.push(i);
+  });
+  if (starts.length !== 1) return null;
+  const start = starts[0] as number;
+  let end = start + 1;
+  while (end < lines.length) {
+    const line = lines[end] as string;
+    if (HEADING_RE.test(line)) break;
+    if (line !== "" && !line.startsWith(" ") && !line.startsWith("\t")) break;
+    end++;
+  }
+  const span = lines.slice(start, end).join("\n");
+  let edited: string;
+  if (CONFIRMED_RE.test(span)) {
+    edited = span.replace(CONFIRMED_RE, (m) => m.replace(/[0-9a-fA-F]{40}/u, sha));
+  } else {
+    edited = `${lines[start] as string}, Confirmed: ${sha}\n${lines.slice(start + 1, end).join("\n")}`;
+  }
+  const next = [...lines.slice(0, start), ...edited.split("\n"), ...lines.slice(end)].join("\n");
+  return bulletConfirm(next, vdir) === sha ? next : null;
+}
+
+/** Remove the directories a keep's removals left empty, deepest first. */
+function pruneEmptyDirs(root: string, rels: string[]): void {
+  const dirs = new Set<string>();
+  for (const rel of rels) {
+    let d = dirname(rel);
+    while (d !== "." && d !== "") {
+      dirs.add(d);
+      d = dirname(d);
+    }
+  }
+  const ordered = [...dirs].sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
+  for (const d of ordered) {
+    try {
+      if (readdirSync(join(root, d)).length === 0) rmdirSync(join(root, d));
+    } catch {
+      // Gone or busy: a leftover empty directory harms nothing.
+    }
+  }
+}
+
+function logRunKeep(dispatch: string, summary: string): void {
+  const r = run(RUN, ["log-action", dispatch, "postmaster", "note", LOCAL_VERIFIER_ROOT, summary]);
+  if (r.code !== 0) throw new RunError(`the keep was not logged: ${r.err.trim() || r.out.trim()}`);
+}
+
+function runKeepCmd(req: ParsedKeep): number {
+  const repo = resolve(req.repo);
+  if (!isRepo(repo)) throw new UsageError(`not a git repository: ${req.repo}`);
+  if (!isRepoTop(repo)) throw new UsageError(`not the top of its repository: ${req.repo}`);
+  const dispatch = runDispatch(req.dispatch, req.dispatch);
+  const resolved = git(repo, ["rev-parse", "--verify", "--quiet", `${req.at}^{commit}`]);
+  if (resolved.code !== 0 || resolved.out.trim() === "") {
+    throw new UsageError(`unknown commit: ${req.at}`);
+  }
+  const merge = resolved.out.trim();
+  const baseRoot = join(dispatch, AT_DISPATCH);
+  const finalRoot = join(dispatch, FINAL);
+  if (existsSync(finalRoot) && !isDirPath(finalRoot)) {
+    throw new RunError(`not a directory: ${finalRoot}`);
+  }
+  if (existsSync(baseRoot) && !isDirPath(baseRoot)) {
+    throw new RunError(`not a directory: ${baseRoot}`);
+  }
+  if (!existsSync(finalRoot)) {
+    if (existsSync(baseRoot)) {
+      throw new RunError(
+        `no frozen copy at ${finalRoot}: the run never froze its verifiers with verifier changes --freeze, so its verifier changes cannot be kept`,
+      );
+    }
+    console.log("nothing to keep");
+    return 0;
+  }
+  const base = readVerifierTree(baseRoot);
+  const final = readVerifierTree(finalRoot);
+  const runDiff = compareTrees(base, final);
+  if (runDiff.added.length + runDiff.removed.length + runDiff.changed.length === 0) {
+    console.log("nothing to keep");
+    return 0;
+  }
+  const dest = join(repo, LOCAL_VERIFIER_ROOT);
+  if (existsSync(dest) && !isDirPath(dest)) {
+    throw new UsageError(`${LOCAL_VERIFIER_ROOT} is not a directory: ${req.repo}`);
+  }
+  ensureIgnore(repo, true);
+  const before = join(dispatch, BEFORE_KEEP);
+  if (existsSync(dest)) {
+    replaceTree(dest, before);
+  } else {
+    rmSync(before, { recursive: true, force: true });
+  }
+  try {
+    return applyKeep(dispatch, dest, before, base, final, merge);
+  } catch (e) {
+    if (e instanceof UsageError || e instanceof RunError) throw e;
+    throw new RunError(
+      `the keep failed partway: ${e instanceof Error ? e.message : String(e)}; the folder as it was is at ${before}`,
+    );
+  }
+}
+
+/** Apply the frozen changes to the project's folder and print what landed. */
+function applyKeep(
+  dispatch: string,
+  dest: string,
+  before: string,
+  base: VerifierTree,
+  final: VerifierTree,
+  merge: string,
+): number {
+  const current = readVerifierTree(dest);
+  const rels = new Set<string>([...base.keys(), ...final.keys(), ...current.keys()]);
+  const ordered = [...rels].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const added: string[] = [];
+  const changed: string[] = [];
+  const removed: string[] = [];
+  const clashes: { rel: string; reason: string }[] = [];
+  const touched = new Set<string>();
+  const removedRels: string[] = [];
+  for (const rel of ordered) {
+    const decision = classifyKeepFile(base.get(rel), final.get(rel), current.get(rel));
+    const target = join(dest, rel);
+    if (decision.kind === "untouched") continue;
+    if (decision.kind === "clash") {
+      clashes.push({ rel, reason: decision.reason });
+      continue;
+    }
+    if (decision.kind === "take-remove") {
+      rmSync(target, { force: true });
+      removed.push(rel);
+      removedRels.push(rel);
+    } else if (decision.kind === "take-add" || decision.kind === "take-change") {
+      const f = final.get(rel) as TreeValue;
+      if (f.kind !== "file") {
+        clashes.push({ rel, reason: "not a regular file" });
+        continue;
+      }
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, f.bytes);
+      (decision.kind === "take-add" ? added : changed).push(rel);
+    } else {
+      const c = current.get(rel) as TreeValue;
+      const b = base.get(rel) as TreeValue;
+      const f = final.get(rel) as TreeValue;
+      if (c.kind !== "file" || b.kind !== "file" || f.kind !== "file") {
+        clashes.push({ rel, reason: "not a regular file" });
+        continue;
+      }
+      const merged = mergeFileThreeWay(c.bytes, b.bytes, f.bytes);
+      if (!merged.ok) {
+        clashes.push({ rel, reason: "changed on both sides" });
+        continue;
+      }
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, merged.merged);
+      changed.push(rel);
+    }
+    const seg = segOfRel(rel);
+    if (seg !== null) touched.add(seg);
+  }
+  pruneEmptyDirs(dest, removedRels);
+  const finalSegs = new Set<string>();
+  for (const rel of final.keys()) {
+    const seg = segOfRel(rel);
+    if (seg !== null) finalSegs.add(seg);
+  }
+  const confirmed: string[] = [];
+  const segs = [...touched].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  if (segs.length > 0) {
+    const indexPath = join(dest, "README.md");
+    let indexText: string | null = null;
+    try {
+      indexText = readFileSync(indexPath, "utf8");
+    } catch {
+      indexText = null;
+    }
+    for (const seg of segs) {
+      if (!finalSegs.has(seg)) continue;
+      if (indexText === null) {
+        clashes.push({ rel: `${seg}/`, reason: "no bullet in the index" });
+        continue;
+      }
+      const stamped = stampConfirmed(indexText, seg, merge);
+      if (stamped === null) {
+        clashes.push({ rel: `${seg}/`, reason: "no bullet in the index" });
+        continue;
+      }
+      indexText = stamped;
+      confirmed.push(seg);
+    }
+    if (indexText !== null && confirmed.length > 0) writeFileSync(indexPath, indexText);
+  }
+  // The confirmation is part of the keep: a clash on it fails the keep,
+  // but the applied files stay applied.
+  const lines = [`kept ${LOCAL_VERIFIER_ROOT}`];
+  if (existsSync(before)) lines.push(`before ${before}`);
+  for (const rel of added) lines.push(`added ${rel}`);
+  for (const rel of changed) lines.push(`changed ${rel}`);
+  for (const rel of removed) lines.push(`removed ${rel}`);
+  for (const seg of confirmed) lines.push(`confirmed ${seg} at ${merge}`);
+  for (const clash of clashes) lines.push(`not kept: ${clash.rel} (${clash.reason})`);
+  for (const line of lines) console.log(line);
+  const kept = added.length + changed.length + removed.length;
+  logRunKeep(
+    dispatch,
+    `kept ${kept} files, confirmed ${confirmed.length === 0 ? "none" : confirmed.join(", ")} at ${merge}` +
+      (clashes.length === 0 ? "" : `; not kept: ${clashes.map((c) => c.rel).join(", ")}`),
+  );
+  return clashes.length === 0 ? 0 : 1;
+}
+
 function main(argv: string[]): number {
   // The verifier names every repo explicitly, so inherited git redirectors
   // can only corrupt: drop them for this process and every session it starts.
@@ -4668,6 +6157,10 @@ function main(argv: string[]): number {
     if (parsed.req.cmd === "upkeep") return runUpkeep(parsed.req);
     if (parsed.req.cmd === "upkeep-prompt") return runUpkeepPrompt(parsed.req);
     if (parsed.req.cmd === "upkeep-report") return runUpkeepReportCmd(parsed.req);
+    if (parsed.req.cmd === "record") return runRecordCmd(parsed.req);
+    if (parsed.req.cmd === "arm") return runArmCmd(parsed.req);
+    if (parsed.req.cmd === "changes") return runChangesCmd(parsed.req);
+    if (parsed.req.cmd === "keep") return runKeepCmd(parsed.req);
     return runMake(parsed.req);
   } catch (e) {
     if (e instanceof UsageError) {

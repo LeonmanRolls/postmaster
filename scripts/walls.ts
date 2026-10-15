@@ -61,6 +61,23 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+/** The five words of a wall detail, or null when it is not five words. */
+export interface WallDetail {
+  role: string;
+  lens: string;
+  round: string;
+  reset: string;
+  message: string;
+}
+
+// The `s` flag: the message may hold U+2028 or U+2029, which `.` without it
+// refuses, and a reviewer's wall would then read as a workhorse's.
+export function parseWallDetail(detail: string): WallDetail | null {
+  const m = /^([^ ]+) ([^ ]+) ([^ ]+) ([^ ]+) (.*)$/su.exec(detail);
+  if (!m) return null;
+  return { role: m[1]!, lens: m[2]!, round: m[3]!, reset: m[4]!, message: m[5]! };
+}
+
 /** Every wall in the run, with its told/ruling/carry state read from the lines after it. */
 export function readWalls(dispatch: string): Wall[] {
   let text: string;
@@ -97,14 +114,12 @@ export function readWalls(dispatch: string): Wall[] {
     index += 1;
   }
   return raw.map((w) => {
-    // The `s` flag: the message may hold U+2028 or U+2029, which `.` without it
-    // refuses, and a reviewer's wall would then read as a workhorse's.
-    const m = /^([^ ]+) ([^ ]+) ([^ ]+) ([^ ]+) (.*)$/su.exec(w.detail);
-    const role = m ? m[1]! : "workhorse";
-    const lens = m ? m[2]! : "-";
-    const round = m ? m[3]! : "-";
-    const reset = m ? m[4]! : "none";
-    const message = m ? m[5]! : w.detail;
+    const p = parseWallDetail(w.detail);
+    const role = p ? p.role : "workhorse";
+    const lens = p ? p.lens : "-";
+    const round = p ? p.round : "-";
+    const reset = p ? p.reset : "none";
+    const message = p ? p.message : w.detail;
     const after = (rows: Array<{ index: number; lane: string }>): boolean =>
       rows.some((r) => r.lane === w.lane && r.index > w.index);
     return {
@@ -171,6 +186,29 @@ export function isSurveyWall(w: Wall): boolean {
 export function wallFor(dispatch: string, lane: string, lens: string, round: string): Wall | null {
   for (const w of readWalls(dispatch)) {
     if (w.lane === lane && w.lens === lens && w.round === round) return w;
+  }
+  return null;
+}
+
+/**
+ * The run's lost wall for a reviewer under a lens in a round, or null. The
+ * file is lane-keyed but its content is round-keyed, so only content naming
+ * this reviewer matches: a stale file from an earlier round never degrades a
+ * later one. Content that does not parse is not attributable and never
+ * matches; `open` still refuses on the file itself.
+ */
+export function lostWallFor(
+  dispatch: string,
+  lane: string,
+  lens: string,
+  round: string,
+): WallDetail | null {
+  for (const lost of lostWalls(dispatch)) {
+    if (lost.lane !== lane) continue;
+    for (const detail of lost.details) {
+      const p = parseWallDetail(detail);
+      if (p !== null && p.role === "reviewer" && p.lens === lens && p.round === round) return p;
+    }
   }
   return null;
 }

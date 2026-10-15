@@ -1,0 +1,30 @@
+57.2.1	no	no	state	Problem statement names takeover reading the wrong thread; stale backfill is plainly wrong.
+57.2.2	no	no	state	Ticket never mentions locks; ownership by inference has one sane fix, a recorded owner.
+57.2.3	no	no	state	Lock mechanism is outside the criteria; releasing an unowned lock has one sane answer.
+57.2.4	no	no	input	Criterion 5 requires walls caught before the first event; missed wordings are a defect.
+57.2.5	no	no	state	Torn tail after a crash; any reading requires appends not fusing records.
+57.2.6	no	no	state	Same torn-tail fusing as 57.2.5 at the refused write; any reading requires the fix.
+57.3.1	no	no	state	Concurrent starts both running is a plain race; one sane answer, an atomic claim.
+57.3.2	no	no	state	Criterion 4 requires the refused resume's prompt delivered; the kill gap loses it.
+57.4.1	no	no	state	Problem names thread id read from wrong thread; ignoring a later launch is wrong.
+57.4.2	no	no	state	Criteria 3 and 4: status must show a refused resume; detector misses a state.
+57.4.3	no	no	prose	Runbook calls the live tool where the pinned checkout is required; one sane answer.
+57.4.4	no	no	state	Criterion 2 separates exited-without-hand-off from finished; a stale marker blurs it.
+57.5.1	yes	no	contract	Outcome set has no spec-review pause; precedence over incomplete is unstated.
+202.2.1	no	no	other	Missing guard lets reset hit the wrong worktree; criterion 11 restores the run's own.
+202.2.2	no	no	input	Criterion 5 lists every write in the lane's record; this shape's write is missed.
+202.2.3	unclear	no	other	Truncated text names ownership rule but states no defect.
+202.3.2	no	no	contract	Criterion 11 requires restoring as before the round; a switched worktree must be handled.
+202.3.3	no	no	input	D13: an unreadable record is reported as not checked, never clean; code returns empty.
+202.5.2	no	no	input	D8 makes any outside write a finding; the named operand of touch is missed.
+202.5.3	no	no	site	D18 says card names outside paths only as outside; this branch prints raw tokens.
+202.7.1	unclear	no	input	Text gives only location and severity, no stated defect.
+202.7.4	no	no	input	A repository path with a space breaks the regex; any reading requires correct parsing.
+202.7.5	no	no	state	Criterion 11 requires restoring as before the round; a deleted branch must not fault.
+268.2.1	no	no	input	D5 and criterion 1 list TypeScript suppressions; the triple-slash form is missed.
+268.2.2	no	no	input	D5 and criterion 1 list TypeScript suppressions; the triple-slash form is missed.
+268.3.1	unclear	no	input	Text gives only line ranges and function names, no stated defect.
+268.3.2	no	no	input	D8: a change to the covered code needs a new word; continuations are covered.
+268.3.4	no	no	input	Criterion 7 records the user's words with each approval; a one-token entry slips through.
+268.4.1	no	no	input	Criterion 6 says each switch-off approved; identical ones sharing one identity breaks it.
+268.8.1	yes	no	input	D8 says same code but never defines context; identical blocks case unstated.

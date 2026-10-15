@@ -60,8 +60,8 @@ function launchedRound(m: Machine): { code: number; out: string; err: string } {
 }
 
 describe("C1: launch saves the round's starting state", () => {
-  test("launch writes before-r1.json before the first reviewer starts", () => {
-    withTempDir((root) => {
+  test("launch writes before-r1.json before the first reviewer starts", async () => {
+    await withTempDir(async (root) => {
       const m = machine(root, { briefs: ["style"] });
       const launched = launchedRound(m);
       expect(launched.code).toBe(0);
@@ -74,6 +74,10 @@ describe("C1: launch saves the round's starting state", () => {
       expect(saved.round).toBe(1);
       expect(saved.synthesisHead).toBe(m.snap);
       const marker = join(m.dispatch, "logs", "review-r1-style-ghost.done");
+      // The marker lands after launch returns, whenever the ghost finishes;
+      // wait for what the ordering assertion below needs.
+      const deadline = Date.now() + 20000;
+      while (!existsSync(marker) && Date.now() < deadline) await Bun.sleep(50);
       expect(existsSync(marker)).toBe(true);
       expect(statSync(snapshot).mtimeMs).toBeLessThan(statSync(marker).mtimeMs);
     }, "acceptance-467-c1-");
@@ -81,12 +85,18 @@ describe("C1: launch saves the round's starting state", () => {
 });
 
 describe("C2: wait runs the round's reach check", () => {
-  test("after launch returns, the round's point is logged after the markers", () => {
+  test("the wait after launch logs the round's point after the markers", () => {
     withTempDir((root) => {
       const m = machine(root, { briefs: ["style"] });
       const launched = launchedRound(m);
       expect(launched.code).toBe(0);
-      expect(launched.out).toContain("r1: ");
+      // #391: the launch returns without collecting; the wait after it runs
+      // the round's check.
+      expect(launched.out).toContain("collect them with wait-next");
+      expect(reachPoint(m, "r1")).toBeNull();
+      const waited = tool(m, "review-round", "wait", m.dispatch, "1", m.repo);
+      expect(waited.code).toBe(0);
+      expect(waited.out).toContain("r1: ");
       const point = reachPoint(m, "r1");
       expect(point).not.toBeNull();
       const lines = actions(m);
@@ -104,17 +114,40 @@ describe("C2: wait runs the round's reach check", () => {
       writeFileSync(join(m.synthesis, "later.txt"), "after\n");
       gitOrThrow(m.synthesis, "add", "later.txt");
       gitOrThrow(m.synthesis, "commit", "-q", "-m", "later fix");
-      expect(actions(m).filter((l) => l.action === "degrade").length).toBe(0);
-      expect(voids(m)).toBe(0);
+      // The launched ghost never ran and has no reader, so the check voids its
+      // verdict instead of counting it; the later fix adds no further void.
+      expect(actions(m).filter((l) => l.action === "degrade").length).toBe(1);
+      expect(voids(m)).toBe(1);
     }, "acceptance-467-c2-");
   }, 300_000);
 
   test("wait run alone ends with the round's check", () => {
     withTempDir((root) => {
-      const m = machine(root, { briefs: ["style"] });
+      // The ghost is recorded on a harness with a reader, as a reviewer that
+      // touched only its own folder: no reader means no check, which voids.
+      const m = machine(root, {
+        briefs: ["style"],
+        lanes: { ghost: { harness: "codex", model: "m" } },
+      });
       expect(tool(m, "reach", "before", m.dispatch, "1").code).toBe(0);
-      expect(tool(m, "review-round", "start", m.dispatch, "1").code).toBe(0);
+      // #391: a pairs wait needs its roster recorded at start.
+      expect(tool(m, "review-round", "start", m.dispatch, "1", "style:ghost").code).toBe(0);
       writeFileSync(join(m.dispatch, "logs", "review-r1-style-ghost.done"), "");
+      // One own-folder touch, as host's --out always exists: no recognized
+      // tool call also leaves the lane not checked.
+      const scratch = join(m.repo, ".worktrees", "T-1-rev-style-ghost");
+      writeFileSync(
+        join(m.dispatch, "logs", "review-r1-style-ghost.jsonl"),
+        `${JSON.stringify({
+          type: "item.completed",
+          item: {
+            type: "command_execution",
+            command: `/bin/bash -lc 'touch ${scratch}/probe.txt'`,
+            aggregated_output: "",
+            exit_code: 0,
+          },
+        })}\n`,
+      );
       const waited = tool(m, "review-round", "wait", m.dispatch, "1", m.repo, "style:ghost");
       expect(waited.code).toBe(0);
       expect(waited.out).toContain("r1: ");

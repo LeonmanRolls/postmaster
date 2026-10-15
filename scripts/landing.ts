@@ -96,10 +96,25 @@
 //       An approval names the run, the identity and the user's words, written
 //       through `run log-action` so it sits in the run's actions and the
 //       project's ledger alike.
+//   run landing libraries --repo <repo> --default <branch> --ticket <ref>
+//       [--dispatch <dispatch>]
+//       every library the run adds or changes, compared between the ticket
+//       head and its merge base with the default branch: new and changed
+//       entries in package.json's dependency blocks, resolved packages the
+//       lockfile adds outside them, and the copied-in bundle's VERSION. The
+//       first line is `clear` when the branch adds nothing or every entry
+//       carries the user's recorded approval, `held` when entries wait on
+//       the user's word, and `refused` when the user refused any. The rest
+//       is the `## Libraries` section: one line per library with its kind,
+//       old and new version, facts and identity; approved entries are
+//       marked. Without --dispatch no approval can match, so any entry
+//       holds. An approval names the run, the identity and the user's
+//       words, written through `run log-action` so it sits in the run's
+//       actions and the project's ledger alike.
 //
 //   exit 0  already-landed, anything-to-land, pull-request-checks, results, card-block, card-open: the answer,
 //           printed; card-results, card-findings: `match`; journey: `clear` or `judge`;
-//           fresh: `fresh`; switch-offs: `clear`; card-write: the card is written, silently
+//           fresh: `fresh`; switch-offs, libraries: `clear`; card-write: the card is written, silently
 //   exit 1  usage; a resolving input that does not resolve (--default, --base,
 //           --card-head, --local-ticket, --pr-merge, and --ticket without a
 //           report: --pr-head answers `re-verify` instead); a file that cannot
@@ -111,12 +126,13 @@
 //           HTML comment or not holding the rendered block exactly once; card-write: a
 //           card whose printed parts are not one block from `## Checks`, that
 //           holds the notes section twice, or that holds an HTML comment
-//   exit 2  fresh: the faults, one line each; journey: `blocked`; switch-offs: `held`
+//   exit 2  fresh: the faults, one line each; journey: `blocked`; switch-offs, libraries: `held`
 //   exit 3  switch-offs, card-write: `no reason`
-//   exit 4  switch-offs, card-write: `refused`
+//   exit 4  switch-offs, libraries, card-write: `refused`
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { physical, scriptsDir } from "./lib/paths.ts";
+import { inspectLibraries } from "./lib/library-landing.ts";
 import { inspectSwitchOffs } from "./lib/switch-offs.ts";
 import { run } from "./lib/proc.ts";
 import { runMode } from "./lib/run-mode.ts";
@@ -709,7 +725,8 @@ const TOP_USAGE =
   "<checkpoint> <card> | card-findings <dispatch> <synthesis-wt> <checkpoint> <card> | " +
   "card-write <dispatch> <synthesis-wt> <checkpoint> <card> --repo <repo> --default <branch> " +
   "--ticket <ref> | card-open <checkpoint> | journey <dispatch> <synthesis-wt> <waybill> | " +
-  "switch-offs --repo <repo> --default <branch> --ticket <ref> [--dispatch <dispatch>]";
+  "switch-offs --repo <repo> --default <branch> --ticket <ref> [--dispatch <dispatch>] | " +
+  "libraries --repo <repo> --default <branch> --ticket <ref> [--dispatch <dispatch>]";
 const ALREADY_USAGE =
   "usage: run landing already-landed --repo <repo> --default <branch> --ticket <ref> --base <sha> " +
   "--card-head <sha> [--local-ticket <branch>] [--pr-merge <sha> --pr-head <sha>]";
@@ -1100,6 +1117,33 @@ function switchOffs(o: string[]): number {
   }
 }
 
+const LIBRARIES_USAGE =
+  "usage: run landing libraries --repo <repo> --default <branch> --ticket <ref> [--dispatch <dispatch>]";
+
+async function libraries(o: string[]): Promise<number> {
+  if (
+    (o.length !== 6 && o.length !== 8) ||
+    o[0] !== "--repo" ||
+    o[2] !== "--default" ||
+    o[4] !== "--ticket" ||
+    (o.length === 8 && o[6] !== "--dispatch")
+  ) {
+    usage(LIBRARIES_USAGE);
+  }
+  try {
+    const report = await inspectLibraries({
+      repo: o[1]!,
+      defaultRef: o[3]!,
+      ticketRef: o[5]!,
+      ...(o.length === 8 ? { dispatch: o[7]! } : {}),
+    });
+    process.stdout.write(`${report.status}\n${report.output}`);
+    return report.status === "clear" ? 0 : report.status === "held" ? 2 : 4;
+  } catch (e) {
+    throw new LandingFailure(`libraries: ${e instanceof Error ? e.message : String(e)}`, 1);
+  }
+}
+
 function cardWrite(o: string[]): number {
   if (o.length !== 10 || o[4] !== "--repo" || o[6] !== "--default" || o[8] !== "--ticket") {
     usage(CARDWRITE_USAGE);
@@ -1173,7 +1217,7 @@ function cardWrite(o: string[]): number {
   return 0;
 }
 
-function main(argv: string[]): number {
+async function main(argv: string[]): Promise<number> {
   // A production entrypoint: shed the test hook before the first scan.
   delete process.env.SCRUB_CHECK_DISABLE;
   try {
@@ -1221,6 +1265,7 @@ function main(argv: string[]): number {
       return journey(argv[1]!, argv[2]!, argv[3]!);
     }
     if (mode === "switch-offs") return switchOffs(argv.slice(1));
+    if (mode === "libraries") return libraries(argv.slice(1));
     usage(TOP_USAGE);
   } catch (e) {
     if (e instanceof LandingFailure) {
@@ -1232,5 +1277,5 @@ function main(argv: string[]): number {
 }
 
 if (import.meta.main) {
-  process.exit(main(process.argv.slice(2)));
+  process.exit(await main(process.argv.slice(2)));
 }

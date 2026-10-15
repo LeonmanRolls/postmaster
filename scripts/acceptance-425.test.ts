@@ -11,7 +11,7 @@
 // Covered: C1-C4. Not covered: the fresh-clone frozen install (the gate runs
 // it on every pull request).
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   PARSER_MARKER,
@@ -32,6 +32,20 @@ const EXACT = /^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/u;
 
 function installTable(): Record<string, unknown> {
   return (readBunfig()["install"] as Record<string, unknown> | undefined) ?? {};
+}
+
+// #424 joined the ticket approval into the refresh: every refresh test
+// below caches the user's yes for its version, so the test reaches the age
+// and scan checks this oracle pins.
+function approveParser(root: string, version: string): void {
+  mkdirSync(join(root, ".postmaster"), { recursive: true });
+  writeFileSync(
+    join(root, ".postmaster", "library-approvals.json"),
+    JSON.stringify({
+      version: 1,
+      approvals: { [`@babel/parser@${version}`]: { identity: "library:probe", run: "425" } },
+    }),
+  );
 }
 
 describe("C1: only the pinned version of each library ever runs", () => {
@@ -69,6 +83,7 @@ describe("C2: no version younger than seven days is taken without a waiver", () 
   test("refresh-parser refuses a version published under seven days earlier", () => {
     const fx = makeRefreshFixture();
     const root = makeTempDir("postmaster-425-root-");
+    approveParser(root, fx.youngVersion);
     try {
       const r = runRefresh([fx.youngVersion], {
         POSTMASTER_REFRESH_FIXTURE: fx.dir,
@@ -84,6 +99,7 @@ describe("C2: no version younger than seven days is taken without a waiver", () 
   test("refresh-parser takes a young version with the waiver for that version", () => {
     const fx = makeRefreshFixture();
     const root = makeTempDir("postmaster-425-root-");
+    approveParser(root, fx.youngVersion);
     try {
       const scan = writeScanFixture(fx.dir, {});
       const r = runRefresh([fx.youngVersion, "--waive-age", fx.youngVersion], {
@@ -105,6 +121,7 @@ describe("C2: no version younger than seven days is taken without a waiver", () 
   test("a waiver for another version does not waive", () => {
     const fx = makeRefreshFixture();
     const root = makeTempDir("postmaster-425-root-");
+    approveParser(root, fx.youngVersion);
     try {
       const scan = writeScanFixture(fx.dir, {});
       const r = runRefresh([fx.youngVersion, "--waive-age", fx.oldVersion], {
@@ -122,6 +139,7 @@ describe("C2: no version younger than seven days is taken without a waiver", () 
   test("refresh-parser takes a version older than seven days", () => {
     const fx = makeRefreshFixture();
     const root = makeTempDir("postmaster-425-root-");
+    approveParser(root, fx.oldVersion);
     try {
       const scan = writeScanFixture(fx.dir, {});
       const r = runRefresh([fx.oldVersion], {
@@ -143,6 +161,7 @@ describe("C2: no version younger than seven days is taken without a waiver", () 
   test("refresh-parser takes an explicit version with no latest tag", () => {
     const fx = makeRefreshFixture();
     const root = makeTempDir("postmaster-425-root-");
+    approveParser(root, fx.oldVersion);
     try {
       const packument = join(fx.dir, "packument.json");
       const doc = JSON.parse(readFileSync(packument, "utf8")) as Record<string, unknown>;
@@ -170,9 +189,12 @@ describe("C3: no dependency install script runs", () => {
 });
 
 describe("C4: Socket's scanner checks every package before it is taken", () => {
-  test("bunfig.toml scans installs with the Socket scanner module, pinned", () => {
+  test("bunfig.toml scans installs with the joined scanner module, Socket pinned", () => {
+    // #424 joined the ticket approval with Socket's scan into one module:
+    // the setting names the wrapper, which delegates to the pinned Socket
+    // package. The installs below prove the delegation still scans.
     const security = (installTable()["security"] as Record<string, unknown> | undefined) ?? {};
-    expect(security["scanner"]).toBe("@socketsecurity/bun-security-scanner");
+    expect(security["scanner"]).toBe("./scripts/lib/install-scanner.ts");
     const socket = readManifest().devDependencies?.["@socketsecurity/bun-security-scanner"];
     expect(socket).toMatch(EXACT);
   });
@@ -236,6 +258,7 @@ describe("C4: Socket's scanner checks every package before it is taken", () => {
   test("the refresh checks its package the same way before writing it", () => {
     const fx = makeRefreshFixture();
     const root = makeTempDir("postmaster-425-root-");
+    approveParser(root, fx.oldVersion);
     try {
       const scan = writeScanFixture(fx.dir, {
         advisories: {
@@ -265,6 +288,7 @@ describe("C4: Socket's scanner checks every package before it is taken", () => {
   test("the refresh refuses a package the scanner cannot check", () => {
     const fx = makeRefreshFixture();
     const root = makeTempDir("postmaster-425-root-");
+    approveParser(root, fx.oldVersion);
     try {
       const scan = writeScanFixture(fx.dir, { error: "probe-425: socket unreachable" });
       const r = runRefresh([fx.oldVersion], {
@@ -283,6 +307,7 @@ describe("C4: Socket's scanner checks every package before it is taken", () => {
   test("the refresh announces a recorded verdict", () => {
     const fx = makeRefreshFixture();
     const root = makeTempDir("postmaster-425-root-");
+    approveParser(root, fx.oldVersion);
     try {
       const scan = writeScanFixture(fx.dir, {});
       const r = runRefresh([fx.oldVersion], {
