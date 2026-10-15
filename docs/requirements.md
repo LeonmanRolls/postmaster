@@ -7,8 +7,9 @@ At least two agent CLIs that can run headless. Any git repository as a target. A
 to watch the fleet in: [Herdr](https://herdr.dev) by default wherever it is running, where each
 launch appears in its worktree's space under the project's, or tmux. With neither, launches run
 in the background and the flow still works (`skills/postmaster/hosts.md`). Bun 1.4.2 or newer, which
-runs the TypeScript scripts and reads the config, and Node and npm, which the fixture flow
-needs to run its gate.
+runs the TypeScript scripts and reads the config, and Node 22.18 or newer with npm, which the
+fixture flow needs to run its gate and the project's own lint step needs to load its TypeScript
+plugin: an older Node fails that step with an unknown file extension error.
 
 ## On a Mac
 
