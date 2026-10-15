@@ -22,6 +22,7 @@ import { scriptsDir } from "./lib/paths.ts";
 import {
   bootId,
   bootTime,
+  parseLstart,
   processCommandLine,
   processInfo,
   processStart,
@@ -2033,7 +2034,7 @@ export async function runControls(): Promise<number> {
       const start = procStart(pid);
       return /^[0-9]+$/u.test(start)
         ? bootSeconds + Number(start) / ticks
-        : Date.parse(start) / 1000;
+        : (parseLstart(start.split(" "), Date.now()) ?? Number.NaN) / 1000;
     };
     const record = (pid: string) => join(launchDir, pid);
     const stale = spawn("sleep", ["60"], { detached: true, stdio: "ignore" });
