@@ -1,7 +1,7 @@
 ---
 title: postmaster wiki
 type: schema
-updated: 2026-10-13
+updated: 2026-10-15
 ---
 
 # postmaster wiki
@@ -155,8 +155,9 @@ Why the design is shaped as it is.
   do not run out of minor findings, so a loop should end on verified serious findings in the
   change's own code, and a mechanism whose fixes keep breaking should be redesigned rather than
   fixed again. From the review of #36 and outside work. The user chose: fix as much as can be
-  fixed in the first round, then repeat until there are no more P1 and P2 findings, with the cap
-  of three rounds as a backstop; many bugs reaching production stays the signal to revisit.
+  fixed in the first round, then repeat until there are no more P1 and P2 findings; since 9
+  October a rise in them stops the loop for a ruling, in place of a cap of three rounds. Many
+  bugs reaching production stays the signal to revisit.
 - [Why runs take the review rounds they do, and what the planning stage could cut](concepts/review-rounds.md):
   **mixed**. Of 61 runs the median took 3 rounds, and a fifth of them hold 44% of the rounds, a
   third of all rounds being in the 13 runs before the loop's rule changed on 29 September. Rounds
