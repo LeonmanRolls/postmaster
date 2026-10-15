@@ -1204,6 +1204,59 @@ describe("the round's three steps", () => {
       }, "review-round-launch-");
     });
 
+    test("with bundled style rules, the style lane starts from its own prompt naming its batches", () => {
+      withTempDir((root) => {
+        const p = paths(root);
+        mkdirSync(join(p.dispatch, "rules"), { recursive: true });
+        const rule = {
+          id: "r1",
+          text: "Do it.",
+          label: "high",
+          scope: [],
+          source: "s",
+          at: "s#r1",
+          gate: true,
+        };
+        writeFileSync(
+          join(p.dispatch, "rules", "rules.json"),
+          JSON.stringify([
+            { ...rule, parts: ["style"] },
+            { ...rule, id: "r2", parts: ["implement"] },
+          ]),
+        );
+        const { calls, deps } = stand((name, args) => {
+          if (name === "launch" && args[0] === "skill")
+            return { code: 0, out: "SECURITY TEXT\n", err: "" };
+          if (name === "host" && args[0] === "name")
+            return { code: 0, out: `${args[4]}-name\n`, err: "" };
+          return green(name, args);
+        });
+        const res = launchRound(
+          { dispatch: p.dispatch, round: "1", repo: p.repo, synthesis: p.synthesis },
+          deps,
+        );
+        expect(res.code).toBe(0);
+        const lanePrompt = join(p.dispatch, "review-r1-style-luna-prompt.txt");
+        const batch = join(p.dispatch, "rules", "style-batch-1.md");
+        expect(readFileSync(lanePrompt, "utf8")).toContain(`every written rule in ${batch}`);
+        expect(readFileSync(batch, "utf8")).toContain("- r1 (high) [gates]: Do it.");
+        expect(readFileSync(batch, "utf8")).not.toContain("r2");
+        const runs = of(calls, "host").filter((c) => c.args[0] === "run");
+        const style = runs.find((c) =>
+          c.args.includes(join(p.repo, ".worktrees", "T-1-rev-style-luna")),
+        );
+        expect(style?.args).toContain(lanePrompt);
+        expect(style?.args).not.toContain(join(p.dispatch, "review-r1-style-prompt.txt"));
+        expect(readFileSync(join(p.dispatch, "review-r1-style-prompt.txt"), "utf8")).toContain(
+          "review-style-brief.md",
+        );
+        const security = runs.find((c) =>
+          c.args.includes(join(p.repo, ".worktrees", "T-1-rev-security-luna")),
+        );
+        expect(security?.args).toContain(join(p.dispatch, "review-r1-security-luna-prompt.txt"));
+      }, "review-round-launch-");
+    });
+
     test("logs one review-launch per lane per lens per round, targeting the lane", () => {
       withTempDir((root) => {
         const p = paths(root);
