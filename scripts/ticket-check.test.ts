@@ -199,7 +199,14 @@ beforeAll(() => {
   copyFileSync(join(HERE, "project-settings.ts"), join(tmp, "bin", "project-settings.ts"));
   copyFileSync(join(HERE, "tracker-kind.ts"), join(tmp, "bin", "tracker-kind.ts"));
   mkdirSync(join(tmp, "bin", "lib"), { recursive: true });
-  for (const f of ["paths.ts", "proc.ts", "data.ts", "text.ts", "effective-config.ts"]) {
+  for (const f of [
+    "paths.ts",
+    "proc.ts",
+    "data.ts",
+    "text.ts",
+    "effective-config.ts",
+    "sources.ts",
+  ]) {
     copyFileSync(join(HERE, "lib", f), join(tmp, "bin", "lib", f));
   }
   for (const name of ["github", "local"]) {
