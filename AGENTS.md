@@ -160,7 +160,8 @@ global config:
   the notes with the user in plain language, route each block to the part of the flow it is for with
   the comments that `scripts/lib/notes.ts` describes, run `scripts/run project-notes preview
   <chosen>` and show the user what each part would receive for a real ticket, and write the file only
-  on their yes. `scripts/run project-notes check <chosen>` must exit 0.
+  on their yes. Git ignores it like `project.toml`; sharing it is `git add -f .postmaster/notes.md`.
+  `scripts/run project-notes check <chosen>` must exit 0.
 
 Then put the answers in a file, one `key=value` per line, and let the script write and check
 the settings; it refuses a harness that is not on PATH, a coachman on a lane's model and

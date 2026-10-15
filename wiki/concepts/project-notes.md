@@ -38,7 +38,8 @@ every lane that writes or judges code sees the same rules.
 
 ## The form
 
-The file is `.postmaster/notes.md`. A comment before a block routes it: `route: waybill, implement;
+The file is `.postmaster/notes.md`, which git ignores like `project.toml`, so a project's checkout
+shows no trace of it; sharing it is `git add -f`. A comment before a block routes it: `route: waybill, implement;
 scope: apps/shop/**` sends the block that follows to those parts for work under that folder. A
 `rules` comment names a file of written rules, as a JSON list or as markdown headings, with the labels
 that gate; a `reads` comment names files a part should open. The parts are the clerk, the waybill,

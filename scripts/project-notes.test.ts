@@ -3,7 +3,15 @@
 // as a subprocess, so what is asserted is what the postmaster would see.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -170,6 +178,24 @@ describe("check", () => {
     expect(r.code).toBe(1);
     expect(r.out).toContain("../outside.md: the path leaves the project");
     expect(r.out).toContain("source:acme-wiki/../x.md: the path leaves the source's folder");
+  });
+
+  test("a link that leads out of the project or the source is refused, one that stays in is read", () => {
+    const s = scratch(
+      "<!-- reads: linked.md, source:acme-wiki/standards/leak.md, inside.md; parts: clerk -->",
+    );
+    const secret = join(dirname(s.repo), "secret.md");
+    put(secret, "private\n");
+    symlinkSync(secret, join(s.repo, "linked.md"));
+    symlinkSync(secret, join(s.wiki, "standards", "leak.md"));
+    symlinkSync("STYLEGUIDE.md", join(s.repo, "inside.md"));
+    const r = pn(s, "check", s.repo);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("linked.md: the path leaves the project");
+    expect(r.out).toContain(
+      "source:acme-wiki/standards/leak.md: the path leaves the source's folder",
+    );
+    expect(r.out).not.toContain("inside.md");
   });
 
   test("a syntax problem in the notes is named with its line", () => {

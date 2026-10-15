@@ -136,6 +136,7 @@ describe("missing profiles and ensure", () => {
     expect(rules).toContain("runs/");
     expect(rules).toContain("clerk/");
     expect(rules).toContain("project.toml");
+    expect(rules).toContain("notes.md");
     expect(rules).toContain(".gitignore");
     expect(rules).not.toContain("*");
     expect(rules).not.toContain("settings.toml");
@@ -149,6 +150,7 @@ describe("missing profiles and ensure", () => {
     expect(kept.startsWith("# existing local rules\n")).toBe(true);
     expect(kept.includes("!keep-me\n")).toBe(true);
     expect(kept.includes("\nruns/\n")).toBe(true);
+    expect(kept.includes("\nnotes.md\n")).toBe(true);
     expect(kept.endsWith(".gitignore\n")).toBe(true);
   });
 

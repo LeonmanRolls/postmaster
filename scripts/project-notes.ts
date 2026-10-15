@@ -38,10 +38,11 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, posix, resolve } from "node:path";
+import { dirname, join, posix, resolve, sep } from "node:path";
 import {
   effectiveConfigForProject,
   expandUser,
@@ -107,6 +108,18 @@ function context(repo: string, areas: readonly string[]): Ctx {
   };
 }
 
+/** Whether a path, with every link in it followed, is still inside a folder. A path that is not
+ * there is left to the caller's "no such file". */
+function staysInside(folder: string, abs: string): boolean {
+  try {
+    const real = realpathSync(abs);
+    const top = realpathSync(folder);
+    return real === top || real.startsWith(top + sep);
+  } catch {
+    return true;
+  }
+}
+
 function locate(ref: string, ctx: Ctx): Located {
   const parsed = parseRef(ref);
   if (parsed.kind === "source") {
@@ -128,6 +141,14 @@ function locate(ref: string, ctx: Ctx): Located {
         problem: `${ref}: the path leaves the source's folder`,
       };
     }
+    if (!staysInside(source.path, abs)) {
+      return {
+        ref,
+        abs: null,
+        snapshot: "",
+        problem: `${ref}: the path leaves the source's folder`,
+      };
+    }
     return {
       ref,
       abs,
@@ -139,7 +160,11 @@ function locate(ref: string, ctx: Ctx): Located {
   if (clean.startsWith("../") || clean === ".." || posix.isAbsolute(clean)) {
     return { ref, abs: null, snapshot: "", problem: `${ref}: the path leaves the project` };
   }
-  return { ref, abs: join(ctx.root, clean), snapshot: posix.join("repo", clean), problem: null };
+  const abs = join(ctx.root, clean);
+  if (!staysInside(ctx.root, abs)) {
+    return { ref, abs: null, snapshot: "", problem: `${ref}: the path leaves the project` };
+  }
+  return { ref, abs, snapshot: posix.join("repo", clean), problem: null };
 }
 
 const reaches = (ctx: Ctx) => (scope: readonly string[]) => scopeApplies(scope, ctx.areas);
