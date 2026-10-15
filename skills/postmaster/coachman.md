@@ -1246,6 +1246,17 @@ past it. After each merge the step makes, run the switch-offs call above again. 
 round runs after a merge: main's code was reviewed in its own run, the gate checks the two
 together, and the card names the files the merge needed by hand.
 
+**A merge that brought in commits gets a drift review.** A merge that applies cleanly can leave
+the branch wrong in a way the gate cannot see: a class main stopped rendering, a helper whose
+meaning changed. Before the final gate pass, run
+`<tool>/scripts/run main-drift <repo> <since> <default-ref> HEAD --name drift-<k>`, where `<since>` is
+the default-branch commit the branch last held when it was checked (BASE for the first merge, the
+main of the previous merge after that); it writes the question and the three files and prints the
+surveyor call to run. Run that call and read `<dispatch>/surveys/drift-<k>.md`. A drift it names is a
+gating finding: fix it in the synthesis worktree and pass the gate again, then say so in the card's
+Merge section. `no drift found` goes on the card with its one line. A surveyor that cannot run is a
+degrade, never a pass: the card says so.
+
 1. **Verify the final HEAD.** Run `<tool>/scripts/run verify run <synthesis-wt> <dispatch>` after
    the last code change; the gate must
    pass before the card is ready. No P1 or P2 finding may remain open.

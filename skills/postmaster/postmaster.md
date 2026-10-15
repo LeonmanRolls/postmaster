@@ -569,6 +569,12 @@ every project and does not change that project's gate.
    merges, resolves and gates. Log it with the leg, the thread id and the stale line
    as `send-back: <stale line>`: the leg's step restarts its merge count only on a
    resume carrying `send-back:`, never on a remount or a ruling.
+   After the pull request is open, main keeps moving, and the user's Update branch merges it into the
+   branch without the flow. When a review arrives, the user says main moved, or the branch's tip is a
+   merge of main since the card, run the drift review before answering the review:
+   `<tool>/scripts/run main-drift <repo> <since> <default-ref> <branch-tip> --name drift-<k>`, with
+   `<since>` the default-branch commit the card verified, then the surveyor call it prints. A drift it
+   names goes to the user with the review's comments.
    For a change to the coachman contract, that merge means a new fixture run from the final
    branch only when what the merge brought in changes the coachman contract; otherwise the
    earlier fixture result stands. That is what the contract checker says: run the dispatch
