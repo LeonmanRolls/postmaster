@@ -141,8 +141,12 @@ repository is involved.">
   `(given by the user)`. The mark never names a model, because the ticket is public. When a library
   already offers a way to do what a decision chooses, `Instead of` names the library's own way in
   plain words. A decision is stated by what it changes for the flow or its user, not by where it is
-  made in the code. A choice only the lanes care about, such as a name, a file or an order, is not
-  a decision. Leave it to them.
+  made in the code. The architecture is the exception that looks inward, and the writer settles it:
+  the parts and boundaries of the change, such as what runs where, which part owns what, what is
+  shared between the apps and what stays in one, which existing module or library each part builds
+  on, and what each part knows. Each is a decision named by the part's role and never by a file, so
+  the run does not have to choose a design. A choice only the lanes care about, such as a name, a
+  file or an order, is not a decision. Leave it to them.
   The decisions come in two parts. `### Not covered by the acceptance criteria` comes first and
   holds only the decisions whose effect no criterion states: these are the ones the user has to
   read. `### Covered by the acceptance criteria` follows and holds the rest, under one line saying
@@ -185,4 +189,5 @@ The workhorses decide which files to change and in what order, the task breakdow
 the files, and how to test beyond the criteria's checks. The ticket lists none of them. A structure
 section and a task list were not used by the lanes, and the places where they were wrong cost more
 than the places where they helped. A file is named only in the technical notes, as a pointer for the
-lanes.
+lanes. The ticket does settle the architecture at the level of parts and boundaries, as decisions;
+the lanes decide how it lies in files.

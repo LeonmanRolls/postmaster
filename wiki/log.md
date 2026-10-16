@@ -1,12 +1,21 @@
 ---
 title: Log
 type: schema
-updated: 2026-10-15
+updated: 2026-10-16
 ---
 
 # Log
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
+
+## [2026-10-16] update | the clerk settles the architecture at the level of parts, not files
+
+At the user's request: the clerk makes the high-level decisions on code architecture and names no
+specific file. The clerk runbook and the ticket template now say that the architecture, meaning what
+runs where, which part owns what, what is shared between the apps and what stays in one, which
+existing module or library each part builds on and what each part knows, is settled in the ticket as
+decisions named by the part's role, and that a name, a file or an order is still the lanes' choice.
+No standing changed.
 
 ## [2026-10-15] update | the clerk plans from menus of the whole API
 

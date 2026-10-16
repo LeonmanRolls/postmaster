@@ -49,8 +49,12 @@ Keep the criteria and the decisions as simple as you can, one idea each. A crite
 that is true when the work is done, in a sentence or two; an "and" that adds a second behaviour
 makes two criteria. A decision is one choice, the reason, and what it beat, a sentence each; mark
 each `(proposed)`, or `(given by the user)` where it is their own word. State each by what it
-changes for the flow or its user, not by where it is made in the code: a choice only the lanes
-care about, such as a name, a file or an order, is not a decision. Write `## Decisions` in two
+changes for the flow or its user, not by where it is made in the code. The architecture is yours
+to settle, at the level of parts and boundaries and never of files: what runs where, which part
+owns what, what is shared between the apps and what stays in one, which existing module or library
+each part builds on, and what each part knows. Make each such choice a decision, named by the
+part's role, with its reason and what it beat. A choice only the lanes care about, such as a name,
+a file or an order, is not a decision. Write `## Decisions` in two
 parts: `### Not covered by the acceptance criteria` first, holding only the decisions whose effect
 no criterion states, then `### Covered by the acceptance criteria`, holding the rest under one line
 saying each is stated by a criterion above and is there for its reason and the alternative it beat.
