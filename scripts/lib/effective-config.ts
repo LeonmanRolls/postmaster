@@ -618,7 +618,7 @@ export const validateCommon = (data: Rec, label: string, local: boolean): Rec =>
   const tracker = asTable(Object.hasOwn(data, "tracker") ? data.tracker : {}, `${label}.tracker`);
   if (!local) {
     const unknownTracker = Object.keys(tracker)
-      .filter((k) => k !== "binding")
+      .filter((k) => k !== "binding" && k !== "board")
       .sort(cmpPoints);
     if (unknownTracker.length > 0) {
       fail(`${label}.tracker has unsupported key: ${unknownTracker[0]}`);
@@ -643,6 +643,10 @@ export const validateCommon = (data: Rec, label: string, local: boolean): Rec =>
       fail(`${label}.tracker.binding must be a tracker name, not a path or URL`);
     }
     tracker.binding = binding;
+  }
+  // Whether the project's GitHub issues sit on a Projects board: "off" tracks them alone.
+  if (Object.hasOwn(tracker, "board") && tracker.board !== "on" && tracker.board !== "off") {
+    fail(`${label}.tracker.board must be "on" or "off"`);
   }
   if (!local && Object.hasOwn(data, "checks")) {
     const checks = asTable(data.checks, `${label}.checks`);
@@ -1008,15 +1012,17 @@ const mergedProfile = (shared: Rec, local: Rec, hasShared: boolean, hasLocal: bo
   }
   const sharedTracker = asTable(Object.hasOwn(shared, "tracker") ? shared.tracker : {}, "tracker");
   const localTracker = asTable(Object.hasOwn(local, "tracker") ? local.tracker : {}, "tracker");
-  if (Object.hasOwn(sharedTracker, "binding")) {
-    tracker.binding = sharedTracker.binding;
-    sources["tracker.binding"] = "shared";
+  for (const field of ["binding", "board"]) {
+    if (Object.hasOwn(sharedTracker, field)) {
+      tracker[field] = sharedTracker[field];
+      sources[`tracker.${field}`] = "shared";
+    }
+    if (Object.hasOwn(localTracker, field)) {
+      tracker[field] = localTracker[field];
+      sources[`tracker.${field}`] = "local";
+    }
+    if (!Object.hasOwn(tracker, field)) sources[`tracker.${field}`] = "discovery";
   }
-  if (Object.hasOwn(localTracker, "binding")) {
-    tracker.binding = localTracker.binding;
-    sources["tracker.binding"] = "local";
-  }
-  if (!Object.hasOwn(tracker, "binding")) sources["tracker.binding"] = "discovery";
   const roles = asTable(Object.hasOwn(local, "roles") ? local.roles : {}, "roles");
   out.roles = roles;
   sources.roles = Object.keys(roles).length > 0 ? "local" : "machine";
@@ -1056,8 +1062,8 @@ export const mergeTables = (base: unknown, override: unknown): unknown => {
 };
 
 // The person's file minus its legacy project facts: [project] and [roles] stay facts
-// for inspect, and tracker.binding stays the project's binding, so none of them merge
-// into the config. A tracker table left empty by the binding's removal goes too,
+// for inspect, and tracker.binding and tracker.board stay the project's tracker facts, so
+// none of them merge into the config. A tracker table left empty by their removal goes too,
 // so what remains is exactly the file's real machine settings.
 const stripLegacy = (local: Rec): Rec => {
   const out: Rec = { ...local };
@@ -1066,6 +1072,7 @@ const stripLegacy = (local: Rec): Rec => {
   if (isRec(out.tracker)) {
     const tracker: Rec = { ...(out.tracker as Rec) };
     delete tracker.binding;
+    delete tracker.board;
     if (Object.keys(tracker).length === 0) delete out.tracker;
     else out.tracker = tracker;
   }

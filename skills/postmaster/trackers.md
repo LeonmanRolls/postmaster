@@ -76,6 +76,14 @@ An optional `.postmaster/project.toml` `[tracker].binding` selects the exact tit
 Projects board. Without it, the adapter keeps its discovered board choice. The shared binding is
 a board name; its owner and the user's GitHub login are machine-side.
 
+A project can track its issues alone, with no board: `[tracker] board = "off"` in the shared
+`.postmaster/project.toml` or the person's `.postmaster/settings.toml`, the person's file
+winning. The adapter then asks GitHub nothing about boards, so `gh` needs no `project` scope.
+In progress is a label named `in-progress`, the way `blocked` is; `done` and `cancelled` close
+the issue as they do with a board. `board` says the project tracks its issues alone and exits 0,
+`board init` is refused, and `create` puts the issue on no board. With the setting left out or
+`"on"`, everything below about the board holds.
+
 ```sh
 <tool>/scripts/run github <repo> board                        # the linked board and its URL; exit 3 if none
 <tool>/scripts/run github <repo> board init                   # create a board named after the repo and link it
@@ -94,8 +102,8 @@ a board name; its owner and the user's GitHub login are machine-side.
 ```
 
 - **Board:** one per target repo, found through the repo's project links. A repo with no
-  board is exit 3 from every command; `board init` creates one, named after the repo, and
-  links it. Propose that to the user before running it, and give them the URL after: a
+  board is exit 3 from `board`, `create`, `read`, `edit`, `state` and `list`, unless the board is
+  off; `board init` creates one, named after the repo, and links it. Propose that to the user before running it, and give them the URL after: a
   board made from the CLI opens in table layout, and the switch to the board layout is one
   click on the page.
 - **Read:** `read`, which prints the issue with its state worked out from the issue and
@@ -110,7 +118,8 @@ a board name; its owner and the user's GitHub login are machine-side.
   file, and a number that is not an issue.
 - **Set state:** `state`. `todo` and `in-progress` move the card and reopen a closed issue;
   `blocked` adds the label; `done` closes the issue and moves the card to Done; `cancelled`
-  closes it as not planned.
+  closes it as not planned. With the board off, `in-progress` adds its label instead of moving
+  a card, and `todo`, `done` and `cancelled` take it away.
 - **Labels:** `label`, which adds or removes a label without changing the issue's state. The
   booking clerk uses `ready` to record the user's sign-off. `has-label` answers whether the
   issue carries a label, by exact name.

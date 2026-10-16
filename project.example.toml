@@ -8,7 +8,8 @@
 #
 # [project] describes project-owned facts that discovery cannot know: what `default` means in a
 # ticket and the risk surfaces the security lens should probe. `[tracker].binding` names the
-# project's board, workspace or team; service hosts, account details and credentials stay in the
+# project's board, workspace or team, and on GitHub `[tracker].board = "off"` tracks the project's
+# issues alone, with no Projects board; service hosts, account details and credentials stay in the
 # machine config. These are requirements and shared facts, not a team's role assignment.
 # Risk surfaces are prose: they may name a path or a secret's name, since that is what the
 # security lens must probe. Every other value here is a name and may not be a path.
@@ -44,6 +45,7 @@
 #
 # [tracker]
 # binding = "the board, workspace or team name"
+# board = "off"   # github only: the issues alone, with no Projects board; "on" when left out
 #
 # A check is a table named for it, in a lowercase word. It has either
 #   command    a shell command, run from the root of the worktree under test with bash -e -o

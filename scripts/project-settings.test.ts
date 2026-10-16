@@ -812,6 +812,49 @@ describe("project overrides", () => {
   }, 30000);
 });
 
+describe("the tracker board setting", () => {
+  test("tracker.board stays a project fact, and the person's file overrides the shared one", () => {
+    const r = at("board-fact");
+    write(join(r, ".postmaster", "project.toml"), '[tracker]\nboard = "off"\n');
+    const shared = inspect(r);
+    expect((shared.tracker as Rec).board).toBe("off");
+    expect((shared.sources as Rec)["tracker.board"]).toBe("shared");
+    write(join(r, ".postmaster", "settings.toml"), '[tracker]\nkind = "github"\nboard = "on"\n');
+    const local = inspect(r);
+    expect((local.tracker as Rec).board).toBe("on");
+    expect((local.sources as Rec)["tracker.board"]).toBe("local");
+    const merged = effectiveConfig(r, loadMachine(machine));
+    expect((merged.tracker as Rec).kind).toBe("github");
+    expect(Object.hasOwn(merged.tracker as Rec, "board")).toBe(false);
+  });
+
+  test("with neither file naming the board, it is left to discovery", () => {
+    const r = at("board-unset");
+    mkdirSync(r, { recursive: true });
+    const facts = inspect(r);
+    expect(Object.hasOwn(facts.tracker as Rec, "board")).toBe(false);
+    expect((facts.sources as Rec)["tracker.board"]).toBe("discovery");
+  });
+
+  test("a board setting other than on or off is refused in either file, naming it", () => {
+    for (const [file, label] of [
+      ["project.toml", "shared"],
+      ["settings.toml", "local"],
+    ] as const) {
+      const r = at(`board-bad-${label}`);
+      write(join(r, ".postmaster", file), "[tracker]\nboard = false\n");
+      let message = "";
+      try {
+        inspect(r);
+      } catch (e) {
+        if (isDie(e)) message = e.message;
+        else throw e;
+      }
+      expect(message).toBe(`${label} project settings.tracker.board must be "on" or "off"`);
+    }
+  });
+});
+
 describe("tracked files", () => {
   const id = ["-c", "user.name=t", "-c", "user.email=t@example.invalid"];
 

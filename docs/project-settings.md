@@ -11,7 +11,8 @@ against looks exactly like one that has.
 
 What a project may declare to everyone who works on it is one file, `.postmaster/project.toml`,
 committed on purpose with `git add -f`: the checks that show a change works, the default
-turnpikes, the tracker binding by name, and the risk surfaces. It names no credential, no
+turnpikes, the tracker binding by name, whether a GitHub project keeps a board, and the risk
+surfaces. It names no credential, no
 filesystem path, no machine name and no role assignment. This person's choices for the
 project are in `.postmaster/settings.toml`, written like the global config: they override it
 setting by setting, models and env files included. Share it by committing it; a tracked
