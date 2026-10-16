@@ -21,7 +21,7 @@
 // snapshot is --snapshot when given, else the target of the round's last
 // gate line opening `review round <k>`; the 268r8 and 335r6 stops have no
 // such line, so old records pass it explicitly. The timeout is
-// review.round_timeout_seconds from run.json, 2400 when absent, as
+// review.round_timeout_seconds from run.json, 3600 when absent, as
 // review-round reads it.
 //
 //   exit 0  surveyed and answered; the escalation or question rendered, its path printed
@@ -51,7 +51,7 @@ const HERE = scriptsDir(import.meta);
 const USAGE =
   "usage: run review-survey survey <dispatch> <repo> <round> [--snapshot <sha>] | escalate <dispatch> <round> --decision <line> --coachman <file> | question <dispatch>";
 const QUESTION_FILE = join(HERE, "..", "skills", "postmaster", "review-rise-question.md");
-const DEFAULT_TIMEOUT = 2400;
+const DEFAULT_TIMEOUT = 3600;
 
 export const PARTS = [
   "What the findings share",

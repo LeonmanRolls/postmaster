@@ -51,9 +51,11 @@ either design, so neither the time saved nor the coverage gained is measured yet
   added only if runs show one is needed. Each lane also runs three reviews at once on one
   account, so it can reach a usage limit sooner. A lane that does is DEGRADED for the round, as
   any walled lane is. So is a reviewer still running at the round's time limit, which is
-  stopped. The limit is a config value, `review.round_timeout_seconds`. Its default, 2400
-  seconds, is the limit a round had when it ran one lens. The `degrade` lines whose cause is
-  `timeout` will show whether round 1 needs more.
+  stopped. The limit is a config value, `review.round_timeout_seconds`, set in a project's
+  settings.toml or the global config; a run keeps the value recorded in its run.json at
+  dispatch. Its default is 3600 seconds, because a reviewer's own code review of a large change
+  runs ten finder agents in parallel and spends most of an hour on them before it verifies
+  anything. The `degrade` lines whose cause is `timeout` show when a round needs still more.
 - **Context.** One leg now carries all three lenses' findings, and no cap bounds its rounds: a
   rise stops it for a ruling instead. If
   a leg's context still runs out, the leg would be split at a round boundary, never by lens,
