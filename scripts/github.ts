@@ -3,11 +3,16 @@
 // column, which every new board has as Todo, In Progress and Done, carries the flow's state,
 // and closing an issue is done. GitHub has no blocked column by default, so blocked is a label
 // named `blocked`, added without moving the card and removed by the next state change.
+// A project whose settings turn the board off (`[tracker] board = "off"`) tracks its issues
+// alone: in progress is then a label named `in-progress`, the way blocked is, and nothing here
+// asks GitHub about a board.
 //
-//   run github <repo> board                         the linked board; exit 3 when there is none
+//   run github <repo> board                         the linked board; exit 3 when there is none;
+//                                                  with the board off, says so and exits 0
 //   run github <repo> board init [title]            create a board named after the repo and
-//                                                  link it; idempotent
-//   run github <repo> create <title> <body-file>    new issue on the board in Todo; prints its number
+//                                                  link it; idempotent; refused with the board off
+//   run github <repo> create <title> <body-file>    new issue, on the board in Todo unless the board
+//                                                  is off; prints its number
 //                                                  (exit 5: created, but not put on the board)
 //   run github <repo> read <n> [--body]             title, state, labels, body, comments; with
 //                                                  read --body prints the stored body followed by one newline
@@ -27,8 +32,8 @@
 //                                                  colon or a quote in the text counts as a space)
 //
 // <repo> is a local checkout; the GitHub repository is read from its origin remote. Everything
-// goes through the gh CLI, which must be logged in with the `project` scope
-// (`gh auth refresh -s project`); scripts/run probe-trackers says whether it is.
+// goes through the gh CLI, which must be logged in, with the `project` scope unless the board is
+// off (`gh auth refresh -s project`); scripts/run probe-trackers says whether it is.
 //
 // Cost: GitHub gives all tools and agents together 5,000 GraphQL points an hour, and listing a
 // board of about 200 items costs about 300 of them. So a ticket's column is read from the issue's
@@ -43,7 +48,7 @@
 //   exit 1  usage, gh missing or not logged in, no origin remote, unknown issue (a pull request
 //           is not one), a body file that cannot be read or is empty, or gh failed
 //   exit 2  invalid state
-//   exit 3  the repo has no linked board (run: run github <repo> board init)
+//   exit 3  the repo has no linked board, and the board is not off (run: run github <repo> board init)
 //   exit 4  the issue changed since the base was read
 //   exit 5  create made the issue, and printed its number, but could not put it on the board
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -61,6 +66,7 @@ const COLUMN: Record<string, string> = {
   cancelled: "done",
 };
 const BLOCKED = "blocked";
+const IN_PROGRESS = "in-progress";
 const READY = "ready";
 
 class DieError extends Error {
@@ -203,14 +209,26 @@ function linkedBoards(owner: string, name: string): Board[] {
 
 let REPO_DIR = "";
 
-function trackerBinding(): string | null {
+// The project's tracker facts from its settings, read once: the board's name, and whether the
+// project has a board at all.
+interface TrackerFacts {
+  binding: string | null;
+  boardOn: boolean;
+}
+let FACTS: TrackerFacts | null = null;
+
+function trackerFacts(): TrackerFacts {
+  if (FACTS !== null) return FACTS;
   const r = run(join(scriptsDir(import.meta), "run"), ["project-settings", "inspect", REPO_DIR]);
-  if (r.code !== 0) dieGh(r.err.trim() || "cannot read the project's tracker binding");
+  if (r.code !== 0) dieGh(r.err.trim() || "cannot read the project's tracker settings");
+  let tracker: { binding?: string; board?: string } | undefined;
   try {
-    return JSON.parse(r.out).tracker?.binding ?? null;
+    tracker = JSON.parse(r.out).tracker;
   } catch (e) {
     dieGh(`project settings gave no JSON: ${e instanceof Error ? e.message : String(e)}`);
   }
+  FACTS = { binding: tracker?.binding ?? null, boardOn: tracker?.board !== "off" };
+  return FACTS;
 }
 
 function boardOf(nwo: string, owner: string, name: string): Board {
@@ -218,7 +236,7 @@ function boardOf(nwo: string, owner: string, name: string): Board {
   if (boards.length === 0) {
     dieGh(`${nwo} has no linked board; run: run github <repo> board init`, 3);
   }
-  const binding = trackerBinding();
+  const binding = trackerFacts().binding;
   const named = boards.filter((b) => b.title === (binding || name));
   if (binding) {
     if (named.length === 0)
@@ -328,12 +346,14 @@ function setColumn(b: Board, url: string, flow: string, item: { id: string } | n
 }
 
 // --- issues -----------------------------------------------------------------------------------
-function issueOf(owner: string, name: string, nwo: string, number: number): Issue {
+// The issue, with its board items only when the caller needs its column: a query that names a
+// board field needs gh's project scope.
+function issueOf(owner: string, name: string, nwo: string, number: number, items: boolean): Issue {
   const q =
     "query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){" +
     "issue(number:$number){number title body state stateReason url createdAt " +
     "labels(first:50){nodes{name}} comments(first:100){nodes{body createdAt author{login}}} " +
-    `${ITEMS_QUERY}}}}`;
+    `${items ? ITEMS_QUERY : ""}}}}`;
   let data: IssueData;
   try {
     data = ghj<IssueData>([
@@ -361,12 +381,12 @@ function issueOf(owner: string, name: string, nwo: string, number: number): Issu
   return shaped;
 }
 
-function allIssues(owner: string, name: string): ListItem[] {
+function allIssues(owner: string, name: string, items: boolean): ListItem[] {
   const q =
     "query($owner:String!,$name:String!,$after:String){repository(owner:$owner,name:$name){" +
     "issues(first:100,after:$after,states:[OPEN,CLOSED],orderBy:{field:CREATED_AT,direction:ASC}){" +
     "pageInfo{hasNextPage endCursor} nodes{number title state stateReason labels(first:50){nodes{name}} " +
-    `${ITEMS_QUERY}}}}}`;
+    `${items ? ITEMS_QUERY : ""}}}}}`;
   const out: ListItem[] = [];
   let after: string | null = null;
   for (;;) {
@@ -397,17 +417,26 @@ function allIssues(owner: string, name: string): ListItem[] {
   }
 }
 
+function hasLabel(labels: IssueLabel[] | undefined, name: string): boolean {
+  return (labels ?? []).some((l) => pyLower(l.name ?? "") === name);
+}
+
+// The flow's state: closing decides done and cancelled, the blocked label blocked, and in progress
+// comes from the board's column, or from its label when the project has no board.
 function flowState(
   iss: { state: string; stateReason?: string | null; labels?: IssueLabel[] },
   status: string | undefined,
+  boardOn: boolean,
 ): string {
   if (iss.state === "CLOSED") return iss.stateReason === "NOT_PLANNED" ? "cancelled" : "done";
-  if ((iss.labels ?? []).some((l) => pyLower(l.name ?? "") === BLOCKED)) return "blocked";
+  if (hasLabel(iss.labels, BLOCKED)) return "blocked";
+  if (!boardOn) return hasLabel(iss.labels, IN_PROGRESS) ? "in-progress" : "todo";
   return pyLower((status ?? "").replace(NONWORD_RE, "")) === "inprogress" ? "in-progress" : "todo";
 }
 
 const LABEL_COLORS: Record<string, [string, string]> = {
   [BLOCKED]: ["B60205", "Waiting on something outside the run"],
+  [IN_PROGRESS]: ["FBCA04", "Being worked on"],
   [READY]: ["0E8A16", "Signed off by the user, ready to run"],
 };
 
@@ -524,20 +553,36 @@ function main(): void {
 
   if (cmd === "board") {
     if (args.length === 1) {
+      if (!trackerFacts().boardOn) {
+        console.log("no board: this project tracks its issues alone");
+        return;
+      }
       const b = boardOf(NWO, OWNER, NAME);
       console.log(`#${b.number}\t${b.title}\t${b.url}`);
     } else if (args[1] === "init" && (args.length === 2 || args.length === 3)) {
-      boardInit(OWNER, NAME, NWO, args.length === 3 ? (args[2] ?? NAME) : trackerBinding() || NAME);
+      if (!trackerFacts().boardOn) {
+        dieGh(
+          'the project\'s settings turn the board off ([tracker] board = "off"); turn it on to make one',
+        );
+      }
+      boardInit(
+        OWNER,
+        NAME,
+        NWO,
+        args.length === 3 ? (args[2] ?? NAME) : trackerFacts().binding || NAME,
+      );
     } else {
       dieGh("usage: run github <repo> board [init [title]]");
     }
   } else if (cmd === "create") {
     if (args.length !== 3) dieGh("usage: run github <repo> create <title> <body-file>");
     bodyFile(args[2] ?? "");
-    const b = boardOf(NWO, OWNER, NAME);
-    const [, opts] = statusField(b);
-    if (!("todo" in opts)) {
-      dieGh(`board #${b.number} has no Status column for todo; nothing was created`);
+    const b = trackerFacts().boardOn ? boardOf(NWO, OWNER, NAME) : null;
+    if (b !== null) {
+      const [, opts] = statusField(b);
+      if (!("todo" in opts)) {
+        dieGh(`board #${b.number} has no Status column for todo; nothing was created`);
+      }
     }
     const createOut = gh([
       "issue",
@@ -551,15 +596,17 @@ function main(): void {
     ]);
     const url = createOut.trim().split("\n").pop() ?? "";
     const number = parseInt(url.replace(/\/$/u, "").split("/").pop() ?? "0", 10);
-    try {
-      setColumn(b, url, "todo", null);
-    } catch (e) {
-      if (e instanceof DieError) {
-        console.log(String(number));
-        process.stderr.write(`github: #${number} was created, but is not on the board\n`);
-        process.exit(5);
+    if (b !== null) {
+      try {
+        setColumn(b, url, "todo", null);
+      } catch (e) {
+        if (e instanceof DieError) {
+          console.log(String(number));
+          process.stderr.write(`github: #${number} was created, but is not on the board\n`);
+          process.exit(5);
+        }
+        throw e;
       }
-      throw e;
     }
     console.log(String(number));
   } else if (cmd === "edit") {
@@ -572,8 +619,8 @@ function main(): void {
     const n = numberArg(args[1] ?? "");
     bodyFile(args[2] ?? "");
     const base = textOf(args[3] ?? "", "base file");
-    boardOf(NWO, OWNER, NAME);
-    const iss = issueOf(OWNER, NAME, NWO, n);
+    if (trackerFacts().boardOn) boardOf(NWO, OWNER, NAME);
+    const iss = issueOf(OWNER, NAME, NWO, n, false);
     if (normal(iss.body ?? "") !== normal(base)) {
       dieGh(`#${n} changed since ${args[3]} was read; read it again`, 4);
     }
@@ -583,7 +630,7 @@ function main(): void {
     if (args.length !== 3) dieGh("usage: run github <repo> title <n> <title>");
     const n = numberArg(args[1] ?? "");
     const title = args[2] ?? "";
-    issueOf(OWNER, NAME, NWO, n);
+    issueOf(OWNER, NAME, NWO, n, false);
     gh(["issue", "edit", String(n), "-R", NWO, "--title", title]);
     console.log(`#${n}: title changed`);
   } else if (cmd === "label") {
@@ -592,14 +639,14 @@ function main(): void {
     const n = numberArg(args[1] ?? "");
     const verb = args[2] as "add" | "remove";
     const name = args[3] ?? "";
-    issueOf(OWNER, NAME, NWO, n);
+    issueOf(OWNER, NAME, NWO, n, false);
     setLabel(NWO, n, verb === "add", name);
     console.log(`#${n}: label ${verb === "add" ? "added" : "removed"} ${name}`);
   } else if (cmd === "has-label") {
     if (args.length !== 3) dieGh("usage: run github <repo> has-label <n> <label>");
     const n = numberArg(args[1] ?? "");
     const name = args[2] ?? "";
-    const iss = issueOf(OWNER, NAME, NWO, n);
+    const iss = issueOf(OWNER, NAME, NWO, n, false);
     // Exact membership: a label name may itself hold commas, so the
     // comma-joined `labels:` line is display-only and never parsed back.
     console.log(
@@ -611,15 +658,17 @@ function main(): void {
     const bodyOnly = args.slice(2).length === 1 && args[2] === "--body";
     if (args.length !== 2 && !bodyOnly) dieGh("usage: run github <repo> read <n> [--body]");
     const n = numberArg(args[1] ?? "");
-    const iss = issueOf(OWNER, NAME, NWO, n);
-    const b = boardOf(NWO, OWNER, NAME);
+    const on = trackerFacts().boardOn;
+    const iss = issueOf(OWNER, NAME, NWO, n, on);
+    const b = on ? boardOf(NWO, OWNER, NAME) : null;
     if (bodyOnly) {
       process.stdout.write(`${iss.body ?? ""}\n`);
       return;
     }
+    const status = b === null ? undefined : (boardItem(iss.items, b)?.status ?? undefined);
     console.log(`id: #${n}`);
     console.log(`title: ${iss.title ?? ""}`);
-    console.log(`state: ${flowState(iss, boardItem(iss.items, b)?.status ?? undefined)}`);
+    console.log(`state: ${flowState(iss, status, on)}`);
     console.log(`labels: ${(iss.labels ?? []).map((l) => l.name).join(", ")}`);
     console.log(`created: ${String(iss.createdAt ?? "").slice(0, 10)}`);
     console.log(`url: ${iss.url ?? ""}`);
@@ -646,9 +695,10 @@ function main(): void {
     if (!STATES.includes(newSt)) {
       dieGh(`invalid state ${newSt} (one of: ${STATES.join(", ")})`, 2);
     }
-    const b = boardOf(NWO, OWNER, NAME);
-    const iss = issueOf(OWNER, NAME, NWO, n);
-    const blockedNow = (iss.labels ?? []).some((l) => pyLower(l.name ?? "") === BLOCKED);
+    const on = trackerFacts().boardOn;
+    const b = on ? boardOf(NWO, OWNER, NAME) : null;
+    const iss = issueOf(OWNER, NAME, NWO, n, on);
+    const blockedNow = hasLabel(iss.labels, BLOCKED);
     const closed = iss.state === "CLOSED";
     if (newSt === "blocked") {
       if (closed) gh(["issue", "reopen", String(n), "-R", NWO]);
@@ -663,7 +713,11 @@ function main(): void {
         if (closed) gh(["issue", "reopen", String(n), "-R", NWO]);
         gh(["issue", "close", String(n), "-R", NWO, "--reason", "not planned"]);
       }
-      setColumn(b, iss.url, newSt, boardItem(iss.items, b));
+      if (b !== null) {
+        setColumn(b, iss.url, newSt, boardItem(iss.items, b));
+      } else if ((newSt === "in-progress") !== hasLabel(iss.labels, IN_PROGRESS)) {
+        setLabel(NWO, n, newSt === "in-progress", IN_PROGRESS);
+      }
     }
     console.log(`#${n}: ${newSt}`);
   } else if (cmd === "comment") {
@@ -682,9 +736,12 @@ function main(): void {
     if (want && !STATES.includes(want)) {
       dieGh(`invalid state ${want} (one of: ${STATES.join(", ")})`, 2);
     }
-    const board = boardOf(NWO, OWNER, NAME);
-    for (const iss of [...allIssues(OWNER, NAME)].sort((a, b) => a.number - b.number)) {
-      const st = flowState(iss, boardItem(iss.items, board)?.status ?? undefined);
+    const on = trackerFacts().boardOn;
+    const board = on ? boardOf(NWO, OWNER, NAME) : null;
+    for (const iss of [...allIssues(OWNER, NAME, on)].sort((a, b) => a.number - b.number)) {
+      const status =
+        board === null ? undefined : (boardItem(iss.items, board)?.status ?? undefined);
+      const st = flowState(iss, status, on);
       if (want === null || st === want) {
         console.log(`#${iss.number}\t${st}\t${iss.title ?? ""}`);
       }
