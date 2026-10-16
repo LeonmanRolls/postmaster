@@ -8,6 +8,24 @@ updated: 2026-10-15
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
 
+## [2026-10-15] update | the clerk plans from menus of the whole API
+
+At the user's request, after a second clerk, started with the first ticket's references closed, again passed over
+settings that sat beside the ones it used. Added `scripts/run api-index` (a package's declared API, its family's
+packages included) and `scripts/run code-index` (the project's own exports): each saves a menu of the entries nearest
+the draft's words and a map of every name, under a key of the draft's words. `ticket-capabilities --candidates` refuses
+a menu made from an older draft and a custom part with no `Searched:` line. The user's ruling: the clerk must know
+every function available while it plans, and the ticket lists none of them. The clerk runbook and the template carry
+the step. The menu of the libraries is made for every library the project declares (`api-index --all`): a directory
+with the names near the draft, every function and method, and a file for each library's own menu. Standing unchanged:
+`claimed`, with no record behind it.
+
+## [2026-10-15] ingest | capabilities are checked before a ticket picks a design
+
+At the user's request, after a run built a consent mechanism beside the one its analytics SDK already offered and a
+reviewer asked for the rework. Wrote [the page](concepts/capabilities-before-design.md) at standing `claimed`, with no
+record behind it, and changed the clerk runbook and the ticket template to carry the check. No standing changed.
+
 ## [2026-10-15] update | the review loop has had no round cap since 9 October
 
 The README's flow links the review-loop page, and that page still said a cap of three rounds ends
