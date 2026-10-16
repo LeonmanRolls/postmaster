@@ -8,6 +8,19 @@ updated: 2026-10-16
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
 
+## [2026-10-16] update | a review round may run 3600 seconds by default
+
+At the user's request: the default limit of a review round rose from 2400 to 3600 seconds, 60
+minutes. Round 1 of a test run on a change of 92 files closed at 2400 seconds with one of its five
+reviewers cut off: the Claude bug lane's `/code-review` at max effort had started ten finder agents
+(1,398 tool calls and 4.7 million tokens between them), four were still reading at 35 minutes, and
+its verification and sweep had not begun. The limit was already a config value,
+`review.round_timeout_seconds`, in a project's settings.toml, the global config and each run's
+run.json; only its default moved: `config.example.toml`, the setup prompt, the survey's fallback
+and the review-loop page. `scripts/review-round.ts`, a coachman contract file, keeps its own 2400
+fallback, reached only when a run's record holds no value; it changes with the next contract
+change. No standing changed.
+
 ## [2026-10-16] update | the clerk settles the architecture at the level of parts, not files
 
 At the user's request: the clerk makes the high-level decisions on code architecture and names no
