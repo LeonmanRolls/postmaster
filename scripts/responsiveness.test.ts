@@ -61,6 +61,49 @@ describe("responsiveness record spellings", () => {
     );
   });
 
+  test("a task delivery beside an unnamed delivery is not a message", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(40), type: "queue-operation" },
+        { operation: "dequeue", timestamp: iso(41), type: "queue-operation" },
+        { operation: "enqueue", timestamp: iso(45), type: "queue-operation" },
+        { operation: "remove", timestamp: iso(46), type: "queue-operation" },
+        {
+          attachment: { origin: { kind: "task-notification" }, type: "queued_command" },
+          timestamp: iso(45),
+          type: "attachment",
+        },
+        { subtype: "turn_duration", timestamp: iso(60), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.code).toBe(0);
+        expect(r.out).toContain("messages: 0");
+      },
+    );
+  });
+
+  test("a queued user row names its pending delivery", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        { operation: "remove", timestamp: iso(10), type: "queue-operation" },
+        {
+          origin: { kind: "human" },
+          promptSource: "queued",
+          timestamp: iso(10),
+          type: "user",
+        },
+        { subtype: "turn_duration", timestamp: iso(70), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.code).toBe(0);
+        expect(r.out).toContain("message 1: seen: 10 s; answer: 60 s");
+      },
+    );
+  });
+
   test("an unknown harness is unsupported in one line", () => {
     withRecord([], (path) => {
       const r = run(RUN, ["responsiveness", path, "--harness", "nope"]);

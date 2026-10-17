@@ -664,7 +664,7 @@ itself (`<tool>/scripts/acceptance-167.test.ts`, `<tool>/scripts/responsiveness.
 
 | harness | where its record lives | lines it reads | result |
 |---|---|---|---|
-| claude | `CLAUDE_CONFIG_DIR` or `~/.claude`, under `projects/<working directory, each / as ->/<session id>.jsonl` | `queue-operation` `enqueue` then `remove` or `dequeue`, `attachment` `queued_command` with `origin.kind` `human`, `user` with `origin.kind` `human` and `promptSource` `typed`, `system` `turn_duration`, `system` `compact_boundary` | seen wait, answer wait, compactions |
+| claude | `CLAUDE_CONFIG_DIR` or `~/.claude`, under `projects/`, then the working directory with each non-alphanumeric character replaced by `-`, then `/<session id>.jsonl` | `queue-operation` `enqueue` then `remove` or `dequeue`, `attachment` `queued_command` with `origin.kind` `human`, `user` with `origin.kind` `human` and `promptSource` `typed` or `queued`, `system` `turn_duration`, `system` `compact_boundary` | seen wait, answer wait, compactions |
 | codex | its session store; this report does not read it | none | unsupported, one line, non-zero exit |
 | grok | its session store; this report does not read it | none | unsupported, one line, non-zero exit |
 | agy | its session store; this report does not read it | none | unsupported, one line, non-zero exit |
@@ -675,8 +675,10 @@ itself (`<tool>/scripts/acceptance-167.test.ts`, `<tool>/scripts/responsiveness.
 The claude lines are not documented by the vendor; they were read from records written by
 Claude Code 2.1.275 to 2.1.301. A queued message's seen wait runs from `enqueue` to its
 delivery, a message typed while the session is idle has no seen wait, the answer wait runs
-from delivery or the typed line to the next `turn_duration`, and a `queued_command` whose
-origin kind is `task-notification` is not a user message.
+from delivery or the typed line to the next `turn_duration`, a `queued_command` whose
+origin kind is `task-notification` is not a user message, and a delivery nothing named
+human is not counted as one either. A queued message can also arrive as a `user` line
+with `promptSource` `queued`, which names the delivery still waiting for its kind.
 
 ## The pane view
 

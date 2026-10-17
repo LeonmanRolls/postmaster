@@ -58,6 +58,64 @@ describe("findNativeRecord", () => {
 });
 
 describe("findNewestPostmasterRecord", () => {
+  test("a record renamed away from postmaster is not selected, and one renamed to it is", () => {
+    withTemp((dir) => {
+      const config = join(dir, "claude");
+      const repo = join(dir, "app");
+      const folder = join(config, "projects", repo.replaceAll("/", "-"));
+      write(
+        join(folder, "renamed-away.jsonl"),
+        `${JSON.stringify({ customTitle: "postmaster", type: "custom-title" })}\n${JSON.stringify({ customTitle: "booking clerk", type: "custom-title" })}\n`,
+        2000,
+      );
+      write(
+        join(folder, "renamed-to.jsonl"),
+        `${JSON.stringify({ customTitle: "booking clerk", type: "custom-title" })}\n${JSON.stringify({ customTitle: "postmaster", type: "custom-title" })}\n`,
+        1000,
+      );
+      expect(findNewestPostmasterRecord(repo, { CLAUDE_CONFIG_DIR: config })).toBe(
+        join(folder, "renamed-to.jsonl"),
+      );
+    });
+  });
+
+  test("the newest of two postmaster-titled records wins", () => {
+    withTemp((dir) => {
+      const config = join(dir, "claude");
+      const repo = join(dir, "app");
+      const folder = join(config, "projects", repo.replaceAll("/", "-"));
+      write(
+        join(folder, "old.jsonl"),
+        `${JSON.stringify({ customTitle: "postmaster", type: "custom-title" })}\n`,
+        1000,
+      );
+      write(
+        join(folder, "new.jsonl"),
+        `${JSON.stringify({ customTitle: "postmaster", type: "custom-title" })}\n`,
+        2000,
+      );
+      expect(findNewestPostmasterRecord(repo, { CLAUDE_CONFIG_DIR: config })).toBe(
+        join(folder, "new.jsonl"),
+      );
+    });
+  });
+
+  test("a repo path with a dot resolves to its dashed project folder", () => {
+    withTemp((dir) => {
+      const config = join(dir, "claude");
+      const repo = join(dir, "my.app");
+      const folder = join(config, "projects", repo.replace(/[^A-Za-z0-9]/gu, "-"));
+      write(
+        join(folder, "s.jsonl"),
+        `${JSON.stringify({ customTitle: "postmaster", type: "custom-title" })}\n`,
+        1000,
+      );
+      expect(findNewestPostmasterRecord(repo, { CLAUDE_CONFIG_DIR: config })).toBe(
+        join(folder, "s.jsonl"),
+      );
+    });
+  });
+
   test("the newest postmaster-titled record wins over a newer clerk record", () => {
     withTemp((dir) => {
       const config = join(dir, "claude");

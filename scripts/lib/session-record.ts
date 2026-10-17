@@ -65,7 +65,7 @@ export const sessionStoreRoot = (
 export const claudeProjectsRoot = (env: SessionRecordEnv = process.env): string =>
   join(env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"), "projects");
 
-export const encodeProjectFolder = (cwd: string): string => cwd.replaceAll("/", "-");
+export const encodeProjectFolder = (cwd: string): string => cwd.replace(/[^A-Za-z0-9]/gu, "-");
 
 export const claudeProjectFolder = (repo: string, env: SessionRecordEnv = process.env): string =>
   join(claudeProjectsRoot(env), encodeProjectFolder(repo));
@@ -102,13 +102,17 @@ export const findNativeRecord = (
   return withMtime[0]!.path;
 };
 
-const readCustomTitle = (path: string): string | null => {
+const readCustomTitle = (path: string, onWarn?: (message: string) => void): string | null => {
   let content: string;
   try {
     content = readFileSync(path, "utf8");
   } catch {
+    onWarn?.(`cannot read session record ${path}; skipping it`);
     return null;
   }
+  // The record is an append-only log: a rename appends a new title, so the
+  // last custom-title line is the session's current name.
+  let title: string | null = null;
   for (const line of content.split("\n")) {
     if (!line.trim()) continue;
     try {
@@ -120,13 +124,13 @@ const readCustomTitle = (path: string): string | null => {
         (row as Record<string, unknown>).type === "custom-title" &&
         typeof (row as Record<string, unknown>).customTitle === "string"
       ) {
-        return (row as Record<string, unknown>).customTitle as string;
+        title = (row as Record<string, unknown>).customTitle as string;
       }
     } catch {
       // A line that is not JSON carries no title.
     }
   }
-  return null;
+  return title;
 };
 
 const POSTMASTER_WORD = new RegExp(`${BOUND_L}postmaster${BOUND_R}`, "iu");
@@ -135,6 +139,7 @@ const namesPostmaster = (title: string): boolean => POSTMASTER_WORD.test(title);
 export const findNewestPostmasterRecord = (
   repo: string,
   env: SessionRecordEnv = process.env,
+  onWarn?: (message: string) => void,
 ): string => {
   const folder = claudeProjectFolder(repo, env);
   if (!isDir(folder)) throw new Error(`no Claude Code project folder for ${repo}`);
@@ -155,7 +160,7 @@ export const findNewestPostmasterRecord = (
       }
     })
     .flatMap((path) => {
-      const title = readCustomTitle(path);
+      const title = readCustomTitle(path, onWarn);
       return title !== null && namesPostmaster(title) ? [path] : [];
     });
   if (candidates.length === 0) {

@@ -16,7 +16,8 @@
 //
 //   exit 0  the report was printed
 //   exit 1  an unsupported harness, no record found, or an unreadable record
-import { lstatSync, readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
+import { resolve } from "node:path";
 import { findNativeRecord, findNewestPostmasterRecord } from "./lib/session-record.ts";
 
 type Row = Record<string, unknown>;
@@ -78,11 +79,22 @@ const jsonRows = (content: string): Row[] => {
 // each compaction is a system line of subtype compact_boundary. The wait
 // before a message was seen runs from enqueue to its delivery; the wait for
 // its answer runs from delivery to the next turn_duration.
+type Queued = {
+  deliveredMs: number | null;
+  enqueueMs: number;
+  kind: unknown;
+  reported: boolean;
+};
+
 export const readClaude = (rows: Row[]): ResponsivenessReport => {
   const messages: MessageWait[] = [];
   let compactions = 0;
-  const pendingEnqueues: number[] = [];
-  const pendingDeliveries: { enqueueMs: number; deliveredMs: number }[] = [];
+  // One entry per enqueue, in record order. Deliveries take enqueues in
+  // order, and an attachment names the kind of the enqueue stamped nearest
+  // its own time (an attachment carries its enqueue's timestamp, and can
+  // sit in the record after that enqueue's delivery), so kind and delivery
+  // are paired with the enqueue they belong to, never with each other.
+  const queued: Queued[] = [];
   let unanswered: MessageWait[] = [];
 
   const deliver = (enqueueMs: number | null, deliveredMs: number): void => {
@@ -95,45 +107,68 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
     unanswered.push(message);
   };
 
+  const report = (entry: Queued): void => {
+    if (entry.reported || entry.deliveredMs === null) return;
+    entry.reported = true;
+    deliver(entry.enqueueMs, entry.deliveredMs);
+  };
+
   for (const row of rows) {
     const ts = timestampMs(row);
     if (row.type === "queue-operation" && ts !== null) {
       if (row.operation === "enqueue") {
-        pendingEnqueues.push(ts);
+        queued.push({ deliveredMs: null, enqueueMs: ts, kind: null, reported: false });
       } else if (row.operation === "remove" || row.operation === "dequeue") {
-        const enqueueMs = pendingEnqueues.shift();
-        if (enqueueMs !== undefined) pendingDeliveries.push({ deliveredMs: ts, enqueueMs });
+        const entry = queued.find((q) => q.deliveredMs === null);
+        if (entry) entry.deliveredMs = ts;
       }
       continue;
     }
     if (row.type === "attachment" && at(row, "attachment", "type") === "queued_command") {
       const kind = at(row, "attachment", "origin", "kind");
-      if (kind === "human") {
-        const delivery = pendingDeliveries.shift();
-        if (delivery) deliver(delivery.enqueueMs, delivery.deliveredMs);
-        else if (ts !== null) deliver(null, ts);
-      } else {
-        pendingDeliveries.shift();
+      if (ts !== null) {
+        let nearest: Queued | undefined;
+        for (const entry of queued) {
+          if (entry.kind !== null) continue;
+          if (!nearest || Math.abs(ts - entry.enqueueMs) < Math.abs(ts - nearest.enqueueMs)) {
+            nearest = entry;
+          }
+        }
+        if (nearest) {
+          nearest.kind = kind;
+          if (kind === "human") report(nearest);
+          continue;
+        }
       }
+      // No enqueue to name: a human attachment is still a user message,
+      // timed from the earliest moment the record shows for it.
+      if (kind === "human" && ts !== null) deliver(null, ts);
       continue;
     }
-    if (
-      row.type === "user" &&
-      at(row, "origin", "kind") === "human" &&
-      row.promptSource === "typed" &&
-      ts !== null
-    ) {
-      deliver(null, ts);
-      continue;
+    if (row.type === "user" && at(row, "origin", "kind") === "human" && ts !== null) {
+      if (row.promptSource === "typed") {
+        deliver(null, ts);
+        continue;
+      }
+      if (row.promptSource === "queued") {
+        // The same message in user-row form: report the delivery still
+        // waiting for its kind, or stand alone where there is none.
+        const waiting = queued.find((q) => q.deliveredMs !== null && !q.reported);
+        if (waiting) {
+          waiting.kind = "human";
+          report(waiting);
+        } else deliver(null, ts);
+        continue;
+      }
     }
     if (row.type === "system" && row.subtype === "compact_boundary") {
       compactions++;
       continue;
     }
     if (row.type === "system" && row.subtype === "turn_duration" && ts !== null) {
-      for (const delivery of pendingDeliveries.splice(0)) {
-        deliver(delivery.enqueueMs, delivery.deliveredMs);
-      }
+      // Only a delivery a human attachment or queued user row named is a
+      // user message; a delivery nothing named is not promoted to one.
+      for (const entry of queued) if (entry.kind === "human") report(entry);
       for (const message of unanswered) {
         message.answerWaitMs = Math.max(0, ts - message.deliveredMs);
       }
@@ -181,8 +216,7 @@ export const readResponsiveness = (harness: string, content: string): Responsive
 
 const isRegularFile = (path: string): boolean => {
   try {
-    const stat = lstatSync(path);
-    return stat.isFile() && !stat.isSymbolicLink();
+    return statSync(path).isFile();
   } catch {
     return false;
   }
@@ -201,7 +235,7 @@ const parseCli = (args: string[]): Cli => {
       if (value === undefined) throw new Error(`${arg} needs a value`);
       i++;
       if (arg === "--harness") harness = value;
-      else repo = value;
+      else repo = resolve(value);
     } else if (arg.startsWith("-")) {
       throw new Error(`unknown option: ${arg}`);
     } else if (target === undefined) {
@@ -215,8 +249,11 @@ const parseCli = (args: string[]): Cli => {
 
 const resolveRecord = (cli: Cli): string => {
   if (cli.target !== undefined && isRegularFile(cli.target)) return cli.target;
-  if (cli.target !== undefined) return findNativeRecord("claude", cli.target);
-  return findNewestPostmasterRecord(cli.repo);
+  const warn = (message: string): void => {
+    console.error(`responsiveness: ${message}`);
+  };
+  if (cli.target !== undefined) return findNativeRecord("claude", cli.target, process.env, warn);
+  return findNewestPostmasterRecord(cli.repo, process.env, warn);
 };
 
 const main = (args: string[]): void => {
@@ -232,7 +269,7 @@ const main = (args: string[]): void => {
   try {
     content = readFileSync(recordPath, "utf8");
   } catch {
-    throw new Error(`no such session record: ${recordPath}`);
+    throw new Error(`cannot read session record: ${recordPath}`);
   }
   console.log(formatReport(readResponsiveness(cli.harness, content)));
 };
