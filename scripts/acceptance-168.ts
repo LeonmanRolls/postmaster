@@ -39,7 +39,7 @@ export function watch(
 export function statusNext(root: string, cfg: string, name: string): string {
   const r = run(SELF, ["runs-status", root], { env: envFor(cfg) });
   for (const line of r.out.split("\n")) {
-    const f = line.trim().split(/\s+/u);
+    const f = line.trim().split(/[ \t]+/u);
     if (f[0] === name) return f[f.length - 1] ?? "";
   }
   return "";
