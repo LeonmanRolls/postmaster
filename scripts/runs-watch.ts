@@ -40,7 +40,8 @@
 //             WAIT-DONE. For a pull-request wait the watcher asks
 //             `landing pull-request-checks` at every look: `pending:` leaves
 //             the run waiting, `pass` or a `fail:` line names it WAIT-DONE,
-//             and a second consecutive `none` counts as over (the count is
+//             and a second consecutive `none` at least a minute after the
+//             first counts as over (the count and the first none's time are
 //             kept in watcher.json, seeded by the wait's noneCount). An
 //             answer it cannot read names the run WAIT-FAULT, never over.
 //
@@ -1542,7 +1543,61 @@ function setWaitNoneCount(dispatch: string, key: string, count: number): boolean
   const counts: Record<string, unknown> = isRecord(table) ? table : {};
   counts[key] = count;
   data.wait_none = counts;
+  // A count of 0 starts a new run of nones: its first-none time goes too.
+  if (count === 0 && isRecord(data.wait_none_at)) delete data.wait_none_at[key];
   return writeJsonAtomic(path, data);
+}
+
+/** The persisted time (epoch seconds) of the current run's first none. */
+function waitNoneAt(
+  dispatch: string,
+  key: string,
+): { ok: true; at: number | null } | { ok: false } {
+  const path = join(dispatch, "watcher.json");
+  if (!existsSync(path)) return { ok: true, at: null };
+  let data: unknown;
+  try {
+    data = JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return { ok: false };
+  }
+  if (!isRecord(data)) return { ok: false };
+  const table = data.wait_none_at;
+  if (table === undefined) return { ok: true, at: null };
+  if (!isRecord(table)) return { ok: false };
+  const value = table[key];
+  if (value === undefined) return { ok: true, at: null };
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return { ok: false };
+  return { ok: true, at: value };
+}
+
+function setWaitNoneAt(dispatch: string, key: string, at: number): boolean {
+  const path = join(dispatch, "watcher.json");
+  let data: Record<string, unknown> = {};
+  if (existsSync(path)) {
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+      if (!isRecord(parsed)) return false;
+      data = parsed;
+    } catch {
+      return false;
+    }
+  }
+  const table = data.wait_none_at;
+  const times: Record<string, unknown> = isRecord(table) ? table : {};
+  times[key] = at;
+  data.wait_none_at = times;
+  return writeJsonAtomic(path, data);
+}
+
+/** When the waiting run's wait was written (epoch seconds): a seeded
+ * noneCount dates the postmaster's own first ask from this. */
+function waitWrittenAt(dispatch: string): number {
+  try {
+    return Math.floor(statSync(join(dispatch, "wait.json")).mtimeMs / 1000);
+  } catch {
+    return Math.floor(Date.now() / 1000);
+  }
 }
 
 interface WaitPoll {
@@ -1611,14 +1666,28 @@ function pollExternalWait(dispatch: string, stillHeld?: () => boolean): WaitPoll
       return { wake: "WAIT-FAULT", reason: "cannot read the checks count in watcher.json" };
     const count = (stored.count ?? wait.noneCount) + 1;
     if (stillHeld !== undefined && !stillHeld()) return { wake: null };
-    if (!setWaitNoneCount(dispatch, key, count))
-      return { wake: "WAIT-FAULT", reason: "cannot record the checks count in watcher.json" };
-    if (count >= 2) {
-      // The wait is over: leave no count for a later wait on this key.
-      setWaitNoneCount(dispatch, key, 0);
-      return { wake: "WAIT-DONE", reason: "pull request checks: none (second in a row)" };
+    const now = Math.floor(Date.now() / 1000);
+    if (count < 2) {
+      if (!setWaitNoneCount(dispatch, key, count))
+        return { wake: "WAIT-FAULT", reason: "cannot record the checks count in watcher.json" };
+      const seen = waitNoneAt(dispatch, key);
+      if (!seen.ok)
+        return { wake: "WAIT-FAULT", reason: "cannot read the checks count in watcher.json" };
+      if (seen.at === null && !setWaitNoneAt(dispatch, key, now))
+        return { wake: "WAIT-FAULT", reason: "cannot record the checks count in watcher.json" };
+      return { wake: null };
     }
-    return { wake: null };
+    // The second none counts only a minute after the first: GitHub creates
+    // the checks seconds after the pull request opens, and the ask the seed
+    // counts was made then (Stage F's second ask waited a minute).
+    const seen = waitNoneAt(dispatch, key);
+    if (!seen.ok)
+      return { wake: "WAIT-FAULT", reason: "cannot read the checks count in watcher.json" };
+    const firstAt = seen.at ?? (wait.noneCount === 1 ? waitWrittenAt(dispatch) : now);
+    if (now - firstAt < 60) return { wake: null };
+    // The wait is over: leave no count for a later wait on this key.
+    setWaitNoneCount(dispatch, key, 0);
+    return { wake: "WAIT-DONE", reason: "pull request checks: none (second in a row)" };
   }
   // An answer that is none of the four breaks the none run too.
   setWaitNoneCount(dispatch, key, 0);

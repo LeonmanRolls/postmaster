@@ -8,8 +8,9 @@
 //   {"kind": "pull-request", "repo": "<abs>", "pr": "<ref>",
 //    "cardHead": "<sha>", "noneCount": 0}
 //       Over when the pull request's checks pass or fail; a second
-//       consecutive `none` counts as over. `noneCount` seeds that count
-//       with the asks the postmaster already made (0 or 1).
+//       consecutive `none` at least a minute after the first counts as
+//       over. `noneCount` seeds that count with the asks the postmaster
+//       already made (0 or 1).
 //
 // A wait that cannot be read is a fault, never over.
 import { existsSync, readFileSync, statSync } from "node:fs";

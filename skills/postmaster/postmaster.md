@@ -794,14 +794,16 @@ every project and does not change that project's gate.
      surface and says so, and that word is the answer step 3 waits on. On `none`, write
      the run's wait as below with `noneCount` 1, since GitHub creates the checks seconds
      after the pull request opens and this first ask can land before they exist; the
-     watcher's next `none` is the second in a row, and only then does it wake you to move
-     on as a second `none` does here. On `pending`, write
+     watcher's next `none` at least a minute after the first is the second in a row,
+     and only then does it wake you to move on as a second `none` does here. On
+     `pending`, write
      nothing to `.waiting-on-user`; write the waiting run's wait in its dispatch
      directory instead: `wait.json` holding `{"kind": "pull-request", "repo": "<the
      repo's absolute path>", "pr": "<pull-request-url>", "cardHead": "<the card's final
      HEAD>", "noneCount": 0}`, and stop asking in this conversation. The watcher asks
      the same question at every look and wakes you with WAIT-DONE only when the answer
-     is `pass`, a `fail:` line, or the second `none` in a row. On that wake, ask the
+     is `pass`, a `fail:` line, or the second `none` in a row, a minute or more after
+     the first. On that wake, ask the
      question once more yourself, remove `wait.json`, and follow the answer's branch
      here; an answer of `pending` again writes the wait again, and an answer of
      `none` again is the second `none` in a row: move on as a second `none` does

@@ -1787,6 +1787,14 @@ describe("external waits", () => {
       const after = watch(root, "0");
       expect(after.rc).toBe(3);
       expect(after.out).not.toContain("needs waitnone");
+      // A minute after that first none, the second one counts.
+      const watcherFile = join(root, "waitnone", "watcher.json");
+      const saved = JSON.parse(readFileSync(watcherFile, "utf8")) as {
+        wait_none_at: Record<string, number>;
+      };
+      for (const k of Object.keys(saved.wait_none_at))
+        saved.wait_none_at[k] = Math.floor(Date.now() / 1000) - 70;
+      writeFileSync(watcherFile, `${JSON.stringify(saved)}\n`);
       const second = watch(root);
       expect(second.rc).toBe(0);
       expect(second.out).toContain("needs waitnone WAIT-DONE");
