@@ -716,6 +716,7 @@ function asciiLower(value: string): string {
   return value.replace(/[A-Z]/gu, (c) => String.fromCharCode(c.charCodeAt(0) + 32));
 }
 // time.strptime(start, "%a %b %d %H:%M:%S %Y") in the C locale, as main parses a ps lstart.
+// The text is UTC: lib/processes.ts runs every ps that prints it with TZ=UTC.
 const LSTART_PATTERN = new RegExp(
   "^([A-Za-z]+) ([A-Za-z]+) +([0-9]+) ([0-9]+):([0-9]+):([0-9]+) +([0-9]+)" + END_OF_STRING,
   "u",
@@ -739,8 +740,8 @@ function parseLstart(start: string): number | null {
   const year = Number(match[7]);
   if (day < 1 || day > 31 || hour > 23 || minute > 59 || second > 61 || year < 1 || year > 9999)
     return null;
-  const date = new Date(year, month, day, hour, minute, second);
-  if (date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day)
+  const date = new Date(Date.UTC(year, month, day, hour, minute, second));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month || date.getUTCDate() !== day)
     return null;
   return date.getTime() / 1000;
 }

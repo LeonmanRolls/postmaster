@@ -428,7 +428,7 @@ plane.workspace                               plane only; the slug in the worksp
 plane.env_file             ~/.postmaster/plane.env   plane only; holds PLANE_API_KEY=<key>
 tracker.name                                  other only
 postmaster_may_create      no                 yes lets the postmaster create tickets unasked
-round_timeout_seconds      2400               seconds a review round may run, 1 to 86400
+round_timeout_seconds      3600               seconds a review round may run, 1 to 86400
 merge_authority            user               user or postmaster
 checkpoint_mode            autonomous         autonomous or consult
 review_link?               (none)             template with {path}
@@ -989,7 +989,7 @@ const PMC = ask(
 if (PMC !== "" && PMC !== "yes" && PMC !== "no") die("setup: answer yes or no", 1);
 const RT = ask(
   "Seconds a review round may run before the reviewers still running are stopped",
-  PROJECT !== "" ? "" : "2400",
+  PROJECT !== "" ? "" : "3600",
   "round_timeout_seconds",
   opts,
 );

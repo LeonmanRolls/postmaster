@@ -16,6 +16,7 @@
   },
   "trustedDependencies": [],
   "engines": {
-    "bun": ">=1.4.2"
+    "bun": ">=1.4.2",
+    "node": "^22.18.0 || >=23.6.0"
   }
 }

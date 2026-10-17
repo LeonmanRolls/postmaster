@@ -1,7 +1,7 @@
 ---
 title: postmaster wiki
 type: schema
-updated: 2026-10-13
+updated: 2026-10-15
 ---
 
 # postmaster wiki
@@ -121,6 +121,11 @@ Why the design is shaped as it is.
 - [A ticket's shape is checked before it is accepted](concepts/ticket-shape.md): **claimed**.
   A title, the problem, numbered criteria each answerable yes or no, and the user's direction,
   checked by a script before any ticket is dispatched. What is missing is asked of the user.
+- [A ticket checks what the libraries already do before it picks a design](concepts/capabilities-before-design.md):
+  **claimed**. The ticket names what each library, SDK or service it touches already offers, read from the vendor's
+  documentation and the installed version, and the library's own way is an alternative in every decision that adds
+  custom code. A decision taken on reasoning after one run that built a second consent mechanism beside the one its
+  SDK already had; no standing rests on a record yet.
 - [Tickets and acceptance criteria that a run can finish](concepts/ticket-and-criteria-design.md):
   **claimed**. The template's four shapes that cannot be finished restate an old idea, the verifiable
   requirement, and each bounded form has older names and some support. The reading asks for the
@@ -155,8 +160,9 @@ Why the design is shaped as it is.
   do not run out of minor findings, so a loop should end on verified serious findings in the
   change's own code, and a mechanism whose fixes keep breaking should be redesigned rather than
   fixed again. From the review of #36 and outside work. The user chose: fix as much as can be
-  fixed in the first round, then repeat until there are no more P1 and P2 findings, with the cap
-  of three rounds as a backstop; many bugs reaching production stays the signal to revisit.
+  fixed in the first round, then repeat until there are no more P1 and P2 findings; since 9
+  October a rise in them stops the loop for a ruling, in place of a cap of three rounds. Many
+  bugs reaching production stays the signal to revisit.
 - [Why runs take the review rounds they do, and what the planning stage could cut](concepts/review-rounds.md):
   **mixed**. Of 61 runs the median took 3 rounds, and a fifth of them hold 44% of the rounds, a
   third of all rounds being in the 13 runs before the loop's rule changed on 29 September. Rounds

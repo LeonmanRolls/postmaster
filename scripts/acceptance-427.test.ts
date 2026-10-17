@@ -53,8 +53,9 @@ describe("C1: the instructions welcome a library from the ticket's list", () => 
     expect(readRepo("types", "bun.d.ts")).not.toContain("Development dependencies are only");
   });
 
-  test("the README passage names the clerk's vetting", () => {
-    const text = readRepo("README.md");
+  // The passage moved from the README to the design principles page it links.
+  test("the design principles passage names the clerk's vetting", () => {
+    const text = readRepo("docs", "design-principles.md");
     const at = text.indexOf("## Adding a library takes the user's word");
     expect(at).toBeGreaterThanOrEqual(0);
     const end = text.indexOf("\n## ", at + 1);

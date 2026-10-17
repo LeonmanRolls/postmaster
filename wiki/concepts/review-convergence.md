@@ -2,15 +2,17 @@
 title: When a review loop should stop, and what counts toward it
 type: concept
 standing: claimed
-sources: [runs/2026-09-26-postmaster-36, papers/petersson-2004-capture-recapture, papers/kemerer-paulk-2009-review-rate, papers/czerwonka-2015-code-reviews, papers/tian-2016-severity, papers/purushothaman-perry-2005-small-changes, papers/wang-lin-2026-iterative-bug-fixing, papers/gao-2026-looping-not-reliability, papers/olausson-2024-self-repair, papers/wang-2026-solved-issues, papers/ullah-2024-llm-vulnerabilities, papers/klishevich-2025-review-determinism, papers/cihan-2025-automated-review, papers/lin-2026-agentic-review, papers/al-haddad-2025-vulnerability-triage]
-updated: 2026-09-27
+sources: [runs/2026-09-26-postmaster-36, papers/petersson-2004-capture-recapture, papers/kemerer-paulk-2009-review-rate, papers/czerwonka-2015-code-reviews, papers/tian-2016-severity, papers/purushothaman-perry-2005-small-changes, papers/wang-lin-2026-iterative-bug-fixing, papers/gao-2026-looping-not-reliability, papers/olausson-2024-self-repair, papers/wang-2026-solved-issues, papers/ullah-2024-llm-vulnerabilities, papers/klishevich-2025-review-determinism, papers/cihan-2025-automated-review, papers/lin-2026-agentic-review, papers/al-haddad-2025-vulnerability-triage, trials/2026-10-11-review-rounds]
+updated: 2026-10-15
 ---
 
 # When a review loop should stop, and what counts toward it
 
 **The question.** The [review loop](review-loop.md) ends when a round returns no new verified gating
-finding and every fix verifies closed. It has a round cap, five until #60 made it three on
-2026-09-26, and it escalates when one class of defect recurs in three consecutive rounds. That
+finding and every fix verifies closed. It had a round cap, five until #60 made it three on
+2026-09-26, until #316 removed it on 9 October in favour of a stop for a ruling when serious
+findings rise from one round to the next [@trials/2026-10-11-review-rounds/results/loop-rule.md].
+It escalates when one class of defect recurs in three consecutive rounds. That
 follows the practice of people, who re-review until the reviewer has no more comments. Model
 reviewers may not run out of comments the way people do. This page asks what should end a loop of
 model reviewers, and what should count toward ending it. The question is [issue
@@ -272,8 +274,8 @@ the fourth, and silent on which was which.
 *For:* bounds the cost, about 0.8 million reviewer tokens a round in #36, and the risk that more
 revision undoes correct fixes. *Against:* it ends review regardless of what is open, and a loop
 stopped at the cap ships its last round's fixes unreviewed. *In #36:* the cap was five and was
-never reached; the loop stopped at four. Under today's cap of three it would have stopped after
-round 3, where the class rule as written would also have stopped it.
+never reached; the loop stopped at four. Under the cap of three that followed it would have
+stopped after round 3, where the class rule as written would also have stopped it.
 
 **7. A fixed budget.** One full round, then one round that checks the fixes and hunts holes in them,
 then the user triages everything left.
@@ -423,9 +425,10 @@ lanes exist.
 On 2026-09-27 the user chose the rule the loop runs under #80: "in the first round we fix as much
 as we can, then we repeat until there are no more P1 and P2s." Round 1 applies the fix for every
 verified gating finding, P1, P2 and P3 alike; from round 2 on only P1 and P2 findings are fixed,
-and a P3 finding goes to the user unfixed. The cap of three rounds stays as a backstop: when
-round 3 logs a verified P1 or P2 finding, the loop stops and escalates with the residue. The
-repeated-class escalation stays too. The user's first answer, "for now we will just have one
+and a P3 finding goes to the user unfixed. A cap of three rounds backed it until 9 October, when
+#316 replaced the cap with a stop for a ruling whenever a round logs more verified P1 or P2
+findings than the one before [@trials/2026-10-11-review-rounds/results/loop-rule.md]. The
+repeated-class escalation stays. The user's first answer, "for now we will just have one
 round of bug review, if we see lots of bugs in prod, we can revisit this", was refined into this
 rule; many bugs reaching production stays the signal to revisit it. It is none of options A to E.
 `coachman.md` changes under #80. The trial was not run.

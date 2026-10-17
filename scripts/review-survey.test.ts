@@ -262,7 +262,7 @@ describe("timeout", () => {
   test("absent reads as the default, wrong reads warned", () => {
     const dir = mkdtempSync(join(tmpdir(), "rise-timeout-"));
     try {
-      expect(resolveTimeout(dir)).toBe(2400);
+      expect(resolveTimeout(dir)).toBe(3600);
       writeFileSync(
         join(dir, "run.json"),
         JSON.stringify({ config: { review: { round_timeout_seconds: 99 } } }),
@@ -272,7 +272,7 @@ describe("timeout", () => {
         join(dir, "run.json"),
         JSON.stringify({ config: { review: { round_timeout_seconds: "soon" } } }),
       );
-      expect(resolveTimeout(dir)).toBe(2400);
+      expect(resolveTimeout(dir)).toBe(3600);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

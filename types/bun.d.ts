@@ -141,6 +141,11 @@ declare function queueMicrotask(fn: () => void): void;
 
 declare const Bun: {
   version: string;
+  Glob: new (
+    pattern: string,
+  ) => {
+    match(path: string): boolean;
+  };
   TOML: {
     parse(text: string): Record<string, unknown>;
     stringify(data: Record<string, unknown>): string;

@@ -62,6 +62,7 @@ case "$1 $2" in
   "api graphql")
     q="" n=""
     for a in "$@"; do case $a in query=*) q=$a ;; number=*) n=\${a#number=} ;; esac; done
+    printf '%s\\n' "$q" >> "$d/queries.log"
     case $q in
       *projectsV2*) cat "$d/boards.json" ;;
       *viewerPermission*) cat "$d/access.json" ;;
@@ -100,6 +101,7 @@ case "$1 $2" in
     for a in "$@"; do [ "$prev" = --body-file ] && { f=$a; body=1; }; prev=$a; done
     printf 'call:%s\\n' "$(printf ' [%s]' "$@")" >> "$d/edits.log"
     if [ $body = 1 ]; then cp -- "$f" "$d/edited-body"; fi ;;
+  "issue close"|"issue reopen") printf '%s\\n' "$*" >> "$d/closes.log" ;;
   *) echo "stub gh: unexpected: $*" >&2; exit 1 ;;
 esac
 `;
@@ -126,6 +128,7 @@ function stored(
   file: string,
   labels: string[] = [],
   items: Array<{ id: string; project: string; status: string | null }> = [],
+  closedAs: "COMPLETED" | "NOT_PLANNED" | null = null,
 ): void {
   const body = readFileSync(file, "utf8");
   const obj = {
@@ -135,8 +138,8 @@ function stored(
           number: n,
           title: "Check a ticket's shape",
           body,
-          state: "OPEN",
-          stateReason: null,
+          state: closedAs === null ? "OPEN" : "CLOSED",
+          stateReason: closedAs,
           url: `https://github.com/o/r/issues/${n}`,
           createdAt: "2026-09-23T00:00:00Z",
           labels: { nodes: labels.map((name) => ({ name })) },
@@ -207,9 +210,32 @@ function createsCount(): number {
   }
 }
 
+function queriesLog(): string {
+  try {
+    return readFileSync(join(S, "queries.log"), "utf8");
+  } catch {
+    return "";
+  }
+}
+
+function closesLog(): string {
+  try {
+    return readFileSync(join(S, "closes.log"), "utf8");
+  } catch {
+    return "";
+  }
+}
+
 function plainBoards(): void {
   rmSync(join(repo, ".postmaster", "project.toml"), { force: true });
+  rmSync(join(repo, ".postmaster", "settings.toml"), { force: true });
   writeFileSync(join(S, "boards.json"), `${BOARD}\n`);
+}
+
+// The person's settings file turns the board off, or sets it to the value given.
+function boardSetting(value = "off"): void {
+  mkdirSync(join(repo, ".postmaster"), { recursive: true });
+  writeFileSync(join(repo, ".postmaster", "settings.toml"), `[tracker]\nboard = "${value}"\n`);
 }
 
 beforeAll(() => {
@@ -816,6 +842,325 @@ describe("labels over REST", () => {
     } finally {
       rmSync(join(S, "rest-fails"), { force: true });
       rmSync(join(S, "repo-labels.json"), { force: true });
+    }
+  });
+});
+
+describe("the board turned off", () => {
+  const ON_BOARD = (status: string | null) => [{ id: "PVTI_7", project: "PVT_1", status }];
+
+  const fresh = (): void => {
+    for (const f of [
+      "calls.log",
+      "queries.log",
+      "rest.log",
+      "closes.log",
+      "item-edits.log",
+      "creates.log",
+      "labels.log",
+    ]) {
+      rmSync(join(S, f), { force: true });
+    }
+  };
+
+  // Nothing asked GitHub about a board: no query names a project, and no gh project command ran.
+  const askedNothingOfBoards = (): void => {
+    expect(/project/iu.test(queriesLog())).toBe(false);
+    expect(
+      callsLog()
+        .split("\n")
+        .some((l) => l.startsWith("project ")),
+    ).toBe(false);
+    expect(itemEdits()).toBe("");
+  };
+
+  test("positive control: with the board on, reading an issue asks for its board items", () => {
+    plainBoards();
+    stored(7, join(tmp, "lf.md"));
+    fresh();
+    const r = ghSh(["read", "7"]);
+    expect(r.code).toBe(0);
+    expect(/project/iu.test(queriesLog())).toBe(true);
+  });
+
+  test("board says the project tracks its issues alone, and succeeds", () => {
+    plainBoards();
+    writeFileSync(join(S, "boards.json"), `${NO_BOARDS}\n`);
+    boardSetting();
+    try {
+      fresh();
+      const r = ghSh(["board"]);
+      expect(r.code).toBe(0);
+      expect(r.out.trim()).toBe("no board: this project tracks its issues alone");
+      askedNothingOfBoards();
+    } finally {
+      plainBoards();
+    }
+  });
+
+  test("board init is refused while the board is off, and makes nothing", () => {
+    plainBoards();
+    boardSetting();
+    try {
+      fresh();
+      const r = ghSh(["board", "init"]);
+      expect(r.code).toBe(1);
+      expect(r.err.includes('board = "off"')).toBe(true);
+      askedNothingOfBoards();
+    } finally {
+      plainBoards();
+    }
+  });
+
+  test("read takes in progress from its label, whatever a board item says", () => {
+    plainBoards();
+    boardSetting();
+    try {
+      stored(7, join(tmp, "lf.md"), ["in-progress"], ON_BOARD("Done"));
+      fresh();
+      const r = ghSh(["read", "7"]);
+      expect(r.code).toBe(0);
+      expect(r.out.split("\n")).toContain("state: in-progress");
+      askedNothingOfBoards();
+      stored(7, join(tmp, "lf.md"), [], ON_BOARD("In Progress"));
+      const plain = ghSh(["read", "7"]);
+      expect(plain.code).toBe(0);
+      expect(plain.out.split("\n")).toContain("state: todo");
+    } finally {
+      plainBoards();
+    }
+  });
+
+  test("read --body and edit work with no linked board", () => {
+    plainBoards();
+    writeFileSync(join(S, "boards.json"), `${NO_BOARDS}\n`);
+    boardSetting();
+    try {
+      stored(7, join(tmp, "lf.md"));
+      fresh();
+      const base = ghSh(["read", "7", "--body"]);
+      expect(base.code).toBe(0);
+      writeFileSync(join(tmp, "base-off.md"), base.out);
+      writeFileSync(join(S, "edits.log"), "");
+      const r = ghSh(["edit", "7", join(tmp, "new.md"), join(tmp, "base-off.md")]);
+      expect(r.code).toBe(0);
+      expect(r.out.trim()).toBe("#7: edited");
+      expect(editsCount()).toBe(1);
+      askedNothingOfBoards();
+    } finally {
+      plainBoards();
+    }
+  });
+
+  test("labels and titles work with no linked board", () => {
+    plainBoards();
+    writeFileSync(join(S, "boards.json"), `${NO_BOARDS}\n`);
+    boardSetting();
+    writeFileSync(join(S, "repo-labels.json"), '[{"name": "ready"}]\n');
+    try {
+      stored(7, join(tmp, "lf.md"), ["ready"]);
+      writeFileSync(join(S, "edits.log"), "");
+      fresh();
+      expect(ghSh(["label", "7", "add", "ready"]).code).toBe(0);
+      expect(ghSh(["has-label", "7", "ready"]).out.trim()).toBe("present");
+      expect(ghSh(["title", "7", "A new title"]).code).toBe(0);
+      askedNothingOfBoards();
+    } finally {
+      rmSync(join(S, "repo-labels.json"), { force: true });
+      plainBoards();
+    }
+  });
+
+  test("create files the issue and prints its number, putting nothing on a board", () => {
+    plainBoards();
+    writeFileSync(join(S, "boards.json"), `${NO_BOARDS}\n`);
+    boardSetting();
+    try {
+      fresh();
+      const r = ghSh(["create", "A title", join(tmp, "new.md")]);
+      expect(r.code).toBe(0);
+      expect(r.out.trim()).toBe("60");
+      expect(createsCount()).toBe(1);
+      askedNothingOfBoards();
+    } finally {
+      plainBoards();
+    }
+  });
+
+  test("in progress adds its label, and todo takes it away", () => {
+    plainBoards();
+    boardSetting();
+    rmSync(join(S, "repo-labels.json"), { force: true });
+    try {
+      stored(7, join(tmp, "lf.md"));
+      fresh();
+      const started = ghSh(["state", "7", "in-progress"]);
+      expect(started.code).toBe(0);
+      expect(restLog().includes("[repos/o/r/issues/7/labels] [-f] [labels[]=in-progress]")).toBe(
+        true,
+      );
+      expect(labelsLog().includes("name=in-progress")).toBe(true);
+      askedNothingOfBoards();
+      stored(7, join(tmp, "lf.md"), ["in-progress"]);
+      fresh();
+      const back = ghSh(["state", "7", "todo"]);
+      expect(back.code).toBe(0);
+      expect(restLog().includes("[DELETE] [repos/o/r/issues/7/labels/in-progress]")).toBe(true);
+      expect(closesLog()).toBe("");
+      askedNothingOfBoards();
+    } finally {
+      plainBoards();
+    }
+  });
+
+  test("blocked adds its label and keeps in progress, and the next state takes blocked away", () => {
+    plainBoards();
+    boardSetting();
+    try {
+      stored(7, join(tmp, "lf.md"), ["in-progress"]);
+      fresh();
+      const blocked = ghSh(["state", "7", "blocked"]);
+      expect(blocked.code).toBe(0);
+      expect(restLog().includes("[labels[]=blocked]")).toBe(true);
+      expect(restLog().includes("DELETE")).toBe(false);
+      stored(7, join(tmp, "lf.md"), ["in-progress", "blocked"]);
+      expect(ghSh(["read", "7"]).out.split("\n")).toContain("state: blocked");
+      fresh();
+      const resumed = ghSh(["state", "7", "in-progress"]);
+      expect(resumed.code).toBe(0);
+      expect(restLog().includes("[DELETE] [repos/o/r/issues/7/labels/blocked]")).toBe(true);
+      expect(restLog().includes("[labels[]=in-progress]")).toBe(false);
+      askedNothingOfBoards();
+    } finally {
+      plainBoards();
+    }
+  });
+
+  test("done closes the issue as completed and takes in progress away", () => {
+    plainBoards();
+    boardSetting();
+    try {
+      stored(7, join(tmp, "lf.md"), ["in-progress"]);
+      fresh();
+      const r = ghSh(["state", "7", "done"]);
+      expect(r.code).toBe(0);
+      expect(closesLog().includes("issue close 7 -R o/r --reason completed")).toBe(true);
+      expect(restLog().includes("[DELETE] [repos/o/r/issues/7/labels/in-progress]")).toBe(true);
+      askedNothingOfBoards();
+    } finally {
+      plainBoards();
+    }
+  });
+
+  test("cancelled closes the issue as not planned, and todo reopens it", () => {
+    plainBoards();
+    boardSetting();
+    try {
+      stored(7, join(tmp, "lf.md"));
+      fresh();
+      const cancelled = ghSh(["state", "7", "cancelled"]);
+      expect(cancelled.code).toBe(0);
+      expect(closesLog().includes("issue close 7 -R o/r --reason not planned")).toBe(true);
+      stored(7, join(tmp, "lf.md"), [], [], "NOT_PLANNED");
+      expect(ghSh(["read", "7"]).out.split("\n")).toContain("state: cancelled");
+      fresh();
+      const reopened = ghSh(["state", "7", "todo"]);
+      expect(reopened.code).toBe(0);
+      expect(closesLog().includes("issue reopen 7 -R o/r")).toBe(true);
+      askedNothingOfBoards();
+    } finally {
+      plainBoards();
+    }
+  });
+
+  test("list reads each state from the issue and its labels, asking nothing about boards", () => {
+    plainBoards();
+    writeFileSync(join(S, "boards.json"), `${NO_BOARDS}\n`);
+    boardSetting();
+    try {
+      // Every issue has a board item in progress, which a board-off list never asks for.
+      const node = (
+        number: number,
+        title: string,
+        state: string,
+        labels: string[],
+        stateReason: string | null = null,
+      ) => ({
+        number,
+        title,
+        state,
+        stateReason,
+        labels: { nodes: labels.map((name) => ({ name })) },
+        projectItems: {
+          nodes: [
+            {
+              id: `PVTI_${number}`,
+              project: { id: "PVT_1" },
+              fieldValueByName: { name: "In Progress" },
+            },
+          ],
+        },
+      });
+      const page = {
+        data: {
+          repository: {
+            issues: {
+              pageInfo: { hasNextPage: false, endCursor: null },
+              nodes: [
+                node(9, "Started", "OPEN", ["in-progress"]),
+                node(4, "Finished", "CLOSED", [], "COMPLETED"),
+                node(6, "Waiting", "OPEN", ["in-progress", "blocked"]),
+                node(5, "Dropped", "CLOSED", ["in-progress"], "NOT_PLANNED"),
+                node(3, "Not started", "OPEN", []),
+              ],
+            },
+          },
+        },
+      };
+      writeFileSync(join(S, "issues.json"), `${JSON.stringify(page)}\n`);
+      fresh();
+      const r = ghSh(["list"]);
+      expect(r.code).toBe(0);
+      expect(r.out.trim().split("\n")).toEqual([
+        "#3\ttodo\tNot started",
+        "#4\tdone\tFinished",
+        "#5\tcancelled\tDropped",
+        "#6\tblocked\tWaiting",
+        "#9\tin-progress\tStarted",
+      ]);
+      askedNothingOfBoards();
+    } finally {
+      plainBoards();
+    }
+  });
+
+  test("a board setting other than on or off is refused before GitHub is asked anything", () => {
+    plainBoards();
+    boardSetting("maybe");
+    try {
+      stored(7, join(tmp, "lf.md"));
+      fresh();
+      const r = ghSh(["read", "7"]);
+      expect(r.code).toBe(1);
+      expect(r.err.includes("tracker.board")).toBe(true);
+      expect(queriesLog()).toBe("");
+    } finally {
+      plainBoards();
+    }
+  });
+
+  test("a board set on works as the default does, and needs a linked board", () => {
+    plainBoards();
+    boardSetting("on");
+    try {
+      stored(7, join(tmp, "lf.md"), [], ON_BOARD("In Progress"));
+      const r = ghSh(["read", "7"]);
+      expect(r.code).toBe(0);
+      expect(r.out.split("\n")).toContain("state: in-progress");
+      writeFileSync(join(S, "boards.json"), `${NO_BOARDS}\n`);
+      expect(ghSh(["read", "7", "--body"]).code).toBe(3);
+    } finally {
+      plainBoards();
     }
   });
 });

@@ -80,12 +80,18 @@ export function processIsLive(pid: number): boolean {
   return processState(pid) === "live";
 }
 
+/** ps prints lstart in the zone it runs in, so every call that reads it pins the zone to
+ * UTC: the text is then the same whatever zone the machine, the caller or a test runner is
+ * set to, and a launch that outlives a change of zone still matches its record. parseLstart
+ * reads the text back as UTC. */
+const PS_CLOCK_ENV = { LC_ALL: "C", TZ: "UTC" };
+
 /** Return the lock-compatible start value for a live process, or null. */
 export function processStart(pid: number): string | null {
   if (!validPid(pid) || processState(pid) !== "live") return null;
   const stat = readProcStat(pid);
   if (stat) return stat.fields[19] || null;
-  const result = run("ps", ["-o", "lstart=", "-p", String(pid)], { env: { LC_ALL: "C" } });
+  const result = run("ps", ["-o", "lstart=", "-p", String(pid)], { env: PS_CLOCK_ENV });
   const words = result.out
     .trim()
     .split(/[ \t]+/u)
@@ -114,9 +120,7 @@ function psProcessInfo(pid: number): ProcessInfo | null {
   const result = run(
     "ps",
     ["-o", "pid=,ppid=,pgid=,sess=,tpgid=,stat=,lstart=,comm=", "-p", String(pid)],
-    {
-      env: { LC_ALL: "C" },
-    },
+    { env: PS_CLOCK_ENV },
   );
   const fields = result.out.trim().split(/[ \t]+/u);
   if (fields.length < 12 || !fields.slice(0, 4).every((field) => /^[0-9]+$/u.test(field)))
@@ -159,7 +163,7 @@ export function processTable(): Map<number, ProcessInfo> {
   // sess, not sid: macOS rejects sid, and Linux accepts both. tpgid rides
   // along: the terminal's foreground group, -1 when there is no terminal.
   const result = run("ps", ["-A", "-o", "pid=,ppid=,pgid=,sess=,tpgid=,stat=,lstart=,comm="], {
-    env: { LC_ALL: "C" },
+    env: PS_CLOCK_ENV,
   });
   for (const line of result.out.split(/\r?\n/u)) {
     // No split limit: JS drops everything past it, and comm may hold spaces.
@@ -297,9 +301,9 @@ const MONTHS: Record<string, number> = {
   Dec: 11,
 };
 
-/** A ps lstart word run as epoch milliseconds, in this machine's zone: the
- * ctime shape with a year, or the yearless shape read as its most recent
- * past occurrence. Null when the words are neither. */
+/** A ps lstart word run as epoch milliseconds, read as UTC because every ps call that
+ * prints it runs with TZ=UTC: the ctime shape with a year, or the yearless shape read as
+ * its most recent past occurrence. Null when the words are neither. */
 export function parseLstart(words: string[], nowMs: number): number | null {
   const text = words.join(" ");
   const m =
@@ -311,14 +315,14 @@ export function parseLstart(words: string[], nowMs: number): number | null {
   if (month === undefined) return null;
   const day = Number(m[2]);
   const [hh, mm, ss] = [Number(m[3]), Number(m[4]), Number(m[5])];
-  const thisYear = new Date(nowMs).getFullYear();
+  const thisYear = new Date(nowMs).getUTCFullYear();
   if (m[6] !== undefined) {
-    const t = new Date(Number(m[6]), month, day, hh, mm, ss).getTime();
+    const t = Date.UTC(Number(m[6]), month, day, hh, mm, ss);
     return Number.isNaN(t) ? null : t;
   }
-  let t = new Date(thisYear, month, day, hh, mm, ss).getTime();
+  let t = Date.UTC(thisYear, month, day, hh, mm, ss);
   if (Number.isNaN(t)) return null;
-  if (t > nowMs) t = new Date(thisYear - 1, month, day, hh, mm, ss).getTime();
+  if (t > nowMs) t = Date.UTC(thisYear - 1, month, day, hh, mm, ss);
   return Number.isNaN(t) ? null : t;
 }
 
@@ -421,7 +425,7 @@ async function snapshotPs(): Promise<ProcessSnapshot[]> {
     const child = Bun.spawn(["ps", "-A", "-o", "pid=,ppid=,stat=,lstart=,args="], {
       stdout: "pipe",
       stderr: "ignore",
-      env: { ...process.env, LC_ALL: "C" },
+      env: { ...process.env, ...PS_CLOCK_ENV },
     });
     // Drain before waiting: a full process table exceeds the pipe buffer,
     // and awaiting the exit first would deadlock the listing.

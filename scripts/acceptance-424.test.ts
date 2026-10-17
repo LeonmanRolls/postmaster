@@ -601,11 +601,12 @@ describe("C4: landing holds every added or changed library for the user's word",
   });
 });
 
-describe("C5: the README says agents do not add packages as they see fit", () => {
+// The passage moved from the README to the design principles page it links.
+describe("C5: the design principles say agents do not add packages as they see fit", () => {
   test("the passage names both guards", () => {
-    const readme = readFileSync(join(repoRoot(), "README.md"), "utf8");
-    expect(readme).toContain("as they see fit");
-    expect(readme).toContain("only a library its ticket lists");
-    expect(readme).toContain("asks the postmaster");
+    const page = readFileSync(join(repoRoot(), "docs", "design-principles.md"), "utf8");
+    expect(page).toContain("as they see fit");
+    expect(page).toContain("only a library its ticket lists");
+    expect(page).toContain("asks the postmaster");
   });
 });

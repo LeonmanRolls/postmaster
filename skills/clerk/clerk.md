@@ -42,14 +42,19 @@ under `## For the agents`. Follow [the template](ticket-template.md), and run:
 ```sh
 <tool>/scripts/run ticket-check --body <draft> --title "<title>" --project <repo>
 <tool>/scripts/run ticket-parts <draft>
+<tool>/scripts/run ticket-capabilities <draft>
 ```
 
 Keep the criteria and the decisions as simple as you can, one idea each. A criterion is one thing
 that is true when the work is done, in a sentence or two; an "and" that adds a second behaviour
 makes two criteria. A decision is one choice, the reason, and what it beat, a sentence each; mark
 each `(proposed)`, or `(given by the user)` where it is their own word. State each by what it
-changes for the flow or its user, not by where it is made in the code: a choice only the lanes
-care about, such as a name, a file or an order, is not a decision. Write `## Decisions` in two
+changes for the flow or its user, not by where it is made in the code. The architecture is yours
+to settle, at the level of parts and boundaries and never of files: what runs where, which part
+owns what, what is shared between the apps and what stays in one, which existing module or library
+each part builds on, and what each part knows. Make each such choice a decision, named by the
+part's role, with its reason and what it beat. A choice only the lanes care about, such as a name,
+a file or an order, is not a decision. Write `## Decisions` in two
 parts: `### Not covered by the acceptance criteria` first, holding only the decisions whose effect
 no criterion states, then `### Covered by the acceptance criteria`, holding the rest under one line
 saying each is stated by a criterion above and is there for its reason and the alternative it beat.
@@ -121,6 +126,61 @@ which verifier and which step failed: the project may have changed under the ver
 it, through a new tool, browser or service version, or a file the verifier does not list. Do not
 rewrite the check around the failure.
 
+### Check what the libraries already do
+
+Before the draft names a mechanism, find out what the libraries, SDKs and services the project
+already uses do for it, and what the project's own code already offers. Do this for each library
+the change touches, for each one a decision would wrap, replace or work around, and for the
+project folders the change touches and the packages it shares.
+
+1. Make the menus from the draft as it stands: one for every library the project uses, and one for
+   the project's own code. Write each to a file in the draft's folder.
+
+   ```sh
+   <tool>/scripts/run api-index <repo> --all --match <draft> --out <stack-menu>
+   <tool>/scripts/run code-index <repo> <folder-or-glob>... --match <draft> --out <code-menu>
+   ```
+
+   `api-index --all` reads every library the manifests declare, at the version the lockfile
+   resolved. The first run downloads the libraries the project has not installed and can take
+   minutes: give it the longest timeout, and run it again if it stops, which picks up where it
+   left off. Its file has three parts: a directory of every library, with the names in each that
+   are near the draft; every function and method of every library; and the names nearest the draft
+   across all of them. The own menu of each library, with the entries nearest the draft and then a
+   map of every name, is a file in the folder beside it, named in the directory. `code-index` reads
+   every export of the folders you give it: the ones the change touches and the packages it shares.
+   Read the stack menu whole and the code menu whole, then the own menu of every library that shows
+   names near the draft and of every library the change touches or a decision would wrap or replace.
+   While you plan, you must know every function, setting and helper that is available. The ticket
+   does not list them. Make the menus again after any edit that adds or removes a word of the
+   draft, and once more before sign-off: the check refuses a menu made from an older draft.
+2. Read the vendor's own documentation for the feature, opened in a browser, and the installed
+   version's declaration of the names on the menu that are near what the ticket needs. A search
+   result is not a source.
+3. For each thing the ticket needs (keeping a setting or a choice, remembering state, sending or
+   blocking a request, clearing data, and the like), name the setting, method or helper that does
+   it. Where none does, say which names you looked at.
+4. Where a criterion is a guarantee the documentation only implies, run the library against it
+   with a throwaway page or test against a stand-in, and keep what it showed.
+5. Where the ticket would add code for something the library or the repository already does,
+   write that way as the alternative in the decision, in plain words, and say what it cannot do.
+   A decision that adds such code without that line is not finished. The plain part says in one
+   sentence what the library already does, so the user chooses between the real options.
+6. Write the result under `### Existing capabilities` in the agents' part, in the template's form:
+   what the ticket uses or works around, not what the menus hold. An entry whose `Custom:` part is
+   not "none" ends with a `Searched:` part naming the settings, methods or helpers looked for.
+   Then run
+
+   ```sh
+   <tool>/scripts/run ticket-capabilities <draft> --candidates <stack-menu> --candidates <code-menu>
+   ```
+
+   once with every menu. It must exit 0. A change that touches nothing outside the repository says
+   so in one line, and makes no menus.
+
+A ticket that re-opens work already built is checked the same way, against the code that exists.
+Why: [capabilities before design](../../wiki/concepts/capabilities-before-design.md).
+
 ### Show the draft and work through the user's feedback
 
 Tell the user in two or three plain sentences what the ticket asks for. List each decision you
@@ -179,14 +239,15 @@ has a `ready` label; your brief command takes that label off first.
 
 Only when the user says it is ready, read back what they reviewed — the published page when you published one, otherwise the editor's copy — and show them any difference from the draft file. Where the two differ, save the user's version from the document to the draft file and mark that. When you cannot read back what the user reviewed, tell the user so and mark only after they confirm the draft.
 
-Remove the first-line `DRAFT:` marker from the draft and save the final text there. Run both checks again:
+Remove the first-line `DRAFT:` marker from the draft and save the final text there. Run the checks again:
 
 ```sh
 <tool>/scripts/run ticket-check --body <draft> --title "<title>" --project <repo>
 <tool>/scripts/run ticket-parts <draft> --final
+<tool>/scripts/run ticket-capabilities <draft> [--candidates <menu>]...
 ```
 
-Both must exit 0. Then update the ticket and mark it ready through its adapter:
+All must exit 0. Then update the ticket and mark it ready through its adapter:
 
 ```sh
 <tool>/scripts/run ticket-ready mark <repo> <ticket-id> --body <draft> --title "<title>"

@@ -1,6 +1,6 @@
 ---
 name: review-pages
-description: Show the user a change, or code named by a ticket, on a private claude.ai page made for a phone and an iPad. A review page has tabs for the ticket, the change's summary, the diff and the files as they stand, and takes comments on lines that the session reads and answers. A code viewer shows ticket-linked code files in colour at the lines the ticket cites. Use it when the user reviews a change with automatic merging off, or opens files named in a ticket. Claude Code only, until the dashboard shows changes.
+description: Show the user a change, or code named by a ticket, on a private claude.ai page made for a phone and an iPad. A review page has tabs for the ticket, the change's summary, the diff and the files as they stand, and takes comments on lines that the session reads and answers. A code viewer shows ticket-linked code files in colour at the lines the ticket cites. A story page tells a finished change, or a ticket, as one scroll: the change drawn first, then shown in code beside the ticket's words. Use it when the user reviews a change with automatic merging off, or opens files named in a ticket, and to tell a finished change in the order of the ticket's criteria. Claude Code only, until the dashboard shows changes.
 ---
 
 # Review pages
@@ -85,6 +85,51 @@ repository the change belongs to.
    `AGENTS.md` says.
 6. The page is for reading: it takes no comments and has no verdict. The user answers in
    the chat and edits the ticket in its document, as now.
+
+## A story page for a finished change
+
+The change drawn first, then shown in code: one scroll from an opening through a section per
+acceptance criterion to what is left out, with the ticket's words, a drawing or the code in the
+panel beside each step. Build it for a change that is verified and not yet pushed, or already
+merged. The review page stays the place for comments on lines.
+
+1. Write the story in a folder of your scratchpad:
+   - `ticket.md`: the ticket's signed-off text, cut before the pipeline's own sections.
+   - `diagrams/<name>.svg`: one drawing per part, with named states. Draw the mechanism, not
+     its name; label the arrows; keep text at 11 to 13 pixels in a view box about 360 wide.
+     Classes: `dg` on the svg, `bx`, `t1`, `t2`, `t3`, `mono`, `ok`, `bad`, `ln`, `dash`,
+     `ah`. `on-<state>` shows an element only in that state, `hl-<state>` lights it,
+     `dim-<state>` fades it; every state a class names is declared in the scene.
+   - `story.json`: `title`, `ticketLabel`, `ticketTitle`, optionally `ticketUrl`, `eyebrow` and
+     `footer` (the closing line; the default is written for the user who asked for the page and
+     points comments to the chat, so set it, and the eyebrow, for a page that others will read); `base` and `head`, the commits the change is read between; `sections` (`id`,
+     `label`, `title`: the opening, one per criterion, the tests, the end); `scenes`; `steps`.
+   - Scenes, each with an `id`: `{kind: "doc", from: "file", file, title, label, chip}` for
+     the ticket; `{kind: "diagram", svg, states, label, chip, caption}`; `{kind: "head", file,
+     from, to}` for a file as it stands at the head, its changed lines marked; `{kind: "base",
+     file, from, to}` for a file as it stood at the base; `{kind: "leftovers", label, chip}`
+     for the list of changed lines no step shows.
+   - Steps: `id`, `section`, `scene`, `title`, `text` of two to four sentences, and what the
+     scene needs: `focus` as `[from, to]` line ranges lit in a code scene, `marks` as `{line,
+     text: [words]}` on a lit line, `find` as ticket strings lit (each in exactly one block
+     of the ticket), `state` for a diagram. The first step has `kind: "title"`; a step that
+     opens a criterion has `kind: "criterion"`. The last step shows the leftovers scene, and
+     its text may use `{shown}`, `{changed}` and `{left}` for the counts.
+2. Check it: `<tool>/scripts/run story-change check <repo> <story-dir>`. It names every
+   problem at once: a mark not on its line, a focus outside its window, a state a drawing does
+   not declare, a ticket string in no block or in two, a changed line no step shows and no list
+   holds. Fix them and run it again until it prints its one line.
+3. Build it: `<tool>/scripts/run story-change build <repo> <story-dir> <dir>`. It writes
+   `index.html`, `preview-light.html` and `preview-dark.html` only when every check passes, and
+   prints the steps, lines and email addresses it removed.
+4. Look at the page, not only the data: the two previews at desktop and phone width, in light
+   and dark, with every drawing in every state. Nothing scrolls sideways, the fonts load and the
+   console is clean.
+5. Read `index.html` back for home paths, host names, private addresses and anything private, as
+   step 2 of the review page says: the builder removes email addresses and nothing else.
+6. Publish `index.html` as one file with no capabilities (`{}`), then stop the watch on it at
+   once, as `AGENTS.md` says, and give the user the link as step 4 of the review page says.
+7. The page is for reading: it takes no comments and has no verdict.
 
 ## Never
 
