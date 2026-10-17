@@ -1598,7 +1598,10 @@ function pollExternalWait(dispatch: string, stillHeld?: () => boolean): WaitPoll
   }
   if (line.startsWith("pending:")) {
     if (stillHeld !== undefined && !stillHeld()) return { wake: null };
-    if (!setWaitNoneCount(dispatch, key, 0))
+    const stored = waitNoneCount(dispatch, key);
+    if (!stored.ok)
+      return { wake: "WAIT-FAULT", reason: "cannot read the checks count in watcher.json" };
+    if (stored.count !== 0 && !setWaitNoneCount(dispatch, key, 0))
       return { wake: "WAIT-FAULT", reason: "cannot record the checks count in watcher.json" };
     return { wake: null };
   }
@@ -1676,6 +1679,13 @@ function processTable(root: string, table: string): TableResult {
         () => isHeldRun(runName, join(root, "postmaster")) === 1,
       );
       if (polled.wake !== null) markNeeds(needs, runName, polled.wake, polled.reason);
+    } else if (next === "WAIT-FAULT" || next === "WAIT-DONE") {
+      // Named by the status alone (a fixture wait, or a wait that cannot be
+      // read): carry the wait's own reason, as the runbook asks for.
+      const w = readWait(join(root, runName));
+      const reason =
+        w.state === "fault" ? w.error : w.state === "done" ? "fixture wait is over" : undefined;
+      markNeeds(needs, runName, next, reason);
     } else if (next === "WAIT" || next === "USER" || next === "-") {
       // a leg at work, already put to the user, or closed: never wakes
     } else {

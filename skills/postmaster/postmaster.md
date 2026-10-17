@@ -440,7 +440,9 @@ is what needs judgment or what it could not complete:
 - **WAIT-DONE:** an external wait is over. Read the run's `wait.json`, re-ask its question
   yourself (score the fixture run, or ask `landing pull-request-checks` again), remove
   `wait.json` once you have acted on the answer, and carry on at the Stage F step that
-  waited. A wake you do not act on repeats at the next look.
+  waited. Where the answer resumes a leg, remove `wait.json` before the resume, so no
+  look can name the wait over work in progress. A wake you do not act on repeats at the
+  next look.
 - **WAIT-FAULT:** a wait, or the checks answer for it, cannot be read. Read `wait.json` and
   the watcher's reason, fix or remove the wait, and re-ask its question yourself. Never
   treat it as over.
@@ -663,9 +665,13 @@ every project and does not change that project's gate.
    `wait.json` holding `{"kind": "fixture", "fixture": "<the fixture repo's absolute
    path>"}`. Withhold landing and stop waiting in this conversation: the watcher wakes
    you with WAIT-DONE when the fixture copy's postmaster ends. On that wake, run
-   `<tool>/scripts/run fixture score <fixture-dispatch> <fixture-repo>`, remove
-   `wait.json`, and land only when the score exits 0; any other score withholds as
-   before and the branch is repeated from the final branch. Exit 0 from the contract
+   `<tool>/scripts/run fixture score <fixture-dispatch> <fixture-repo>` (the fixture
+   run's dispatch, under `<fixture-repo>/.postmaster/runs/`), remove
+   `wait.json`, and land only when the score exits 0; any other score withholds
+   landing: where the score fails the run, remove `.card-ready` and `.leg-<n>-done`
+   for the manifest's current leg `<n>` and resume that leg with the score's output,
+   as the `fail:` branch in step 2 does; where the score could not run, fix what it
+   names and score again. Exit 0 from the contract
    checker means no; any other exit is an error to resolve before landing.
 
    Record the commit that the clean fixture score covered, on the waybill's check line and
@@ -757,7 +763,7 @@ every project and does not change that project's gate.
    and close instead: log `merge` noting the branch was already merged, move the ticket to
    done,
    logging `ticket-state`, remove `.waiting-on-user` and `.card-ready` (either may already
-   be gone), set the stage with `<tool>/scripts/run stage <dispatch> shipped postmaster`,
+   be gone), and `wait.json` where one is written, set the stage with `<tool>/scripts/run stage <dispatch> shipped postmaster`,
    and run current Stage G. On `unpushed`, the ticket branch is at the card's HEAD and only
    the remote is behind: push the ticket branch, re-fetch, and ask `already-landed` again;
    a push rejected because the remote contains work the pusher lacks (`[rejected]`, fetch
@@ -825,7 +831,7 @@ every project and does not change that project's gate.
 3. **When the user's word that they merged comes**, ask `already-landed` as in step 2, with
    `--pr-merge --pr-head` from the report when the provider reports the merged pull request.
    On `landed`, remove
-   `.waiting-on-user` and `.card-ready`, log `merge`, move the ticket to done, logging
+   `.waiting-on-user` and `.card-ready`, and `wait.json` where one is written, log `merge`, move the ticket to done, logging
    `ticket-state`, and set the stage with `<tool>/scripts/run stage <dispatch> shipped
    postmaster`. On `unpushed`, push the ticket branch, re-fetch, and ask again, as in step 2.
    On `re-verify` the ticket ref and the card's HEAD differ: tell the user to

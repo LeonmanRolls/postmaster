@@ -36,7 +36,7 @@ function absField(rec: Record<string, unknown>, name: string): string | null {
 
 function textField(rec: Record<string, unknown>, name: string): string | null {
   const v = rec[name];
-  return typeof v === "string" && v !== "" ? v : null;
+  return typeof v === "string" && v !== "" && !/[\u0000-\u001f\u007f]/u.test(v) ? v : null;
 }
 
 /** The parsed wait in a dispatch directory, files only. */
@@ -67,6 +67,8 @@ export function readWait(dispatch: string): WaitState {
       marker = named;
     }
     const wait: Wait = { kind: "fixture", fixture, marker };
+    if (!existsSync(fixture))
+      return { state: "fault", error: "fixture wait names a fixture copy that does not exist" };
     return existsSync(marker) ? { state: "done", wait } : { state: "open", wait };
   }
   if (parsed.kind === "pull-request") {
