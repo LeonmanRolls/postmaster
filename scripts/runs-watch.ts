@@ -1550,26 +1550,37 @@ interface WaitPoll {
   reason?: string;
 }
 
-/** Ask a WAITING run's pull-request question for this look. */
-function pollExternalWait(dispatch: string): WaitPoll {
+/** Ask a WAITING run's pull-request question for this look. `stillHeld`,
+ * where given, is re-read before the question and before every count
+ * write: a run held since this look began is left alone entirely. */
+function pollExternalWait(dispatch: string, stillHeld?: () => boolean): WaitPoll {
   const found = readWait(dispatch);
   if (found.state === "fault") return { wake: "WAIT-FAULT", reason: found.error };
   if (found.state === "none") return { wake: "WAIT-FAULT", reason: "wait.json went away" };
   if (found.state === "done") return { wake: "WAIT-DONE", reason: "fixture wait is over" };
   const wait = found.wait;
   if (wait.kind === "fixture") return { wake: null };
+  if (stillHeld !== undefined && !stillHeld()) return { wake: null };
   const key = `pr=${wait.pr} head=${wait.cardHead} seed=${wait.noneCount}`;
-  const asked = run(beside(import.meta, "run"), [
-    "landing",
-    "pull-request-checks",
-    "--repo",
-    wait.repo,
-    "--pr",
-    wait.pr,
-    "--card-head",
-    wait.cardHead,
-  ]);
+  const asked = run(
+    beside(import.meta, "run"),
+    [
+      "landing",
+      "pull-request-checks",
+      "--repo",
+      wait.repo,
+      "--pr",
+      wait.pr,
+      "--card-head",
+      wait.cardHead,
+    ],
+    { timeout: 60_000 },
+  );
   if (asked.code !== 0) {
+    // A fault breaks the none run: the next none is the first in a row.
+    setWaitNoneCount(dispatch, key, 0);
+    if (asked.timedOut)
+      return { wake: "WAIT-FAULT", reason: "landing pull-request-checks timed out" };
     const detail = (asked.err || asked.out).trim().replace(/\n+/gu, "; ");
     return {
       wake: "WAIT-FAULT",
@@ -1579,6 +1590,7 @@ function pollExternalWait(dispatch: string): WaitPoll {
   const line = (asked.out.trim().split("\n")[0] ?? "").trim();
   if (line === "pass" || line.startsWith("fail:")) return { wake: "WAIT-DONE", reason: line };
   if (line.startsWith("pending:")) {
+    if (stillHeld !== undefined && !stillHeld()) return { wake: null };
     if (!setWaitNoneCount(dispatch, key, 0))
       return { wake: "WAIT-FAULT", reason: "cannot record the checks count in watcher.json" };
     return { wake: null };
@@ -1588,12 +1600,15 @@ function pollExternalWait(dispatch: string): WaitPoll {
     if (!stored.ok)
       return { wake: "WAIT-FAULT", reason: "cannot read the checks count in watcher.json" };
     const count = (stored.count ?? wait.noneCount) + 1;
+    if (stillHeld !== undefined && !stillHeld()) return { wake: null };
     if (!setWaitNoneCount(dispatch, key, count))
       return { wake: "WAIT-FAULT", reason: "cannot record the checks count in watcher.json" };
     if (count >= 2)
       return { wake: "WAIT-DONE", reason: "pull request checks: none (second in a row)" };
     return { wake: null };
   }
+  // An answer that is none of the four breaks the none run too.
+  setWaitNoneCount(dispatch, key, 0);
   return {
     wake: "WAIT-FAULT",
     reason: `landing pull-request-checks answered '${line}', which is not pass, pending, fail or none`,
@@ -1646,7 +1661,10 @@ function processTable(root: string, table: string): TableResult {
         markNeeds(needs, runName, "RULE", `run walls open failed (exit ${open.code})`);
       }
     } else if (next === "WAITING") {
-      const polled = pollExternalWait(join(root, runName));
+      const polled = pollExternalWait(
+        join(root, runName),
+        () => isHeldRun(runName, join(root, "postmaster")) === 1,
+      );
       if (polled.wake !== null) markNeeds(needs, runName, polled.wake, polled.reason);
     } else if (next === "WAIT" || next === "USER" || next === "-") {
       // a leg at work, already put to the user, or closed: never wakes
