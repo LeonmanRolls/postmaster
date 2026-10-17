@@ -32,7 +32,13 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 function absField(rec: Record<string, unknown>, name: string): string | null {
   const v = rec[name];
-  return typeof v === "string" && v.startsWith("/") && v.trim() === v && v !== "/" ? v : null;
+  return typeof v === "string" &&
+    v.startsWith("/") &&
+    v.trim() === v &&
+    v !== "/" &&
+    !/[\u0000-\u001f\u007f]/u.test(v)
+    ? v
+    : null;
 }
 
 function textField(rec: Record<string, unknown>, name: string): string | null {
@@ -68,8 +74,14 @@ export function readWait(dispatch: string): WaitState {
       marker = named;
     }
     const wait: Wait = { kind: "fixture", fixture, marker };
-    if (!existsSync(fixture))
+    let fixtureIsDir = false;
+    try {
+      fixtureIsDir = statSync(fixture).isDirectory();
+    } catch {
       return { state: "fault", error: "fixture wait names a fixture copy that does not exist" };
+    }
+    if (!fixtureIsDir)
+      return { state: "fault", error: "fixture wait names a fixture copy that is not a directory" };
     return existsSync(marker) ? { state: "done", wait } : { state: "open", wait };
   }
   if (parsed.kind === "pull-request") {

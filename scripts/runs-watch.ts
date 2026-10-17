@@ -873,6 +873,7 @@ function watcherValue(dispatch: string, table: string, leg: string): number | nu
     return null;
   }
   const counts = data[table];
+  if (counts === undefined) return 0;
   if (!isRecord(counts)) {
     console.error(`runs-watch: cannot read ${path}: ${table} is not an object`);
     return null;
