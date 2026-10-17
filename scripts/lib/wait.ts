@@ -12,7 +12,7 @@
 //       with the asks the postmaster already made (0 or 1).
 //
 // A wait that cannot be read is a fault, never over.
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 export type Wait =
@@ -42,7 +42,12 @@ function textField(rec: Record<string, unknown>, name: string): string | null {
 /** The parsed wait in a dispatch directory, files only. */
 export function readWait(dispatch: string): WaitState {
   const path = join(dispatch, "wait.json");
-  if (!existsSync(path)) return { state: "none" };
+  try {
+    statSync(path);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return { state: "none" };
+    return { state: "fault", error: "wait.json cannot be read" };
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(path, "utf8"));
@@ -70,6 +75,8 @@ export function readWait(dispatch: string): WaitState {
     const cardHead = textField(parsed, "cardHead");
     if (repo === null || pr === null || cardHead === null)
       return { state: "fault", error: "pull-request wait needs repo, pr and cardHead" };
+    if (pr.startsWith("-"))
+      return { state: "fault", error: "pull-request wait pr must not start with -" };
     let noneCount = 0;
     if ("noneCount" in parsed) {
       const n = parsed.noneCount;

@@ -797,7 +797,9 @@ every project and does not change that project's gate.
      the same question at every look and wakes you with WAIT-DONE only when the answer
      is `pass`, a `fail:` line, or the second `none` in a row. On that wake, ask the
      question once more yourself, remove `wait.json`, and follow the answer's branch
-     here; an answer of `pending` again writes the wait again. On
+     here; an answer of `pending` again writes the wait again, and an answer of
+     `none` again is the second `none` in a row: move on as a second `none` does
+     above, without writing the wait again. On
      `fail:`, in either shape (`fail: <name> (<state>) <link>` or `fail: pull request head
      <sha> does not match card <sha> <pr>`), remove `.card-ready` and `.leg-<n>-done` for the
      manifest's current leg `<n>`, then resume that last leg on the same branch with the

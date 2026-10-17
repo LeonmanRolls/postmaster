@@ -1588,7 +1588,14 @@ function pollExternalWait(dispatch: string, stillHeld?: () => boolean): WaitPoll
     };
   }
   const line = (asked.out.trim().split("\n")[0] ?? "").trim();
-  if (line === "pass" || line.startsWith("fail:")) return { wake: "WAIT-DONE", reason: line };
+  // Check names in the answer are data from the pull request: never let
+  // control characters they carry reach the watcher's output.
+  const shown = line.replace(/[\u0000-\u001f\u007f]/gu, " ");
+  if (line === "pass" || line.startsWith("fail:")) {
+    if (stillHeld !== undefined && !stillHeld()) return { wake: null };
+    setWaitNoneCount(dispatch, key, 0);
+    return { wake: "WAIT-DONE", reason: shown };
+  }
   if (line.startsWith("pending:")) {
     if (stillHeld !== undefined && !stillHeld()) return { wake: null };
     if (!setWaitNoneCount(dispatch, key, 0))
@@ -1603,8 +1610,11 @@ function pollExternalWait(dispatch: string, stillHeld?: () => boolean): WaitPoll
     if (stillHeld !== undefined && !stillHeld()) return { wake: null };
     if (!setWaitNoneCount(dispatch, key, count))
       return { wake: "WAIT-FAULT", reason: "cannot record the checks count in watcher.json" };
-    if (count >= 2)
+    if (count >= 2) {
+      // The wait is over: leave no count for a later wait on this key.
+      setWaitNoneCount(dispatch, key, 0);
       return { wake: "WAIT-DONE", reason: "pull request checks: none (second in a row)" };
+    }
     return { wake: null };
   }
   // An answer that is none of the four breaks the none run too.
