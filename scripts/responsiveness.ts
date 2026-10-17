@@ -114,7 +114,11 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
       }
       continue;
     }
-    if (row.type === "attachment" && at(row, "attachment", "type") === "queued_command" && ts !== null) {
+    if (
+      row.type === "attachment" &&
+      at(row, "attachment", "type") === "queued_command" &&
+      ts !== null
+    ) {
       const key = [at(row, "attachment", "source_uuid"), at(row, "attachment", "delivery_id")].find(
         (v): v is string => typeof v === "string" && v !== "",
       );
