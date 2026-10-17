@@ -8,7 +8,7 @@ import type { Dirent } from "node:fs";
 import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
-import { D_CLASS, END_OF_STRING } from "./text.ts";
+import { BOUND_L, BOUND_R, D_CLASS, END_OF_STRING } from "./text.ts";
 
 export type SessionRecordEnv = {
   CLAUDE_CONFIG_DIR?: string;
@@ -129,7 +129,8 @@ const readCustomTitle = (path: string): string | null => {
   return null;
 };
 
-const namesPostmaster = (title: string): boolean => /\bpostmaster\b/iu.test(title);
+const POSTMASTER_WORD = new RegExp(`${BOUND_L}postmaster${BOUND_R}`, "iu");
+const namesPostmaster = (title: string): boolean => POSTMASTER_WORD.test(title);
 
 export const findNewestPostmasterRecord = (
   repo: string,

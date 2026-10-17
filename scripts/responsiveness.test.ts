@@ -66,7 +66,7 @@ describe("responsiveness record spellings", () => {
       const r = run(RUN, ["responsiveness", path, "--harness", "nope"]);
       expect(r.code).not.toBe(0);
       expect(`${r.out}\n${r.err}`.trim().split("\n")).toHaveLength(1);
-      expect(`${r.out}\n${r.err}`.toLowerCase()).toContain("unsupported");
+      expect(`${r.out}\n${r.err}`).toContain("unsupported");
     });
   });
 });

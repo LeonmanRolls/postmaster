@@ -660,7 +660,7 @@ report, and prints times and counts only, never what a message said. It takes a 
 session id found the way the session export finds it, or no session, in which case it reads the
 newest record in the target's project folder whose `custom-title` line names the postmaster.
 Its paired controls are made-up records in the record's exact shape, driven through the command
-itself (`scripts/acceptance-167.test.ts`, `scripts/responsiveness.test.ts`).
+itself (`<tool>/scripts/acceptance-167.test.ts`, `<tool>/scripts/responsiveness.test.ts`).
 
 | harness | where its record lives | lines it reads | result |
 |---|---|---|---|
