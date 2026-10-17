@@ -245,7 +245,7 @@ describe("responsiveness record spellings", () => {
       (path) => {
         const r = run(RUN, ["responsiveness", path]);
         expect(r.code).toBe(0);
-        expect(r.out).toContain("message 1: seen: no wait; answer: 40 s");
+        expect(r.out).toContain("message 1: seen: 10 s; answer: 40 s");
       },
     );
   });
@@ -260,6 +260,110 @@ describe("responsiveness record spellings", () => {
         const r = run(RUN, ["responsiveness", path]);
         expect(r.code).toBe(0);
         expect(r.out).toContain("message 1: seen: no wait; answer: 45 s");
+      },
+    );
+  });
+
+  test("a keyed delivery no attachment claims joins the keyless pool", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        { operation: "enqueue", timestamp: iso(10), type: "queue-operation" },
+        {
+          commandUuid: "cmd-unclaimed",
+          operation: "remove",
+          timestamp: iso(20),
+          type: "queue-operation",
+        },
+        { operation: "remove", timestamp: iso(30), type: "queue-operation" },
+        {
+          attachment: { origin: { kind: "human" }, type: "queued_command" },
+          timestamp: iso(0),
+          type: "attachment",
+        },
+        {
+          attachment: { origin: { kind: "human" }, type: "queued_command" },
+          timestamp: iso(10),
+          type: "attachment",
+        },
+        { subtype: "turn_duration", timestamp: iso(100), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.code).toBe(0);
+        expect(r.out).toContain("messages: 2");
+        expect(r.out).toContain("message 1: seen: 20 s; answer: 80 s");
+        expect(r.out).toContain("message 2: seen: 20 s; answer: 70 s");
+      },
+    );
+  });
+
+  test("a queued user row names its own enqueue beside an undelivered orphan", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        { operation: "enqueue", timestamp: iso(10), type: "queue-operation" },
+        { operation: "remove", timestamp: iso(20), type: "queue-operation" },
+        {
+          origin: { kind: "human" },
+          promptSource: "queued",
+          timestamp: iso(20),
+          type: "user",
+        },
+        { subtype: "turn_duration", timestamp: iso(60), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.code).toBe(0);
+        expect(r.out).toContain("messages: 1");
+        expect(r.out).toContain("message 1: seen: 10 s; answer: 40 s");
+      },
+    );
+  });
+
+  test("an attachment far from every enqueue stands alone", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        {
+          attachment: { origin: { kind: "human" }, type: "queued_command" },
+          timestamp: iso(100),
+          type: "attachment",
+        },
+        { subtype: "turn_duration", timestamp: iso(200), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.code).toBe(0);
+        expect(r.out).toContain("messages: 1");
+        expect(r.out).toContain("message 1: seen: no wait; answer: 100 s");
+      },
+    );
+  });
+
+  test("a queued user row beside its own attachment counts once", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        { operation: "remove", timestamp: iso(10), type: "queue-operation" },
+        {
+          attachment: { origin: { kind: "human" }, type: "queued_command" },
+          timestamp: iso(0),
+          type: "attachment",
+        },
+        {
+          origin: { kind: "human" },
+          promptSource: "queued",
+          timestamp: iso(10),
+          type: "user",
+        },
+        { subtype: "turn_duration", timestamp: iso(70), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.code).toBe(0);
+        expect(r.out).toContain("messages: 1");
+        expect(r.out).toContain("message 1: seen: 10 s; answer: 60 s");
       },
     );
   });

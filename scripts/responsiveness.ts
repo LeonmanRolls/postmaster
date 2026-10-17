@@ -93,8 +93,7 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
   // row named is a user message; a delivery nothing named is not
   // promoted to one.
   const enqueues: Enqueue[] = [];
-  const unkeyedDeliveries: number[] = [];
-  const keyedDeliveries = new Map<string, number>();
+  const deliveries: { key: string | null; ts: number }[] = [];
   const attachments: { key: string | null; kind: unknown; ts: number }[] = [];
   const userRows: { source: unknown; ts: number }[] = [];
   const turns: number[] = [];
@@ -109,8 +108,7 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
         const key = [row.commandUuid, row.deliveryId].find(
           (v): v is string => typeof v === "string" && v !== "",
         );
-        if (key === undefined) unkeyedDeliveries.push(ts);
-        else keyedDeliveries.set(key, ts);
+        deliveries.push({ key: key ?? null, ts });
       }
       continue;
     }
@@ -148,14 +146,29 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
       seenWaitMs: enqueueMs === null ? null : Math.max(0, deliveredMs - enqueueMs),
     });
   };
+  // An attachment is stamped with its enqueue's time: every measured
+  // record sits within 16 ms, so no enqueue further away is its own.
+  const MAX_ATTACHMENT_SKEW_MS = 16;
   const nearestEnqueue = (ts: number, free: (e: Enqueue) => boolean): Enqueue | undefined => {
     let nearest: Enqueue | undefined;
     for (const entry of enqueues) {
       if (!free(entry)) continue;
+      if (Math.abs(ts - entry.ts) > MAX_ATTACHMENT_SKEW_MS) continue;
       if (!nearest || Math.abs(ts - entry.ts) < Math.abs(ts - nearest.ts)) nearest = entry;
     }
     return nearest;
   };
+
+  // A delivery whose key no attachment claims joins the keyless pool in
+  // record order; a claimed key pairs with its attachment alone.
+  const claimedKeys = new Set(attachments.map((a) => a.key).filter((k) => k !== null));
+  const keyedDeliveries = new Map<string, number>();
+  const unkeyedDeliveries: number[] = [];
+  for (const delivery of deliveries) {
+    if (delivery.key !== null && claimedKeys.has(delivery.key)) {
+      keyedDeliveries.set(delivery.key, delivery.ts);
+    } else unkeyedDeliveries.push(delivery.ts);
+  }
 
   // Keyed attachments pair with their own delivery first, and consume
   // the enqueue they were stamped for, so that enqueue's slot is never
@@ -214,21 +227,37 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
     }
     if (userRow.source === "queued") {
       // The same message in user-row form: report the latest enqueue
-      // delivered in this turn, still waiting for its kind, or stand
-      // alone where there is none. A delivery from an earlier turn
-      // never takes the row.
+      // of this turn still waiting for its kind, timed by its delivery
+      // where it has one and by this row where it has none. Where an
+      // attachment already counted that message in this turn, the row
+      // is its second form and adds nothing; a delivery or an enqueue
+      // from an earlier turn never takes the row.
       const turnStart = turns.filter((t) => t <= userRow.ts).pop() ?? null;
       let waiting: Enqueue | undefined;
       for (const entry of enqueues) {
-        if (entry.kind !== null || entry.deliveredMs === null || entry.messaged) continue;
-        if (entry.deliveredMs > userRow.ts) continue;
-        if (turnStart !== null && entry.deliveredMs <= turnStart) continue;
-        if (!waiting || entry.deliveredMs > (waiting.deliveredMs ?? 0)) waiting = entry;
+        if (entry.kind !== null || entry.messaged) continue;
+        if (entry.ts > userRow.ts) continue;
+        if (turnStart !== null && entry.ts <= turnStart) continue;
+        if (!waiting || entry.ts > waiting.ts) waiting = entry;
       }
       if (waiting) {
         waiting.messaged = true;
-        addMessage(waiting.ts, waiting.deliveredMs ?? userRow.ts);
-      } else addMessage(null, userRow.ts);
+        const deliveredMs =
+          waiting.deliveredMs !== null && waiting.deliveredMs <= userRow.ts
+            ? waiting.deliveredMs
+            : userRow.ts;
+        addMessage(waiting.ts, deliveredMs);
+      } else if (
+        !enqueues.some(
+          (e) =>
+            e.messaged &&
+            e.deliveredMs !== null &&
+            e.deliveredMs <= userRow.ts &&
+            (turnStart === null || e.deliveredMs > turnStart),
+        )
+      ) {
+        addMessage(null, userRow.ts);
+      }
     }
   }
 
