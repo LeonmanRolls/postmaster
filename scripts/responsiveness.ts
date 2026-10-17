@@ -151,9 +151,16 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
         continue;
       }
       if (row.promptSource === "queued") {
-        // The same message in user-row form: report the delivery still
-        // waiting for its kind, or stand alone where there is none.
-        const waiting = queued.find((q) => q.deliveredMs !== null && !q.reported);
+        // The same message in user-row form: report the latest delivery
+        // still waiting for its kind at or before this row, or stand
+        // alone where there is none. A delivery already named, or one
+        // from an earlier turn, never takes the row.
+        let waiting: Queued | undefined;
+        for (const entry of queued) {
+          if (entry.kind !== null || entry.deliveredMs === null || entry.reported) continue;
+          if (entry.deliveredMs > ts) continue;
+          if (!waiting || entry.deliveredMs > (waiting.deliveredMs ?? 0)) waiting = entry;
+        }
         if (waiting) {
           waiting.kind = "human";
           report(waiting);
