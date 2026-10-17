@@ -1633,6 +1633,7 @@ function pollExternalWait(dispatch: string, stillHeld?: () => boolean): WaitPoll
     { timeout: 60_000 },
   );
   if (asked.code !== 0) {
+    if (stillHeld !== undefined && !stillHeld()) return { wake: null };
     // A fault breaks the none run: the next none is the first in a row.
     setWaitNoneCount(dispatch, key, 0);
     if (asked.timedOut)
@@ -1691,6 +1692,7 @@ function pollExternalWait(dispatch: string, stillHeld?: () => boolean): WaitPoll
     return { wake: "WAIT-DONE", reason: "pull request checks: none (second in a row)" };
   }
   // An answer that is none of the four breaks the none run too.
+  if (stillHeld !== undefined && !stillHeld()) return { wake: null };
   setWaitNoneCount(dispatch, key, 0);
   return {
     wake: "WAIT-FAULT",
