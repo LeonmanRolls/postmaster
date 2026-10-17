@@ -1787,6 +1787,10 @@ describe("external waits", () => {
       const after = watch(root, "0");
       expect(after.rc).toBe(3);
       expect(after.out).not.toContain("needs waitnone");
+      // A second none seconds later does not count: the gap is a minute.
+      const quick = watch(root, "0");
+      expect(quick.rc).toBe(3);
+      expect(quick.out).not.toContain("needs waitnone");
       // A minute after that first none, the second one counts.
       const watcherFile = join(root, "waitnone", "watcher.json");
       const saved = JSON.parse(readFileSync(watcherFile, "utf8")) as {
