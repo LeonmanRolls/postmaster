@@ -171,6 +171,40 @@ describe("responsiveness record spellings", () => {
     );
   });
 
+  test("a keyed delivery does not spend its enqueue slot on a keyless delivery", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        { operation: "enqueue", timestamp: iso(10), type: "queue-operation" },
+        {
+          commandUuid: "cmd-a",
+          operation: "remove",
+          timestamp: iso(20),
+          type: "queue-operation",
+        },
+        { operation: "remove", timestamp: iso(30), type: "queue-operation" },
+        {
+          attachment: { origin: { kind: "human" }, source_uuid: "cmd-a", type: "queued_command" },
+          timestamp: iso(0),
+          type: "attachment",
+        },
+        {
+          attachment: { origin: { kind: "human" }, type: "queued_command" },
+          timestamp: iso(10),
+          type: "attachment",
+        },
+        { subtype: "turn_duration", timestamp: iso(90), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.code).toBe(0);
+        expect(r.out).toContain("messages: 2");
+        expect(r.out).toContain("message 1: seen: 20 s; answer: 70 s");
+        expect(r.out).toContain("message 2: seen: 20 s; answer: 60 s");
+      },
+    );
+  });
+
   test("an unknown harness is unsupported in one line", () => {
     withRecord([], (path) => {
       const r = run(RUN, ["responsiveness", path, "--harness", "nope"]);
