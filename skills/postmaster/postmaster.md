@@ -317,6 +317,13 @@ with `the watcher took it` in the detail:
   as Stage E step 4 resumes an escalation; a ruling given during the pause takes effect at
   the watcher's next look, without you (criterion 20). You rule; the watcher delivers.
 
+The watcher also checks every run's external wait at every look. A run's own records say
+what it waits for outside itself: `wait.json` in its dispatch directory, written when the
+wait starts (Stage F), naming a fixture copy or a pull request and its card head. While
+the wait is open the run reads WAITING and never wakes you. When it ends it reads
+WAIT-DONE, and a wait that cannot be read reads WAIT-FAULT, never over. One watcher per
+project checks every wait; no second watcher is started for a fixture copy.
+
 When `READY <id>` is named, repeat the readiness check and dispatch through Stage B without
 asking the user again. Consume its ready marker with
 `<tool>/scripts/run ticket-ready consume <repo> <id>` after the run is dispatched. If the ticket
@@ -428,6 +435,15 @@ is what needs judgment or what it could not complete:
   record, the evidence is gone and only the user can decide: escalate with the files that
   remain. Never infer an action from `.err` text and never kill a running leg for being slow.
 - **WAIT:** nothing to do. The watcher never wakes you on WAIT.
+- **WAITING:** an external wait in the run's `wait.json` is still open. Nothing to do. The
+  watcher never wakes you on WAITING.
+- **WAIT-DONE:** an external wait is over. Read the run's `wait.json`, re-ask its question
+  yourself (score the fixture run, or ask `landing pull-request-checks` again), remove
+  `wait.json` once you have acted on the answer, and carry on at the Stage F step that
+  waited. A wake you do not act on repeats at the next look.
+- **WAIT-FAULT:** a wait, or the checks answer for it, cannot be read. Read `wait.json` and
+  the watcher's reason, fix or remove the wait, and re-ask its question yourself. Never
+  treat it as over.
 
 **The takeover prompt** for a fallback coachman, written to `<dispatch>/leg-<n>-takeover.txt`:
 "You take over leg <n> of <TICKET> mid-way. Read `<dispatch>/brief.md`,
@@ -643,9 +659,14 @@ every project and does not change that project's gate.
    detector file is covered whole, while the file list compared comes from both revs.
    Exit 1 means yes: make a fresh fixture repo with `<tool>/scripts/run fixture new
    <fixture-name> <fixture-ticket>`, dispatch its ticket with the postmaster tool checked
-   out at the final branch, and withhold landing until `<tool>/scripts/run fixture score
-   <fixture-dispatch> <fixture-repo>` exits 0. Exit 0 from the contract checker means no;
-   any other exit is an error to resolve before landing.
+   out at the final branch, and write the waiting run's wait in its dispatch directory:
+   `wait.json` holding `{"kind": "fixture", "fixture": "<the fixture repo's absolute
+   path>"}`. Withhold landing and stop waiting in this conversation: the watcher wakes
+   you with WAIT-DONE when the fixture copy's postmaster ends. On that wake, run
+   `<tool>/scripts/run fixture score <fixture-dispatch> <fixture-repo>`, remove
+   `wait.json`, and land only when the score exits 0; any other score withholds as
+   before and the branch is repeated from the final branch. Exit 0 from the contract
+   checker means no; any other exit is an error to resolve before landing.
 
    Record the commit that the clean fixture score covered, on the waybill's check line and
    in a `note`. Before landing, check the final branch again if it moved. With no clean
@@ -764,12 +785,19 @@ every project and does not change that project's gate.
      `<tool>/scripts/run landing pull-request-checks --repo <repo> --pr <pull-request-url>
      --card-head <the card's final HEAD>`. On `pass`, put the pull-request URL and
      merge instructions in `.waiting-on-user`; the user merges it in the project's review
-     surface and says so, and that word is the answer step 3 waits on. On `none`, ask once
-     more after a minute's wait, since GitHub creates the checks seconds after the pull
-     request opens and the first ask can land before they exist; move on only if the second
-     ask still says `none`, and follow the `pending` or `fail:` branch when it says that
-     instead. On `pending`, write
-     nothing to `.waiting-on-user`, and wait; at the next look, ask the same question again. On
+     surface and says so, and that word is the answer step 3 waits on. On `none`, write
+     the run's wait as below with `noneCount` 1, since GitHub creates the checks seconds
+     after the pull request opens and this first ask can land before they exist; the
+     watcher's next `none` is the second in a row, and only then does it wake you to move
+     on as a second `none` does here. On `pending`, write
+     nothing to `.waiting-on-user`; write the waiting run's wait in its dispatch
+     directory instead: `wait.json` holding `{"kind": "pull-request", "repo": "<the
+     repo's absolute path>", "pr": "<pull-request-url>", "cardHead": "<the card's final
+     HEAD>", "noneCount": 0}`, and stop asking in this conversation. The watcher asks
+     the same question at every look and wakes you with WAIT-DONE only when the answer
+     is `pass`, a `fail:` line, or the second `none` in a row. On that wake, ask the
+     question once more yourself, remove `wait.json`, and follow the answer's branch
+     here; an answer of `pending` again writes the wait again. On
      `fail:`, in either shape (`fail: <name> (<state>) <link>` or `fail: pull request head
      <sha> does not match card <sha> <pr>`), remove `.card-ready` and `.leg-<n>-done` for the
      manifest's current leg `<n>`, then resume that last leg on the same branch with the

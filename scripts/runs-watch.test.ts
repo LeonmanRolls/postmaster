@@ -1674,6 +1674,49 @@ describe("provider walls: the watcher wakes, gates dispatch, delivers the pause"
   });
 });
 
+describe("external waits", () => {
+  test("an open fixture wait leaves the watcher waiting", () => {
+    const root = join(tmp, "wait-open");
+    mkdirSync(root, { recursive: true });
+    mkrun(root, "waitopen", "shipping", 1, ".card-ready");
+    const fixture = join(tmp, "wait-open-fixture");
+    mkdirSync(join(fixture, ".postmaster", "runs", "postmaster"), { recursive: true });
+    writeFileSync(
+      join(root, "waitopen", "wait.json"),
+      `${JSON.stringify({ kind: "fixture", fixture })}\n`,
+    );
+    const { rc, out } = watch(root);
+    expect(rc).toBe(3);
+    expect(out).not.toContain("needs waitopen");
+  });
+
+  test("a landed fixture marker names WAIT-DONE", () => {
+    const root = join(tmp, "wait-done");
+    mkdirSync(root, { recursive: true });
+    mkrun(root, "waitdone", "shipping", 1, ".card-ready");
+    const fixture = join(tmp, "wait-done-fixture");
+    mkdirSync(join(fixture, ".postmaster", "runs", "postmaster"), { recursive: true });
+    writeFileSync(join(fixture, ".postmaster", "runs", "postmaster", ".exited"), "");
+    writeFileSync(
+      join(root, "waitdone", "wait.json"),
+      `${JSON.stringify({ kind: "fixture", fixture })}\n`,
+    );
+    const { rc, out } = watch(root);
+    expect(rc).toBe(0);
+    expect(out).toContain("needs waitdone WAIT-DONE");
+  });
+
+  test("an unreadable wait names WAIT-FAULT", () => {
+    const root = join(tmp, "wait-fault");
+    mkdirSync(root, { recursive: true });
+    mkrun(root, "waitbad", "shipping", 1, ".card-ready");
+    writeFileSync(join(root, "waitbad", "wait.json"), "{not json\n");
+    const { rc, out } = watch(root);
+    expect(rc).toBe(0);
+    expect(out).toContain("needs waitbad WAIT-FAULT");
+  });
+});
+
 describe("project poll and capacity", () => {
   const id = ["-c", "user.name=t", "-c", "user.email=t@example.invalid"];
   function watched(name: string, settings: string | null): { root: string; config: string } {
