@@ -172,13 +172,12 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
     if (attachment.kind === "human") addMessage(attachment.ts, deliveredMs);
   }
 
-  // Keyless deliveries take the enqueues no keyed attachment consumed,
-  // in order; keyless attachments then name each enqueue's kind.
-  const freeEnqueues = enqueues.filter((e) => e.deliveredMs === null);
-  for (const deliveredMs of unkeyedDeliveries) {
-    const entry = freeEnqueues.shift();
-    if (entry) entry.deliveredMs = deliveredMs;
-  }
+  // Keyless attachments name each enqueue's kind before any keyless
+  // delivery is handed out: a delivery takes the enqueues an attachment
+  // named, in order, so an enqueue nothing named (an orphan with no
+  // delivery of its own) never spends a later message's delivery.
+  // Deliveries left over take the unnamed enqueues in order, for the
+  // messages a queued user row names below.
   for (const attachment of keylessAttachments) {
     const entry = nearestEnqueue(attachment.ts, (e) => e.kind === null);
     if (!entry) {
@@ -188,7 +187,15 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
       continue;
     }
     entry.kind = attachment.kind;
-    if (attachment.kind === "human" && entry.deliveredMs !== null && !entry.messaged) {
+  }
+  const named = enqueues.filter((e) => e.kind !== null && e.deliveredMs === null);
+  const unnamed = enqueues.filter((e) => e.kind === null && e.deliveredMs === null);
+  for (const deliveredMs of unkeyedDeliveries) {
+    const entry = named.shift() ?? unnamed.shift();
+    if (entry) entry.deliveredMs = deliveredMs;
+  }
+  for (const entry of enqueues) {
+    if (entry.kind === "human" && entry.deliveredMs !== null && !entry.messaged) {
       entry.messaged = true;
       addMessage(entry.ts, entry.deliveredMs);
     }
@@ -200,13 +207,16 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
       continue;
     }
     if (userRow.source === "queued") {
-      // The same message in user-row form: report the latest delivered
-      // enqueue still waiting for its kind at or before this row, or
-      // stand alone where there is none.
+      // The same message in user-row form: report the latest enqueue
+      // delivered in this turn, still waiting for its kind, or stand
+      // alone where there is none. A delivery from an earlier turn
+      // never takes the row.
+      const turnStart = turns.filter((t) => t <= userRow.ts).pop() ?? null;
       let waiting: Enqueue | undefined;
       for (const entry of enqueues) {
         if (entry.kind !== null || entry.deliveredMs === null || entry.messaged) continue;
         if (entry.deliveredMs > userRow.ts) continue;
+        if (turnStart !== null && entry.deliveredMs <= turnStart) continue;
         if (!waiting || entry.deliveredMs > (waiting.deliveredMs ?? 0)) waiting = entry;
       }
       if (waiting) {

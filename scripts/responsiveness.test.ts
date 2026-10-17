@@ -205,6 +205,51 @@ describe("responsiveness record spellings", () => {
     );
   });
 
+  test("an orphan enqueue does not spend the next message's delivery", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        { operation: "enqueue", timestamp: iso(10), type: "queue-operation" },
+        { operation: "remove", timestamp: iso(20), type: "queue-operation" },
+        {
+          attachment: { origin: { kind: "human" }, type: "queued_command" },
+          timestamp: iso(10),
+          type: "attachment",
+        },
+        { subtype: "turn_duration", timestamp: iso(50), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.code).toBe(0);
+        expect(r.out).toContain("messages: 1");
+        expect(r.out).toContain("message 1: seen: 10 s; answer: 30 s");
+      },
+    );
+  });
+
+  test("a queued user row does not take a delivery from an earlier turn", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        { operation: "dequeue", timestamp: iso(5), type: "queue-operation" },
+        { subtype: "turn_duration", timestamp: iso(10), type: "system" },
+        { operation: "enqueue", timestamp: iso(50), type: "queue-operation" },
+        {
+          origin: { kind: "human" },
+          promptSource: "queued",
+          timestamp: iso(60),
+          type: "user",
+        },
+        { subtype: "turn_duration", timestamp: iso(100), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.code).toBe(0);
+        expect(r.out).toContain("message 1: seen: no wait; answer: 40 s");
+      },
+    );
+  });
+
   test("an unknown harness is unsupported in one line", () => {
     withRecord([], (path) => {
       const r = run(RUN, ["responsiveness", path, "--harness", "nope"]);
