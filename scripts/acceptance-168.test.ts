@@ -11,7 +11,7 @@
 // Every test spawns `scripts/run` as a subprocess and never imports the
 // change. Covered: C1, C2. Not covered: C3 (contract fixture, at landing).
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   PR_URL,
@@ -154,6 +154,15 @@ describe("C2: the watcher waits for a pull request's checks", () => {
       const first = watch(root, cfg, "0", { PATH: path });
       expect(first.code).toBe(3);
       expect(`${first.out}${first.err}`).not.toContain("needs T-1");
+      // The second none counts a minute after the first (review r2): age
+      // the recorded first-none time instead of waiting the minute out.
+      const watcherFile = join(root, "T-1", "watcher.json");
+      const saved = JSON.parse(readFileSync(watcherFile, "utf8")) as {
+        wait_none_at: Record<string, number>;
+      };
+      for (const k of Object.keys(saved.wait_none_at))
+        saved.wait_none_at[k] = Math.floor(Date.now() / 1000) - 70;
+      writeFileSync(watcherFile, `${JSON.stringify(saved)}\n`);
       const second = watch(root, cfg, "5", { PATH: path });
       expect(second.code).toBe(0);
       expect(`${second.out}${second.err}`).toContain("needs T-1 WAIT-DONE");
@@ -166,6 +175,9 @@ describe("C2: the watcher waits for a pull request's checks", () => {
         cardHead: head,
         noneCount: 1,
       });
+      // The seeded ask is dated from wait.json: age it past the minute.
+      const aged = new Date(Date.now() - 70_000);
+      utimesSync(join(root2, "T-2", "wait.json"), aged, aged);
       const seeded = watch(root2, cfg, "5", { PATH: path });
       expect(seeded.code).toBe(0);
       expect(`${seeded.out}${seeded.err}`).toContain("needs T-2 WAIT-DONE");
