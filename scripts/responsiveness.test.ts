@@ -129,6 +129,48 @@ describe("responsiveness record spellings", () => {
     );
   });
 
+  test("a keyed delivery pairs with its own attachment, not the oldest enqueue", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        { operation: "enqueue", timestamp: iso(10), type: "queue-operation" },
+        {
+          commandUuid: "cmd-b",
+          operation: "remove",
+          timestamp: iso(50),
+          type: "queue-operation",
+        },
+        {
+          commandUuid: "cmd-a",
+          operation: "remove",
+          timestamp: iso(60),
+          type: "queue-operation",
+        },
+        {
+          attachment: {
+            origin: { kind: "task-notification" },
+            source_uuid: "cmd-b",
+            type: "queued_command",
+          },
+          timestamp: iso(10),
+          type: "attachment",
+        },
+        {
+          attachment: { origin: { kind: "human" }, source_uuid: "cmd-a", type: "queued_command" },
+          timestamp: iso(0),
+          type: "attachment",
+        },
+        { subtype: "turn_duration", timestamp: iso(120), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.code).toBe(0);
+        expect(r.out).toContain("messages: 1");
+        expect(r.out).toContain("message 1: seen: 60 s; answer: 60 s");
+      },
+    );
+  });
+
   test("an unknown harness is unsupported in one line", () => {
     withRecord([], (path) => {
       const r = run(RUN, ["responsiveness", path, "--harness", "nope"]);

@@ -89,12 +89,18 @@ type Queued = {
 export const readClaude = (rows: Row[]): ResponsivenessReport => {
   const messages: MessageWait[] = [];
   let compactions = 0;
-  // One entry per enqueue, in record order. Deliveries take enqueues in
-  // order, and an attachment names the kind of the enqueue stamped nearest
-  // its own time (an attachment carries its enqueue's timestamp, and can
-  // sit in the record after that enqueue's delivery), so kind and delivery
-  // are paired with the enqueue they belong to, never with each other.
+  // One entry per enqueue, in record order. A delivery carrying a
+  // commandUuid or deliveryId belongs to the attachment naming that key
+  // (its source_uuid or delivery_id), and that attachment's timestamp is
+  // the enqueue time, so keyed messages pair exactly. Deliveries without
+  // a key take enqueues in order, and a keyless attachment names the kind
+  // of the enqueue stamped nearest its own time (an attachment carries
+  // its enqueue's timestamp, and can sit in the record after that
+  // enqueue's delivery), so kind and delivery are paired with the
+  // enqueue they belong to, never with each other.
   const queued: Queued[] = [];
+  const keyedDeliveries = new Map<string, number>();
+  const keyedWaiting = new Map<string, Queued>();
   let unanswered: MessageWait[] = [];
 
   const deliver = (enqueueMs: number | null, deliveredMs: number): void => {
@@ -119,13 +125,39 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
       if (row.operation === "enqueue") {
         queued.push({ deliveredMs: null, enqueueMs: ts, kind: null, reported: false });
       } else if (row.operation === "remove" || row.operation === "dequeue") {
-        const entry = queued.find((q) => q.deliveredMs === null);
-        if (entry) entry.deliveredMs = ts;
+        const key = [row.commandUuid, row.deliveryId].find(
+          (v): v is string => typeof v === "string" && v !== "",
+        );
+        const waiting = key === undefined ? undefined : keyedWaiting.get(key);
+        if (waiting) {
+          waiting.deliveredMs = ts;
+          if (waiting.kind === "human") report(waiting);
+        } else if (key !== undefined) {
+          keyedDeliveries.set(key, ts);
+        } else {
+          const entry = queued.find((q) => q.deliveredMs === null);
+          if (entry) entry.deliveredMs = ts;
+        }
       }
       continue;
     }
     if (row.type === "attachment" && at(row, "attachment", "type") === "queued_command") {
       const kind = at(row, "attachment", "origin", "kind");
+      const key = [at(row, "attachment", "source_uuid"), at(row, "attachment", "delivery_id")].find(
+        (v): v is string => typeof v === "string" && v !== "",
+      );
+      if (key !== undefined && ts !== null) {
+        const entry: Queued = {
+          deliveredMs: keyedDeliveries.get(key) ?? null,
+          enqueueMs: ts,
+          kind,
+          reported: false,
+        };
+        queued.push(entry);
+        if (entry.deliveredMs === null) keyedWaiting.set(key, entry);
+        else if (kind === "human") report(entry);
+        continue;
+      }
       if (ts !== null) {
         let nearest: Queued | undefined;
         for (const entry of queued) {
