@@ -680,6 +680,23 @@ origin kind is `task-notification` is not a user message, and a delivery nothing
 human is not counted as one either. A queued message can also arrive as a `user` line
 with `promptSource` `queued`, which names the delivery still waiting for its kind.
 
+Known limits of the pairing, frozen in run 167 after five review rounds kept finding new
+sites in the same join. Each one is a record shape the report reads wrong today:
+
+- A delivery with no attachment of its own, followed by a later message's attachment, can
+  be given to that later message, which then shows a seen wait shorter than the record
+  gives (down to 0 s) and a longer answer wait.
+- A queued message beside both an attachment with no enqueue row and a queued user row
+  is counted twice, once from each form.
+- A `remove` row written when a queued message was cleared on cancel or dropped by a
+  hook is read as a delivery of the next message. Latent on current records: no sampled
+  record carries such a row.
+- A message whose enqueue and attachment stand with no delivery row is not counted at
+  all. Latent on current records: no sampled record has that shape.
+- Where `turn_duration` rows stand out of timestamp order in the file, a queued user
+  row can be timed against the wrong turn. Latent on current records: no sampled record
+  orders them so.
+
 ## The pane view
 
 `<tool>/scripts/run view-stream` is the other executable half of this file: it renders an events
