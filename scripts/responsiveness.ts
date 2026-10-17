@@ -105,6 +105,9 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
       if (row.operation === "enqueue") {
         enqueues.push({ deliveredMs: null, kind: null, messaged: false, ts });
       } else if (row.operation === "remove" || row.operation === "dequeue") {
+        // A row written because the queued message was cleared on
+        // cancel or dropped by a hook is not a delivery.
+        if (row.reason === "cleared_on_cancel" || row.reason === "dropped_by_hook") continue;
         const key = [row.commandUuid, row.deliveryId].find(
           (v): v is string => typeof v === "string" && v !== "",
         );
@@ -190,25 +193,28 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
   }
 
   // Keyless attachments name each enqueue's kind before any keyless
-  // delivery is handed out: a delivery takes the enqueues an attachment
-  // named, in order, so an enqueue nothing named (an orphan with no
-  // delivery of its own) never spends a later message's delivery.
-  // Deliveries left over take the unnamed enqueues in order, for the
-  // messages a queued user row names below.
+  // delivery is handed out. A delivery then takes the earliest enqueue
+  // stamped at or before it, a named one first where both are waiting:
+  // a delivery can never belong to an enqueue stamped after it, and an
+  // enqueue nothing named (an orphan with no delivery of its own) never
+  // spends a later named message's delivery.
+  const standalone: number[] = [];
   for (const attachment of keylessAttachments) {
     const entry = nearestEnqueue(attachment.ts, (e) => e.kind === null);
     if (!entry) {
       // No enqueue to name: a human attachment is still a user message,
       // timed from the earliest moment the record shows for it.
-      if (attachment.kind === "human") addMessage(null, attachment.ts);
+      if (attachment.kind === "human") {
+        standalone.push(attachment.ts);
+        addMessage(null, attachment.ts);
+      }
       continue;
     }
     entry.kind = attachment.kind;
   }
-  const named = enqueues.filter((e) => e.kind !== null && e.deliveredMs === null);
-  const unnamed = enqueues.filter((e) => e.kind === null && e.deliveredMs === null);
   for (const deliveredMs of unkeyedDeliveries) {
-    const entry = named.shift() ?? unnamed.shift();
+    const waiting = enqueues.filter((e) => e.deliveredMs === null && e.ts <= deliveredMs);
+    const entry = waiting.find((e) => e.kind !== null) ?? waiting[0];
     if (entry) entry.deliveredMs = deliveredMs;
   }
   for (const entry of enqueues) {
@@ -254,7 +260,8 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
             e.deliveredMs !== null &&
             e.deliveredMs <= userRow.ts &&
             (turnStart === null || e.deliveredMs > turnStart),
-        )
+        ) &&
+        !standalone.some((ts) => ts <= userRow.ts && (turnStart === null || ts > turnStart))
       ) {
         addMessage(null, userRow.ts);
       }

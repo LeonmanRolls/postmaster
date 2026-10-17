@@ -368,6 +368,82 @@ describe("responsiveness record spellings", () => {
     );
   });
 
+  test("an earlier unnamed delivery is not given to a later named message", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        { operation: "remove", timestamp: iso(1), type: "queue-operation" },
+        { operation: "enqueue", timestamp: iso(10), type: "queue-operation" },
+        { operation: "remove", timestamp: iso(20), type: "queue-operation" },
+        {
+          attachment: { origin: { kind: "human" }, type: "queued_command" },
+          timestamp: iso(10),
+          type: "attachment",
+        },
+        { subtype: "turn_duration", timestamp: iso(70), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.code).toBe(0);
+        expect(r.out).toContain("messages: 1");
+        expect(r.out).toContain("message 1: seen: 10 s; answer: 50 s");
+      },
+    );
+  });
+
+  test("a remove row for a cancelled message is not a delivery", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        {
+          operation: "remove",
+          reason: "cleared_on_cancel",
+          timestamp: iso(1),
+          type: "queue-operation",
+        },
+        { operation: "enqueue", timestamp: iso(10), type: "queue-operation" },
+        { operation: "remove", timestamp: iso(20), type: "queue-operation" },
+        {
+          attachment: { origin: { kind: "human" }, type: "queued_command" },
+          timestamp: iso(10),
+          type: "attachment",
+        },
+        { subtype: "turn_duration", timestamp: iso(70), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.code).toBe(0);
+        expect(r.out).toContain("messages: 1");
+        expect(r.out).toContain("message 1: seen: 10 s; answer: 50 s");
+      },
+    );
+  });
+
+  test("a queued user row beside a standalone attachment counts once", () => {
+    withRecord(
+      [
+        {
+          attachment: { origin: { kind: "human" }, type: "queued_command" },
+          timestamp: iso(0),
+          type: "attachment",
+        },
+        {
+          origin: { kind: "human" },
+          promptSource: "queued",
+          timestamp: iso(10),
+          type: "user",
+        },
+        { subtype: "turn_duration", timestamp: iso(70), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.code).toBe(0);
+        expect(r.out).toContain("messages: 1");
+        expect(r.out).toContain("message 1: seen: no wait; answer: 70 s");
+      },
+    );
+  });
+
   test("an unknown harness is unsupported in one line", () => {
     withRecord([], (path) => {
       const r = run(RUN, ["responsiveness", path, "--harness", "nope"]);
