@@ -80,7 +80,7 @@ describe("C1: message waits from a Claude Code record", () => {
       expect(r.code).not.toBe(0);
       const combined = `${r.out}\n${r.err}`.trim();
       expect(combined.split("\n").filter((line) => line.trim() !== "")).toHaveLength(1);
-      expect(combined.toLowerCase()).toContain("unsupported");
+      expect(combined).toContain("unsupported");
       expect(combined).toContain("codex");
     });
   });
