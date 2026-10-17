@@ -206,7 +206,9 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
   }
 
   for (const userRow of userRows) {
-    if (userRow.source === "typed") {
+    if (userRow.source === "typed" || userRow.source === undefined) {
+      // A human row with no promptSource is a prompt the record does
+      // not source; it stands alone like a typed one.
       addMessage(null, userRow.ts);
       continue;
     }

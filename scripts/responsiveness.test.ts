@@ -250,6 +250,20 @@ describe("responsiveness record spellings", () => {
     );
   });
 
+  test("a human user row with no promptSource is a message", () => {
+    withRecord(
+      [
+        { origin: { kind: "human" }, timestamp: iso(0), type: "user" },
+        { subtype: "turn_duration", timestamp: iso(45), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.code).toBe(0);
+        expect(r.out).toContain("message 1: seen: no wait; answer: 45 s");
+      },
+    );
+  });
+
   test("an unknown harness is unsupported in one line", () => {
     withRecord([], (path) => {
       const r = run(RUN, ["responsiveness", path, "--harness", "nope"]);
