@@ -35,13 +35,26 @@
 //             "the watcher took it". A pause still open, or a delivery it cannot make, wakes
 //             the postmaster.
 //
+//   WAITING   an external wait (wait.json) is still open. A fixture wait is
+//             over when its marker lands, which the status already reads as
+//             WAIT-DONE. For a pull-request wait the watcher asks
+//             `landing pull-request-checks` at every look: `pending:` leaves
+//             the run waiting, `pass` or a `fail:` line names it WAIT-DONE,
+//             and a second consecutive `none` at least a minute after the
+//             first counts as over (the count and the first none's time are
+//             kept in watcher.json, seeded by the wait's noneCount). An
+//             answer it cannot read names the run WAIT-FAULT, never over.
+//
 // Everything that needs judgment still wakes the postmaster: TELL (an untold private-data
 // finding), WALL (an untold provider wall), RULE (an escalation), GATE (a
 // ship card), READ (a checkpoint card), SPEC (a spec package), READY (a signed-off ticket and
 // a free run slot), ASK (a recorded refusal or
 // pre-thread exit, or a wall on the fallback), TAKEOVER (a recorded wall on the primary),
-// INSPECT (a stall, or an attempt without its record), and any step the watcher could not
-// complete. USER (already put to the user), WAIT (a leg at work) and - (closed) never do.
+// INSPECT (a stall, or an attempt without its record), WAIT-DONE (an external
+// wait is over), WAIT-FAULT (a wait or its checks answer cannot be read), and
+// any step the watcher could not
+// complete. USER (already put to the user), WAIT (a leg at work), WAITING (an
+// external wait still open) and - (closed) never do.
 //
 // It looks at once, then every postmaster.poll_seconds (default 120) from the watched
 // project's effective config (POSTMASTER_CONFIG overrides the path). A run listed in
@@ -74,9 +87,9 @@
 //           that is not a whole number
 //
 // Controls: every step it takes (dispatch taken, resume taken) and every NEXT that must wake
-// the postmaster names its run on exit 0 (positive), and WAIT, USER, -, and a held run leave
+// the postmaster names its run on exit 0 (positive), and WAIT, WAITING, USER, -, and a held run leave
 // it waiting until its timeout (negative). A held run is left alone entirely: no step, no
-// count, no wake.
+// count, no wake, and no checks question asked for it.
 import { randomBytes } from "node:crypto";
 import {
   existsSync,
@@ -99,6 +112,7 @@ import {
 } from "./lib/effective-config.ts";
 import { beside, scriptsDir } from "./lib/paths.ts";
 import { pinnedCommand, runPinned } from "./lib/pinned.ts";
+import { readWait } from "./lib/wait.ts";
 import { die, run } from "./lib/proc.ts";
 import { PY_M_END, PY_M_START } from "./lib/text.ts";
 import { thrownCode, thrownDetail } from "./lib/thrown.ts";
@@ -686,7 +700,7 @@ function wakingRuns(table: string, heldText: string): Waking {
     const first = f[0]!;
     seen.add(first);
     const last = f[f.length - 1]!;
-    if (last === "USER" || last === "WAIT" || last === "-") continue;
+    if (last === "USER" || last === "WAIT" || last === "WAITING" || last === "-") continue;
     if (holdSet.has(first)) continue;
     needs.push(`needs ${first} ${last}`);
   }
@@ -859,6 +873,7 @@ function watcherValue(dispatch: string, table: string, leg: string): number | nu
     return null;
   }
   const counts = data[table];
+  if (counts === undefined) return 0;
   if (!isRecord(counts)) {
     console.error(`runs-watch: cannot read ${path}: ${table} is not an object`);
     return null;
@@ -1490,6 +1505,201 @@ function manifestLegValue(manifestPath: string): string {
   }
 }
 
+/** The persisted consecutive-none count for one pull-request wait. */
+function waitNoneCount(
+  dispatch: string,
+  key: string,
+): { ok: true; count: number | null } | { ok: false } {
+  const path = join(dispatch, "watcher.json");
+  if (!existsSync(path)) return { ok: true, count: null };
+  let data: unknown;
+  try {
+    data = JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return { ok: false };
+  }
+  if (!isRecord(data)) return { ok: false };
+  const table = data.wait_none;
+  if (table === undefined) return { ok: true, count: null };
+  if (!isRecord(table)) return { ok: false };
+  const value = table[key];
+  if (value === undefined) return { ok: true, count: null };
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) return { ok: false };
+  return { ok: true, count: value };
+}
+
+function setWaitNoneCount(dispatch: string, key: string, count: number): boolean {
+  const path = join(dispatch, "watcher.json");
+  let data: Record<string, unknown> = {};
+  if (existsSync(path)) {
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+      if (!isRecord(parsed)) return false;
+      data = parsed;
+    } catch {
+      return false;
+    }
+  }
+  const table = data.wait_none;
+  const counts: Record<string, unknown> = isRecord(table) ? table : {};
+  counts[key] = count;
+  data.wait_none = counts;
+  // A count of 0 starts a new run of nones: its first-none time goes too.
+  if (count === 0 && isRecord(data.wait_none_at)) delete data.wait_none_at[key];
+  return writeJsonAtomic(path, data);
+}
+
+/** The persisted time (epoch seconds) of the current run's first none. */
+function waitNoneAt(
+  dispatch: string,
+  key: string,
+): { ok: true; at: number | null } | { ok: false } {
+  const path = join(dispatch, "watcher.json");
+  if (!existsSync(path)) return { ok: true, at: null };
+  let data: unknown;
+  try {
+    data = JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return { ok: false };
+  }
+  if (!isRecord(data)) return { ok: false };
+  const table = data.wait_none_at;
+  if (table === undefined) return { ok: true, at: null };
+  if (!isRecord(table)) return { ok: false };
+  const value = table[key];
+  if (value === undefined) return { ok: true, at: null };
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return { ok: false };
+  return { ok: true, at: value };
+}
+
+function setWaitNoneAt(dispatch: string, key: string, at: number): boolean {
+  const path = join(dispatch, "watcher.json");
+  let data: Record<string, unknown> = {};
+  if (existsSync(path)) {
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+      if (!isRecord(parsed)) return false;
+      data = parsed;
+    } catch {
+      return false;
+    }
+  }
+  const table = data.wait_none_at;
+  const times: Record<string, unknown> = isRecord(table) ? table : {};
+  times[key] = at;
+  data.wait_none_at = times;
+  return writeJsonAtomic(path, data);
+}
+
+/** When the waiting run's wait was written (epoch seconds): a seeded
+ * noneCount dates the postmaster's own first ask from this. */
+function waitWrittenAt(dispatch: string): number {
+  try {
+    return Math.floor(statSync(join(dispatch, "wait.json")).mtimeMs / 1000);
+  } catch {
+    return Math.floor(Date.now() / 1000);
+  }
+}
+
+interface WaitPoll {
+  wake: "WAIT-DONE" | "WAIT-FAULT" | null;
+  reason?: string;
+}
+
+/** Ask a WAITING run's pull-request question for this look. `stillHeld`,
+ * where given, is re-read before the question and before every count
+ * write: a run held since this look began is left alone entirely. */
+function pollExternalWait(dispatch: string, stillHeld?: () => boolean): WaitPoll {
+  const found = readWait(dispatch);
+  if (found.state === "fault") return { wake: "WAIT-FAULT", reason: found.error };
+  if (found.state === "none") return { wake: "WAIT-FAULT", reason: "wait.json went away" };
+  if (found.state === "done") return { wake: "WAIT-DONE", reason: "fixture wait is over" };
+  const wait = found.wait;
+  if (wait.kind === "fixture") return { wake: null };
+  if (stillHeld !== undefined && !stillHeld()) return { wake: null };
+  const key = `pr=${wait.pr} head=${wait.cardHead} seed=${wait.noneCount}`;
+  const asked = run(
+    beside(import.meta, "run"),
+    [
+      "landing",
+      "pull-request-checks",
+      "--repo",
+      wait.repo,
+      "--pr",
+      wait.pr,
+      "--card-head",
+      wait.cardHead,
+    ],
+    { timeout: 60_000 },
+  );
+  if (asked.code !== 0) {
+    if (stillHeld !== undefined && !stillHeld()) return { wake: null };
+    // A fault breaks the none run: the next none is the first in a row.
+    setWaitNoneCount(dispatch, key, 0);
+    if (asked.timedOut)
+      return { wake: "WAIT-FAULT", reason: "landing pull-request-checks timed out" };
+    const detail = (asked.err || asked.out).trim().replace(/\n+/gu, "; ");
+    return {
+      wake: "WAIT-FAULT",
+      reason: `landing pull-request-checks failed (exit ${asked.code})${detail ? `: ${detail}` : ""}`,
+    };
+  }
+  const line = (asked.out.trim().split("\n")[0] ?? "").trim();
+  // Check names in the answer are data from the pull request: never let
+  // control characters they carry reach the watcher's output.
+  const shown = line.replace(/[\u0000-\u001f\u007f]/gu, " ");
+  if (line === "pass" || line.startsWith("fail:")) {
+    if (stillHeld !== undefined && !stillHeld()) return { wake: null };
+    setWaitNoneCount(dispatch, key, 0);
+    return { wake: "WAIT-DONE", reason: shown };
+  }
+  if (line.startsWith("pending:")) {
+    if (stillHeld !== undefined && !stillHeld()) return { wake: null };
+    const stored = waitNoneCount(dispatch, key);
+    if (!stored.ok)
+      return { wake: "WAIT-FAULT", reason: "cannot read the checks count in watcher.json" };
+    if (stored.count !== 0 && !setWaitNoneCount(dispatch, key, 0))
+      return { wake: "WAIT-FAULT", reason: "cannot record the checks count in watcher.json" };
+    return { wake: null };
+  }
+  if (line === "none") {
+    const stored = waitNoneCount(dispatch, key);
+    if (!stored.ok)
+      return { wake: "WAIT-FAULT", reason: "cannot read the checks count in watcher.json" };
+    const count = (stored.count ?? wait.noneCount) + 1;
+    if (stillHeld !== undefined && !stillHeld()) return { wake: null };
+    const now = Math.floor(Date.now() / 1000);
+    if (count < 2) {
+      if (!setWaitNoneCount(dispatch, key, count))
+        return { wake: "WAIT-FAULT", reason: "cannot record the checks count in watcher.json" };
+      const seen = waitNoneAt(dispatch, key);
+      if (!seen.ok)
+        return { wake: "WAIT-FAULT", reason: "cannot read the checks count in watcher.json" };
+      if (seen.at === null && !setWaitNoneAt(dispatch, key, now))
+        return { wake: "WAIT-FAULT", reason: "cannot record the checks count in watcher.json" };
+      return { wake: null };
+    }
+    // The second none counts only a minute after the first: GitHub creates
+    // the checks seconds after the pull request opens, and the ask the seed
+    // counts was made then (Stage F's second ask waited a minute).
+    const seen = waitNoneAt(dispatch, key);
+    if (!seen.ok)
+      return { wake: "WAIT-FAULT", reason: "cannot read the checks count in watcher.json" };
+    const firstAt = seen.at ?? (wait.noneCount === 1 ? waitWrittenAt(dispatch) : now);
+    if (now - firstAt < 60) return { wake: null };
+    // The wait is over: leave no count for a later wait on this key.
+    setWaitNoneCount(dispatch, key, 0);
+    return { wake: "WAIT-DONE", reason: "pull request checks: none (second in a row)" };
+  }
+  // An answer that is none of the four breaks the none run too.
+  if (stillHeld !== undefined && !stillHeld()) return { wake: null };
+  setWaitNoneCount(dispatch, key, 0);
+  return {
+    wake: "WAIT-FAULT",
+    reason: `landing pull-request-checks answered '${line}', which is not pass, pending, fail or none`,
+  };
+}
+
 interface TableResult {
   needs: string[];
   heldUnreadable: boolean;
@@ -1535,6 +1745,19 @@ function processTable(root: string, table: string): TableResult {
       } else {
         markNeeds(needs, runName, "RULE", `run walls open failed (exit ${open.code})`);
       }
+    } else if (next === "WAITING") {
+      const polled = pollExternalWait(
+        join(root, runName),
+        () => isHeldRun(runName, join(root, "postmaster")) === 1,
+      );
+      if (polled.wake !== null) markNeeds(needs, runName, polled.wake, polled.reason);
+    } else if (next === "WAIT-FAULT" || next === "WAIT-DONE") {
+      // Named by the status alone (a fixture wait, or a wait that cannot be
+      // read): carry the wait's own reason, as the runbook asks for.
+      const w = readWait(join(root, runName));
+      const reason =
+        w.state === "fault" ? w.error : w.state === "done" ? "fixture wait is over" : undefined;
+      markNeeds(needs, runName, next, reason);
     } else if (next === "WAIT" || next === "USER" || next === "-") {
       // a leg at work, already put to the user, or closed: never wakes
     } else {

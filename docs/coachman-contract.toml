@@ -65,6 +65,10 @@ path = "scripts/runs-watch.ts"
 holds = "the mechanical leg steps, next-leg dispatch and transient remounts, and what wakes the postmaster"
 
 [[files]]
+path = "scripts/lib/wait.ts"
+holds = "the external wait a run records in wait.json: its shapes, its validation, and when it reads over or at fault"
+
+[[files]]
 path = "scripts/walls.ts"
 holds = "the wall record's shape, the ruling refusals, and the escalation a pause writes; the wall's entrypoint: show, open, told, rule, escalate, carry"
 
