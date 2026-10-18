@@ -1674,6 +1674,140 @@ describe("provider walls: the watcher wakes, gates dispatch, delivers the pause"
   });
 });
 
+describe("external waits", () => {
+  test("an open fixture wait leaves the watcher waiting", () => {
+    const root = join(tmp, "wait-open");
+    mkdirSync(root, { recursive: true });
+    mkrun(root, "waitopen", "shipping", 1, ".card-ready");
+    const fixture = join(tmp, "wait-open-fixture");
+    mkdirSync(join(fixture, ".postmaster", "runs", "postmaster"), { recursive: true });
+    writeFileSync(
+      join(root, "waitopen", "wait.json"),
+      `${JSON.stringify({ kind: "fixture", fixture })}\n`,
+    );
+    const { rc, out } = watch(root);
+    expect(rc).toBe(3);
+    expect(out).not.toContain("needs waitopen");
+  });
+
+  test("a landed fixture marker names WAIT-DONE", () => {
+    const root = join(tmp, "wait-done");
+    mkdirSync(root, { recursive: true });
+    mkrun(root, "waitdone", "shipping", 1, ".card-ready");
+    const fixture = join(tmp, "wait-done-fixture");
+    mkdirSync(join(fixture, ".postmaster", "runs", "postmaster"), { recursive: true });
+    writeFileSync(join(fixture, ".postmaster", "runs", "postmaster", ".exited"), "");
+    writeFileSync(
+      join(root, "waitdone", "wait.json"),
+      `${JSON.stringify({ kind: "fixture", fixture })}\n`,
+    );
+    const { rc, out } = watch(root);
+    expect(rc).toBe(0);
+    expect(out).toContain("needs waitdone WAIT-DONE");
+  });
+
+  test("an unreadable wait names WAIT-FAULT", () => {
+    const root = join(tmp, "wait-fault");
+    mkdirSync(root, { recursive: true });
+    mkrun(root, "waitbad", "shipping", 1, ".card-ready");
+    writeFileSync(join(root, "waitbad", "wait.json"), "{not json\n");
+    const { rc, out } = watch(root);
+    expect(rc).toBe(0);
+    expect(out).toContain("needs waitbad WAIT-FAULT");
+  });
+
+  test("a checks fault between two none answers breaks the none run", () => {
+    const root = join(tmp, "wait-none-fault");
+    mkdirSync(join(root, "postmaster"), { recursive: true });
+    const repo = join(tmp, "wait-none-repo");
+    mkdirSync(repo, { recursive: true });
+    const g = (args: string[]): void => {
+      const r = run("git", [
+        "-C",
+        repo,
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@example.invalid",
+        ...args,
+      ]);
+      if (r.code !== 0) throw new Error("cannot make the checks repo");
+    };
+    if (run("git", ["init", "-q", "-b", "main", repo]).code !== 0)
+      throw new Error("cannot init the checks repo");
+    writeFileSync(join(repo, "app.txt"), "app\n");
+    g(["add", "."]);
+    g(["commit", "-qm", "base"]);
+    const head = run("git", ["-C", repo, "rev-parse", "HEAD"]).out.trim();
+    const bin = join(tmp, "wait-none-bin");
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(join(bin, "head"), `${head}\n`);
+    const mode = join(bin, "mode");
+    writeFileSync(mode, "none\n");
+    writeFileSync(
+      join(bin, "gh"),
+      [
+        "#!/bin/sh",
+        'dir=$(dirname "$0")',
+        'mode=$(cat "$dir/mode")',
+        'if [ "$1" = "pr" ] && [ "$2" = "view" ]; then',
+        '  printf \'{"headRefOid":"%s"}\\n\' "$(cat "$dir/head")"',
+        "  exit 0",
+        "fi",
+        'if [ "$1" = "pr" ] && [ "$2" = "checks" ]; then',
+        '  case "$mode" in',
+        "    none) printf 'no checks reported on the main branch\\n' >&2; exit 1 ;;",
+        "    *) printf 'gh: unknown error\\n' >&2; exit 1 ;;",
+        "  esac",
+        "fi",
+        "exit 1",
+        "",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+    mkrun(root, "waitnone", "shipping", 1, ".card-ready");
+    writeFileSync(
+      join(root, "waitnone", "wait.json"),
+      `${JSON.stringify({ kind: "pull-request", repo, pr: "https://example.invalid/pr/1", cardHead: head, noneCount: 0 })}\n`,
+    );
+    const savedPath = process.env.PATH;
+    process.env.PATH = `${bin}:${savedPath ?? ""}`;
+    try {
+      // One look on none: the first in a row names nothing.
+      const first = watch(root, "0");
+      expect(first.rc).toBe(3);
+      expect(first.out).not.toContain("needs waitnone");
+      // A fault wakes as WAIT-FAULT and breaks the run of nones.
+      writeFileSync(mode, "error\n");
+      const fault = watch(root);
+      expect(fault.rc).toBe(0);
+      expect(fault.out).toContain("needs waitnone WAIT-FAULT");
+      // The next none is again the first in a row, not the second.
+      writeFileSync(mode, "none\n");
+      const after = watch(root, "0");
+      expect(after.rc).toBe(3);
+      expect(after.out).not.toContain("needs waitnone");
+      // A second none seconds later does not count: the gap is a minute.
+      const quick = watch(root, "0");
+      expect(quick.rc).toBe(3);
+      expect(quick.out).not.toContain("needs waitnone");
+      // A minute after that first none, the second one counts.
+      const watcherFile = join(root, "waitnone", "watcher.json");
+      const saved = JSON.parse(readFileSync(watcherFile, "utf8")) as {
+        wait_none_at: Record<string, number>;
+      };
+      for (const k of Object.keys(saved.wait_none_at))
+        saved.wait_none_at[k] = Math.floor(Date.now() / 1000) - 70;
+      writeFileSync(watcherFile, `${JSON.stringify(saved)}\n`);
+      const second = watch(root);
+      expect(second.rc).toBe(0);
+      expect(second.out).toContain("needs waitnone WAIT-DONE");
+    } finally {
+      process.env.PATH = savedPath;
+    }
+  });
+});
+
 describe("project poll and capacity", () => {
   const id = ["-c", "user.name=t", "-c", "user.email=t@example.invalid"];
   function watched(name: string, settings: string | null): { root: string; config: string } {
