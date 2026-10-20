@@ -1631,10 +1631,10 @@ ticket and rand six hex digits you pick fresh, before you end, and end as the br
 
      This brief changes run `<TICKET>`: hold it first with
      `<tool>/scripts/run runs-hold hold <runs> <TICKET> --helper f-mark-ready`, and release it
-     when the report lands. On `ready`, brief the `f-pr-checks` brief below — nothing the
-     draft's checks said is carried over — and follow the `pass`, `none`, `pending` and
-     `fail:` branches again from the new answer; only a `pass` after the mark writes the
-     merge instructions. On any other answer keep waiting.
+     when the report lands. On `ready`, ask `pull-request-checks` again through the
+     `f-pr-checks` brief below — nothing the draft's checks said is carried over — and follow
+     the `pass`, `none`, `pending` and `fail:` branches again from the new answer; only a
+     `pass` after the mark writes the merge instructions. On any other answer keep waiting.
      Before saying it is ready to merge or writing merge instructions, brief a helper to ask
      the pull request's checks at the card's HEAD:
 
@@ -1662,8 +1662,8 @@ ticket and rand six hex digits you pick fresh, before you end, and end as the br
 
      This brief changes run `<TICKET>`: hold it first with
      `<tool>/scripts/run runs-hold hold <runs> <TICKET> --helper f-pr-checks`, and release it
-     when the report lands. On `pass`, put the pull-request URL and merge instructions in
-     `.waiting-on-user` through the `f-write-wait` brief; the user merges it in the project's
+     when the report lands. On `pass`, put the pull-request URL and merge instructions in `.waiting-on-user`
+     through the `f-write-wait` brief; the user merges it in the project's
      review surface and says so, and that word is the answer step 3 waits on. On the
      WAIT-DONE wake, the `d-waitdone` brief asks the question once more and removes
      `wait.json`; follow the answer's branch here from its report: an answer of `pending`
