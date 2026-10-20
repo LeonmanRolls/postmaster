@@ -51,7 +51,8 @@ served by these commands alone:
 - logging your own decisions (`<tool>/scripts/run log-action`),
 - holding and releasing a run (`<tool>/scripts/run runs-hold hold`,
   `<tool>/scripts/run runs-hold release`, `<tool>/scripts/run runs-hold hold-hand`,
-  `<tool>/scripts/run runs-hold release-hand`),
+  `<tool>/scripts/run runs-hold release-hand`, `<tool>/scripts/run runs-hold release-stale`
+  once when a session starts),
 - starting the watcher and keeping its wait (`<tool>/scripts/run host run`, `<tool>/scripts/run runs-watch`, `<tool>/scripts/run wait-for-markers`),
 - starting a helper (the harness form in `harnesses.md`, Helpers).
 
