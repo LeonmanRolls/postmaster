@@ -5,15 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { run, type RunResult } from "./lib/proc.ts";
 
-import {
-  SELF,
-  configFor,
-  envFor,
-  mkRun,
-  scratch,
-  statusNext,
-  watch,
-} from "./acceptance-168.ts";
+import { SELF, configFor, envFor, mkRun, scratch, statusNext, watch } from "./acceptance-168.ts";
 
 export { SELF, configFor, envFor, mkRun, scratch, statusNext, watch };
 
