@@ -166,7 +166,8 @@ Helper brief `a-create` for project `<repo>`: create the approved tickets.
 Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
 Create exactly these tickets through the tracker adapter (`trackers.md` beside that runbook),
 with the title, request, priority and rationale each carries, and log `ticket-create` for each
-as the contract says: `<tickets>`. Create nothing beyond them, and draft no missing part.
+as the contract says, with the detail the postmaster hands you where it hands one:
+`<tickets>`. Create nothing beyond them, and draft no missing part.
 Write your report to `<runs>/postmaster/helper-a-create-<rand>.md`, rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
@@ -456,7 +457,7 @@ ticket and rand six hex digits you pick fresh, before you end, and end as the br
    the run rather than dispatch on premises that do not hold. Paste the cut output as the
    waybill's ticket only once the check holds or the ruling says go on.
 9. **Move the ticket to in-progress through a helper** through the tracker adapter. Brief one
-   to move it and report the move, and log `ticket-state` yourself. Under contract 2 the
+   to move it, log the move, and report it. Under contract 2 the
    coachman never touches the ticket's state and the postmaster marks it done after the
    merge; under the legacy contract the coachman touches it only at stage 3's merge. The
    brief:
@@ -465,7 +466,7 @@ ticket and rand six hex digits you pick fresh, before you end, and end as the br
 Helper brief `b-inprogress` for ticket `<TICKET>` on project `<repo>`: mark it in progress.
 Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
 Move the ticket to in-progress through the tracker adapter (`trackers.md` beside that
-runbook) and report the move.
+runbook), log `ticket-state` for the move as the contract says, and report the move.
 Write your report to `<dispatch>/helper-b-inprogress-<subject>-<rand>.md`, subject the run's
 ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
@@ -536,8 +537,8 @@ ticket and rand six hex digits you pick fresh, before you end, and end as the br
    This brief changes run `<TICKET>`: hold it first with
    `<tool>/scripts/run runs-hold hold <runs> <TICKET> --helper c-handoff`, and release it
    when the report lands. The leg script clears its done marker; wait for it.
-3. **Launch through a helper.** Brief one to check the pin, the walls, and launch the leg;
-   log `dispatch` yourself with the leg and the recorded thread id:
+3. **Launch through a helper.** Brief one to check the pin, the walls, launch the leg,
+   and log the launch as the contract says:
 
 ```helper
 Helper brief `c-launch` for run `<TICKET>` at `<dispatch>`: launch leg `<n>`.
@@ -556,7 +557,8 @@ error paths:
 
 with the dispatch path, repo, ticket, leg name, leg number and prompt file the postmaster
 hands you. The script records the thread id and role in the manifest and appends the outcome
-to `<dispatch>/logs/coachman-leg-<n>-attempts.jsonl`. Report the thread id.
+to `<dispatch>/logs/coachman-leg-<n>-attempts.jsonl`. Report the thread id, and log
+`dispatch` with the leg and the thread id as the contract says.
 Write your report to `<dispatch>/helper-c-launch-<subject>-<rand>.md`, subject the run's
 ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
@@ -569,8 +571,8 @@ ticket and rand six hex digits you pick fresh, before you end, and end as the br
 4. **The coachman's model for a leg** comes from `team.coachman`, or `team.coachman_legs.<leg-name>`
    where set. It is never a lane's model, in any leg. You decide it; the briefs carry it out.
 5. **Resume a leg through a helper,** only in the form that launched it, with its leg,
-   through the host. Brief one to write the prompt and resume; log `resume` yourself with
-   the leg and thread id:
+   through the host. Brief one to write the prompt, resume, and log the resume as the
+   contract says:
 
 ```helper
 Helper brief `c-resume` for run `<TICKET>` at `<dispatch>`: resume leg `<n>`.
@@ -588,7 +590,8 @@ when the manifest has none for the leg, what `<tool>/scripts/run host leg outcom
 <n>` prints: the record is authoritative and the manifest is best-effort. The leg command
 appends to the stream, keeps `.err` to this attempt, clears the done and exited markers and
 records its outcome; it keeps the role from the last attempt, including a fallback takeover.
-Report the resume. A remount and a ruling reach a leg this way. A merge word reaches only a
+Report the resume, and log `resume` with the leg and thread id as the contract says.
+A remount and a ruling reach a leg this way. A merge word reaches only a
 legacy ship leg; contract 2 is merged by the postmaster after the final coachman hand-off.
 Write your report to `<dispatch>/helper-c-resume-<subject>-<rand>.md`, subject the run's
 ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
@@ -1490,8 +1493,8 @@ ticket and rand six hex digits you pick fresh, before you end, and end as the br
 
    This brief reads only: no hold. On `landed`, skip landing and close instead: brief the
    `f-close` brief with the branch-already-merged note, log `merge` yourself noting the
-   branch was already merged, move the ticket to done through the brief, logging
-   `ticket-state` yourself, and run current Stage G. On `unpushed`, brief the `f-push` brief
+   branch was already merged, move the ticket to done through the brief, which logs
+   `ticket-state`, and run current Stage G. On `unpushed`, brief the `f-push` brief
    and then `f-landed` again; a push rejected because the remote contains work the pusher
    lacks (`[rejected]`, fetch first or non-fast-forward) means the remote moved, so brief
    `f-sendback` with that discrepancy instead; any other push failure stops the stage like
@@ -1518,7 +1521,9 @@ Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.
 Move the ticket to done through the tracker adapter, remove `<dispatch>/.waiting-on-user` and
 `<dispatch>/.card-ready` (either may already be gone), and `<dispatch>/wait.json` where one is
 written, and set the stage with `<tool>/scripts/run stage <dispatch> shipped postmaster`.
-Report each step. The postmaster logs `merge` and `ticket-state` itself.
+Report each step, and log `ticket-state` for the move as the contract says. The postmaster
+logs `merge` itself: the merge was the user's, or was already there, and no helper
+performed it.
 Write your report to `<dispatch>/helper-f-close-<subject>-<rand>.md`, subject the run's
 ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
@@ -1555,8 +1560,9 @@ opening another. Otherwise open the pull request against the default branch (`gh
 on a GitHub project) with the description the postmaster hands you. Include the card, final
 checks, diff stat, preview and review links, and thread ids. Leave a dated tracker comment
 linking the pull request and summarizing the same evidence, with the comment text the
-postmaster hands you. Report the push and the pull-request URL whole. The postmaster logs a
-`note` with the push and pull-request URL, and `ticket-comment`, itself.
+postmaster hands you. Report the push and the pull-request URL whole, and log
+`ticket-comment` for the comment as the contract says. The postmaster logs a `note` with
+the push and pull-request URL itself.
 Write your report to `<dispatch>/helper-f-land-pr-<subject>-<rand>.md`, subject the run's
 ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
@@ -1564,7 +1570,8 @@ ticket and rand six hex digits you pick fresh, before you end, and end as the br
      This brief changes run `<TICKET>`: hold it first with
      `<tool>/scripts/run runs-hold hold <runs> <TICKET> --helper f-land-pr`, and release it
      when the report lands. Hand it the description and comment the `f-scribe` brief reported
-     clean. Log a `note` yourself with the push and pull-request URL, and `ticket-comment`.
+     clean. Log a `note` yourself with the push and pull-request URL; the brief logs
+     `ticket-comment`.
      Before saying it is ready to merge or writing merge instructions, brief a helper to ask
      the pull request's checks at the card's HEAD:
 
@@ -1619,23 +1626,22 @@ reads HEAD, which must be the merge. Exit 0, the resolution is clean. Exit 1 nam
 the resolution introduced: undo the merge with `git reset --hard` to the pre-merge tip, merge
 again resolving cleanly, and scan again. Any other exit is an input fault: report it whole
 and stop. Move the ticket to done, remove `<dispatch>/.card-ready`, and set the
-stage with `<tool>/scripts/run stage <dispatch> shipped postmaster`. Report each step. The
-postmaster logs `merge` and `ticket-state` itself.
+stage with `<tool>/scripts/run stage <dispatch> shipped postmaster`. Log `merge` and
+`ticket-state` for the merge and the move as the contract says, and report each step.
 Write your report to `<dispatch>/helper-f-land-local-<subject>-<rand>.md`, subject the run's
 ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
      This brief changes run `<TICKET>`: hold it first with
      `<tool>/scripts/run runs-hold hold <runs> <TICKET> --helper f-land-local`, and release it
-     when the report lands. Leave the dated comment's text to the `f-scribe` brief. Log
-     `merge` yourself, move the ticket to done through the brief, logging `ticket-state`
-     yourself.
+     when the report lands. Leave the dated comment's text to the `f-scribe` brief. The
+     brief merges, moves the ticket to done, and logs `merge` and `ticket-state`.
    - An unknown landing route is a dispatch fault to resolve before this point. Do not infer
      it from the presence of a remote.
 3. **When the user's word that they merged comes**, brief the `f-landed` brief again, with
    `--pr-merge --pr-head` from the report when the provider reports the merged pull request.
    On `landed`, brief the `f-close` brief, log `merge` yourself, move the ticket to done
-   through the brief, logging `ticket-state` yourself, and run current Stage G. On
+   through the brief, which logs `ticket-state`, and run current Stage G. On
    `unpushed`, brief the `f-push` brief and then `f-landed` again, as in step 2. On
    `re-verify` the ticket ref and the card's HEAD differ: tell the
    user to restore the branch to the card's HEAD, and wait; when their word comes, brief
@@ -1856,14 +1862,15 @@ the coachman's; if any survive, remove each with `<tool>/scripts/run cut-scratch
 run dispatched before workhorse copies is a worktree on its `wb/` branch, which `--remove`
 refuses; remove those with `git -C <repo> worktree remove <folder>` instead. Teardown uses
 the live checkout's run host, never the run's pinned one: it must work even when the pin is
-gone or fails its check. Report each removal. The postmaster logs `teardown` itself.
+gone or fails its check. Report each removal, and log `teardown` for them as the contract
+says.
 Write your report to `<dispatch>/helper-lg-teardown-<subject>-<rand>.md`, subject the run's
 ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
    `<tool>/scripts/run runs-hold hold <runs> <TICKET> --helper lg-teardown`, and release it
-   when the report lands. On exit 2, stop and report. Log `teardown` yourself.
+   when the report lands. On exit 2, stop and report.
 3. **Close the run through a helper,** then release the run's pinned tool through the same
    brief:
 
@@ -1874,15 +1881,15 @@ Run `<tool>/scripts/run stage <dispatch> done postmaster`, then release the run'
 `<tool>/scripts/run run-meta release <dispatch>`. It removes the checkout only when no run
 whose `run.json` names it is still in flight (manifest stage other than `done` or
 `abandoned`); a run dispatched at the same commit keeps it. Report the result with the
-checkout path. The postmaster logs it as `teardown` itself. Never delete the dispatch
-directory.
+checkout path, and log `teardown` with the checkout path as the contract says. Never
+delete the dispatch directory.
 Write your report to `<dispatch>/helper-lg-close-<subject>-<rand>.md`, subject the run's
 ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
    `<tool>/scripts/run runs-hold hold <runs> <TICKET> --helper lg-close`, and release it
-   when the report lands. Log the result yourself as `teardown` with the checkout path.
+   when the report lands.
 4. **Put the run's tool faults to the user**, as its aftercare ends (Tool faults, below).
 5. **Put the style sort to the user once, as the run's aftercare ends,** when the run has one.
    Brief a helper to draft what each proposal would become:
@@ -1908,8 +1915,8 @@ ticket and rand six hex digits you pick fresh, before you end, and end as the br
    reason, the drafts, and the proposals the ledger already marks; log a `note`
    with `style proposal asked: <proposal>` for each draft shown; and carry on with the
    stream. On the user's word for a proposal, create its ticket through the `a-create` brief,
-   with `style proposal: <proposal>` as the detail of the `ticket-create` line you log
-   yourself; on their no, log a `note` yourself with
+   handing it `style proposal: <proposal>` as the `ticket-create` detail; on their no, log
+   a `note` yourself with
    `style proposal declined: <proposal>: <their word>`. Nothing is filed without the user's
    word, whatever `tracker.postmaster_may_create` says.
 6. **Dispatch the next ticket** in order, Stage B.
@@ -1930,15 +1937,15 @@ stray files, a workhorse copy the way a reviewer's is removed, with
 dispatched before workhorse copies is a worktree on its `wb/` branch, which `--remove`
 refuses; remove those with `git -C <repo> worktree remove <folder>` instead. Release the
 run's pinned tool (`<tool>/scripts/run run-meta release <dispatch>`), and move the ticket back
-to todo or to cancelled as the user says. The dispatch directory stays. Report each step. The
-postmaster logs the release as `teardown` itself.
+to todo or to cancelled as the user says. The dispatch directory stays. Report each step,
+and log `teardown` for the release as the contract says.
 Write your report to `<dispatch>/helper-ab-abandon-<subject>-<rand>.md`, subject the run's
 ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
 This brief changes run `<TICKET>`: hold it first with
 `<tool>/scripts/run runs-hold hold <runs> <TICKET> --helper ab-abandon`, and release it when
-the report lands. Log the release yourself as `teardown`. Then put the run's tool faults to
+the report lands. Then put the run's tool faults to
 the user (Tool faults).
 
 ## Tool faults
