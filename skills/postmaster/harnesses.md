@@ -576,6 +576,34 @@ there, and the user answers it in the pane. A fixture copy's postmaster runs hea
 (`SKILL.md` step 9, `hosts.md` none), so it never meets the question. A row not checked here
 takes its bypass flag from the headless form above; run it once before relying on it.
 
+## Helpers: starting one, per harness
+
+`postmaster.md` hands every step to a helper on Claude Code, and runs each brief's steps
+itself on any other harness. A helper is that harness's built-in sub-agent where it has
+one, and nothing elsewhere:
+
+| harness | helper form |
+|---|---|
+| claude | the Agent tool, below |
+| pi | none: this harness has no helper form, so the postmaster runs each brief's steps itself |
+| codex | none: this harness has no helper form, so the postmaster runs each brief's steps itself |
+| grok | none: this harness has no helper form, so the postmaster runs each brief's steps itself |
+| agy | none: this harness has no helper form, so the postmaster runs each brief's steps itself |
+| muse | none: this harness has no helper form, so the postmaster runs each brief's steps itself |
+| mimo | none: this harness has no helper form, so the postmaster runs each brief's steps itself |
+
+**Starting a helper on claude** (as documented for 2.1.302): call the Agent tool with the
+brief as its prompt, `subagent_type` `general-purpose`, and nothing else set: a fresh
+helper, never a fork of the conversation, on the postmaster's own model. The tool takes no
+`run_in_background` parameter. In a session someone types to, fork mode is on by default and
+the helper runs in the background; its report arrives in a later turn as a completion
+notification, an automated event carrying the helper's final message. Where nobody types to
+the session, as in a fixture copy, start the helper in the foreground and wait for its
+report before ending the turn: headless, a background helper is given up after ten idle
+minutes. A background helper keeps Bash, Read, Write, Edit, Grep, Glob and the MCP tools,
+and at most 20 run at once by default. Its transcript is kept beside the session's, under
+`<session id>/subagents/`.
+
 ## Keeping the watcher running
 
 Stage D keeps one `<tool>/scripts/run runs-watch <runs>` going per project, acts on the runs it
