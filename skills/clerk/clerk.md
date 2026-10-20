@@ -195,6 +195,11 @@ auto-replies stay off. The user tells you when they have finished commenting. Th
 comment, reply in its thread, and make the requested change in the draft. Do not treat silence as
 approval.
 
+Once the draft is first shown, run the message command once for the ticket —
+`<tool>/scripts/run notify clerk <repo> <ticket>` — and none for its later questions: by
+then the user is in the conversation. It sends nothing when messages are off, and a failure
+never stops the step: note the reason and go on.
+
 When the brief says to make a story, make it now that the draft is verified, before the user
 is shown anything: write the story beside the draft in the story folder the brief names, set
 the story's base to the brief's base, and follow "A story page for a ticket" in the

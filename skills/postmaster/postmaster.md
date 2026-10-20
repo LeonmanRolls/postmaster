@@ -644,6 +644,12 @@ then start the watcher again at once. If it names nothing it failed: the reason 
 before starting it again. A watcher that is not running is a run nobody notices. Starting
 the watcher and keeping its wait is yours; every act it names is a helper's.
 
+The watcher also sends the user's Telegram message for the look where messages are on
+(`notifications.md` beside this file): one message with a line per thing that came up. If
+`<runs>/postmaster/watch.err` names a notify failure, tell the user once — messages are
+failing and why — and do not repeat it while the same failure stands; the watcher records
+it once and retries the unsent message at later looks.
+
 The watcher takes three mechanical steps on its own, logging each through `<tool>/scripts/run log-action`
 with `the watcher took it` in the detail:
 
