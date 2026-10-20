@@ -1,5 +1,7 @@
 # Publish wiki/ with GitHub Pages. Pages must be set to "GitHub Actions" once in the
 # repository settings; after that every push to main that touches the wiki republishes it.
+# Until then the first job says so in a notice and the run ends green, instead of failing
+# on every push.
 name: Publish the wiki
 on:
   push:
@@ -14,7 +16,36 @@ concurrency:
   group: pages
   cancel-in-progress: true
 jobs:
+  enabled:
+    name: Is Pages switched on
+    runs-on: ubuntu-latest
+    outputs:
+      pages: ${{ steps.ask.outputs.pages }}
+    steps:
+      - id: ask
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/pages")
+          case "$code" in
+            200)
+              echo "pages=true" >> "$GITHUB_OUTPUT"
+              ;;
+            404)
+              echo "pages=false" >> "$GITHUB_OUTPUT"
+              echo "::notice::Pages is not switched on for this repository, so the wiki is not published. Switch it on under Settings, Pages, Source: GitHub Actions."
+              ;;
+            *)
+              echo "::error::Asking GitHub whether Pages is switched on returned HTTP $code"
+              exit 1
+              ;;
+          esac
   build:
+    needs: enabled
+    if: needs.enabled.outputs.pages == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

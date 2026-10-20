@@ -533,7 +533,13 @@ describe("runbooks: setup offers the global config, then the project's own setti
       .replace(/ {2,}/gu, " ");
   const agents = flat(readFileSync(join(ROOT, "AGENTS.md"), "utf8"));
   const skill = flat(readFileSync(join(ROOT, "skills", "postmaster", "SKILL.md"), "utf8"));
-  const readme = flat(readFileSync(join(ROOT, "README.md"), "utf8"));
+  // The README is a short hub; the setup commands and the settings advice live in the two
+  // pages it links, so the text a user reads is the README and those pages together.
+  const readme = flat(
+    ["README.md", "docs/getting-started.md", "docs/project-settings.md"]
+      .map((file) => readFileSync(join(ROOT, file), "utf8"))
+      .join("\n"),
+  );
   const example = flat(readFileSync(join(ROOT, "settings.example.toml"), "utf8"));
 
   test("both runbooks route the setup steps through setup-next", () => {

@@ -2,7 +2,13 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { run } from "./proc.ts";
-import { packageSettingsDiffer, parseSwitchOff, scanComments } from "./switch-offs.ts";
+import {
+  generatedMatcher,
+  packageSettingsDiffer,
+  parseSwitchOff,
+  relaxesChecks,
+  scanComments,
+} from "./switch-offs.ts";
 
 const SELF = join(import.meta.dir, "../run");
 const CLEAN_GIT_ENV = {
@@ -1798,5 +1804,264 @@ describe("switch-off landing instructions", () => {
     expect(postmaster).toContain("The merge authority never approves these entries");
     expect(postmaster).toContain("before it opens a\n   pull request or merges");
     expect(postmaster).toContain("with the refused\n   entry as the exact discrepancy");
+  });
+});
+
+describe("generatedMatcher", () => {
+  test("matches the listed globs at any depth and nothing else", () => {
+    const match = generatedMatcher(["**/*.gen.ts", "docs/api/**"]);
+    expect(match("routeTree.gen.ts")).toBe(true);
+    expect(match("apps/web/src/routeTree.gen.ts")).toBe(true);
+    expect(match("docs/api/v1/schema.ts")).toBe(true);
+    expect(match("apps/web/src/routeTree.ts")).toBe(false);
+    expect(match("apps/web/src/routeTree.gen.tsx")).toBe(false);
+    expect(match("docs/other/schema.ts")).toBe(false);
+  });
+
+  test("an empty list matches nothing", () => {
+    expect(generatedMatcher([])("apps/web/src/routeTree.gen.ts")).toBe(false);
+  });
+});
+
+describe("generated files named by the project", () => {
+  const HEADER = "/* eslint-disable */\n\n// @ts-nocheck\n\n";
+  const GENERATED = "apps/web/src/routeTree.gen.ts";
+  const SKIP_GEN = '[project]\ngenerated_files = ["**/*.gen.ts"]\n';
+
+  // main holds a generated file with the generator's bare header and the ticket
+  // regenerates it, which is what a run that adds a route does. The settings go in
+  // the working tree after the last commit, as they sit in the project's checkout.
+  function regenerated(name: string, shared: string | null, local: string | null = null): void {
+    freshRepo(name);
+    git(repo, "checkout", "-q", "main");
+    write(GENERATED, `${HEADER}export const routes = ["a"];\n`);
+    commit("generated file on main");
+    git(repo, "checkout", "-q", "-B", "ticket", "main");
+    write(GENERATED, `${HEADER}export const routes = ["a", "b"];\n`);
+    commit("regenerate");
+    if (shared !== null) write(".postmaster/project.toml", shared);
+    if (local !== null) write(".postmaster/settings.toml", local);
+  }
+
+  test("without a setting the regenerated header is listed with no reason (control)", () => {
+    regenerated("generated-control", null);
+    const result = check();
+    expect(result.code).toBe(3);
+    expect(result.out.startsWith("no reason\n## Switch-offs\n\n")).toBe(true);
+    expect(result.out).toContain(`${GENERATED}:1 eslint-disable`);
+    expect(result.out).toContain(`${GENERATED}:3 ts-nocheck`);
+  });
+
+  test("a project that names the file as generated is not asked about its header", () => {
+    regenerated("generated-skip", SKIP_GEN);
+    const result = check();
+    expect(result.code).toBe(0);
+    expect(result.out.startsWith("clear\n## Switch-offs\n\nnone")).toBe(true);
+    expect(result.out).toContain(`skipped generated file ${GENERATED}`);
+  });
+
+  test("a hand-written file beside a skipped generated file is still listed", () => {
+    regenerated("generated-beside", SKIP_GEN);
+    write("apps/web/src/hand.ts", "// @ts-ignore -- known mismatch\nconst x: string = 1;\n");
+    commit("add a hand-written switch-off");
+    const result = check();
+    expect(result.code).toBe(2);
+    expect(result.out).toContain("apps/web/src/hand.ts:1 ts-ignore");
+    expect(result.out).not.toContain(`${GENERATED}:1`);
+  });
+
+  test("a hand-written file with a similar name is not skipped (control)", () => {
+    regenerated("generated-similar", SKIP_GEN);
+    write("apps/web/src/routeTree.ts", "// @ts-nocheck\nexport const routes = [];\n");
+    commit("add a similarly named file");
+    const result = check();
+    expect(result.code).toBe(3);
+    expect(result.out).toContain("apps/web/src/routeTree.ts:1 ts-nocheck");
+    expect(result.out).not.toContain(`${GENERATED}:1`);
+  });
+
+  test("a generated file the ticket adds is skipped too", () => {
+    regenerated("generated-added", SKIP_GEN);
+    write("apps/web/src/other.gen.ts", `${HEADER}export const other = 1;\n`);
+    commit("add another generated file");
+    const result = check();
+    expect(result.code).toBe(0);
+    expect(result.out).toContain("skipped generated file apps/web/src/other.gen.ts");
+  });
+
+  test("a settings file under a generated path is skipped and one elsewhere is listed", () => {
+    regenerated("generated-settings", '[project]\ngenerated_files = ["gen/**"]\n');
+    write("gen/tsconfig.json", '{"compilerOptions":{"strict":false}}\n');
+    write("other/tsconfig.json", '{"compilerOptions":{"strict":false}}\n');
+    commit("add two settings files");
+    const result = check();
+    expect(result.out).toContain("settings other/tsconfig.json");
+    expect(result.out).not.toContain("settings gen/tsconfig.json");
+    expect(result.out).toContain("skipped generated file gen/tsconfig.json");
+  });
+
+  test("the person's settings file works and replaces the shared list whole", () => {
+    regenerated("generated-local", '[project]\ngenerated_files = ["docs/**"]\n', SKIP_GEN);
+    const skipped = check();
+    expect(skipped.code).toBe(0);
+    expect(skipped.out).toContain(`skipped generated file ${GENERATED}`);
+    write(".postmaster/settings.toml", "[project]\ngenerated_files = []\n");
+    write(".postmaster/project.toml", SKIP_GEN);
+    const cleared = check();
+    expect(cleared.code).toBe(3);
+    expect(cleared.out).toContain(`${GENERATED}:1 eslint-disable`);
+  });
+
+  test("an invalid setting fails the check instead of reading as none", () => {
+    regenerated("generated-invalid", '[project]\ngenerated_files = "**/*.gen.ts"\n');
+    const result = check();
+    expect(result.code).toBe(1);
+    expect(result.out).toContain("generated_files");
+  });
+});
+
+describe("relaxesChecks", () => {
+  test("a tsconfig that turns strictness off relaxes the checks", () => {
+    expect(relaxesChecks("tsconfig", '{"compilerOptions":{"strict":false}}')).toBe(true);
+    expect(
+      relaxesChecks(
+        "tsconfig",
+        '{\n  // loose\n  "compilerOptions": { "noImplicitAny" : false }\n}',
+      ),
+    ).toBe(true);
+  });
+
+  test("a strict tsconfig does not (control)", () => {
+    expect(relaxesChecks("tsconfig", '{"compilerOptions":{"strict":true,"noEmit":true}}')).toBe(
+      false,
+    );
+  });
+
+  test("a package whose check script runs nothing relaxes the checks", () => {
+    for (const run of ["true", ":", "exit 0", 'echo "no tests"']) {
+      expect(relaxesChecks("package", JSON.stringify({ scripts: { test: run } }))).toBe(true);
+    }
+    expect(relaxesChecks("package", JSON.stringify({ scripts: { lint: "true" } }))).toBe(true);
+    expect(relaxesChecks("package", JSON.stringify({ scripts: { "test:unit": "true" } }))).toBe(
+      true,
+    );
+  });
+
+  test("a package with real check scripts, or an empty script that is not a check, does not (control)", () => {
+    const real = { typecheck: "tsc --noEmit", test: "vitest run", lint: "biome check" };
+    expect(relaxesChecks("package", JSON.stringify({ scripts: real }))).toBe(false);
+    expect(
+      relaxesChecks("package", JSON.stringify({ scripts: { dev: "echo hi", clean: "true" } })),
+    ).toBe(false);
+    expect(relaxesChecks("package", JSON.stringify({ name: "x" }))).toBe(false);
+  });
+
+  test("a package that carries its own lint or format block relaxes the checks", () => {
+    expect(relaxesChecks("package", JSON.stringify({ eslintConfig: { rules: {} } }))).toBe(true);
+    expect(relaxesChecks("package", JSON.stringify({ prettier: {} }))).toBe(true);
+  });
+
+  test("text that cannot be read is never waved through", () => {
+    expect(relaxesChecks("package", "{not json")).toBe(true);
+    expect(relaxesChecks("package", null)).toBe(true);
+    expect(relaxesChecks("tsconfig", null)).toBe(true);
+  });
+});
+
+describe("the own settings of a brand-new folder", () => {
+  const PACKAGE = `${JSON.stringify(
+    {
+      name: "new-pkg",
+      scripts: { typecheck: "tsc --noEmit", test: "vitest run", lint: "biome check" },
+    },
+    null,
+    2,
+  )}\n`;
+  const TSCONFIG = `${JSON.stringify({ compilerOptions: { strict: true, noEmit: true }, include: ["src"] }, null, 2)}\n`;
+
+  // main already holds one package, so a second folder is new and the first is not.
+  function withBasePackage(name: string): void {
+    freshRepo(name);
+    git(repo, "checkout", "-q", "main");
+    write("packages/old/src/a.ts", "export const a = 1;\n");
+    commit("an existing package");
+    git(repo, "checkout", "-q", "-B", "ticket", "main");
+  }
+
+  test("a new folder's package.json and tsconfig.json are not listed, and each is named on stderr", () => {
+    withBasePackage("newfolder-clear");
+    write("packages/new/package.json", PACKAGE);
+    write("packages/new/tsconfig.json", TSCONFIG);
+    write("packages/new/src/index.ts", "export const x = 1;\n");
+    commit("add a new package");
+    const result = check();
+    expect(result.code).toBe(0);
+    expect(result.out.startsWith("clear\n## Switch-offs\n\nnone")).toBe(true);
+    expect(result.out).toContain("not listed: packages/new/package.json");
+    expect(result.out).toContain("not listed: packages/new/tsconfig.json");
+  });
+
+  test("the same files added to a folder that already existed are listed (control)", () => {
+    withBasePackage("newfolder-existing");
+    write("packages/old/package.json", PACKAGE);
+    write("packages/old/tsconfig.json", TSCONFIG);
+    commit("add settings to an existing package");
+    const result = check();
+    expect(result.code).toBe(2);
+    expect(result.out).toContain("settings packages/old/package.json");
+    expect(result.out).toContain("settings packages/old/tsconfig.json");
+    expect(result.out).not.toContain("not listed:");
+  });
+
+  test("a new folder's tsconfig that turns strictness off is listed, its real package.json is not", () => {
+    withBasePackage("newfolder-loose");
+    write("packages/new/package.json", PACKAGE);
+    write("packages/new/tsconfig.json", '{"compilerOptions":{"strict":false}}\n');
+    commit("add a loose package");
+    const result = check();
+    expect(result.code).toBe(2);
+    expect(result.out).toContain("settings packages/new/tsconfig.json");
+    expect(result.out).not.toContain("settings packages/new/package.json");
+  });
+
+  test("a new folder's package.json whose check script runs nothing is listed", () => {
+    withBasePackage("newfolder-empty-script");
+    write("packages/new/package.json", '{"name":"new","scripts":{"lint":"true"}}\n');
+    commit("add a package with an empty lint");
+    const result = check();
+    expect(result.code).toBe(2);
+    expect(result.out).toContain("settings packages/new/package.json");
+  });
+
+  test("a new folder's package.json with its own lint block is listed", () => {
+    withBasePackage("newfolder-eslint-block");
+    write("packages/new/package.json", '{"name":"new","eslintConfig":{"rules":{}}}\n');
+    commit("add a package with an eslint block");
+    const result = check();
+    expect(result.code).toBe(2);
+    expect(result.out).toContain("settings packages/new/package.json");
+  });
+
+  test("other settings files in a new folder are listed (control)", () => {
+    withBasePackage("newfolder-others");
+    write("packages/new/biome.json", '{"linter":{"enabled":false}}\n');
+    write("packages/new/.gitignore", "dist\n");
+    commit("add lint settings to a new package");
+    const result = check();
+    expect(result.code).toBe(2);
+    expect(result.out).toContain("settings packages/new/biome.json");
+    expect(result.out).toContain("settings packages/new/.gitignore");
+  });
+
+  test("a change to the root package.json is still listed beside a new folder's own", () => {
+    withBasePackage("newfolder-root");
+    write("package.json", '{"scripts":{"check":"true"},"devDependencies":{}}\n');
+    write("packages/new/package.json", PACKAGE);
+    commit("weaken the root check and add a package");
+    const result = check();
+    expect(result.code).toBe(2);
+    expect(result.out).toContain("settings package.json");
+    expect(result.out).not.toContain("settings packages/new/package.json");
+    expect(result.out).toContain("not listed: packages/new/package.json");
   });
 });

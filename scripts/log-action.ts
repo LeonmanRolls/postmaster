@@ -19,7 +19,7 @@
 //            escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment
 //            gate verify merge teardown degrade handoff-accept handoff stage premises
 //            tool-fault note wall told carry reach take-in switch-off experiment library
-//            notify
+//            notify library-yes age-waiver script-allow pm-word
 //   target   what the action was done to: a lane, a ticket id, a branch, a path, a round
 //   detail   free text; everything after the target, joined by spaces. A finding's opens with its
 //            class, gating or style, so the style findings can be told apart, and a
@@ -55,6 +55,13 @@
 // root's ledger alone, its detail opening with failed and carrying the reason
 // with the token and the chat id redacted, never the secrets themselves.
 //
+// library-yes, age-waiver, script-allow and pm-word are the user's word on a run's
+// installs (#426): the yes to install one exact name@version, the waiver of the
+// seven-day wait for one exact name@version, the allowance for one package's
+// install scripts, and the word to run on despite unsupported package managers.
+// Only the postmaster records them, after asking the user; their targets are
+// enforced shapes and their detail carries the user's words.
+//
 // A tool-fault is postmaster itself misbehaving: a script, a runbook step or a harness adapter.
 // Its target is the postmaster file, relative to the checkout this script is in or absolute,
 // and is recorded as its real path relative to that checkout. Its fields are flags, all
@@ -74,8 +81,10 @@
 //   exit 0  written to both files
 //   exit 1  usage, an action outside the set, a finding or finding-also with no class,
 //           a premises result with no verified commit or base, a switch-off, library
-//           or notify with a target or detail out of shape, a tool-fault missing a
-//           field or naming no postmaster file, or a file could not be appended
+//           or notify with a target or detail out of shape, an approval verb (library-yes,
+//           age-waiver, script-allow, pm-word) from any actor but the postmaster or
+//           with a target or detail out of shape, a tool-fault missing a field or naming
+//           no postmaster file, or a file could not be appended
 import {
   appendFileSync,
   existsSync,
@@ -91,7 +100,7 @@ import { pyWords } from "./lib/text.ts";
 import { isSymlink } from "./lib/effective-config.ts";
 
 const VERBS =
-  " dispatch resume refuse harvest synthesize review-launch review-harvest review-finish finding finding-also apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment reach gate verify merge teardown degrade handoff-accept handoff stage premises tool-fault note wall told carry take-in switch-off experiment library notify ";
+  " dispatch resume refuse harvest synthesize review-launch review-harvest review-finish finding finding-also apply escalate rule ticket-check ticket-create ticket-edit ticket-state ticket-comment reach gate verify merge teardown degrade handoff-accept handoff stage premises tool-fault note wall told carry take-in switch-off experiment library notify library-yes age-waiver script-allow pm-word ";
 const NOTIFY_KINDS = new Set(["question", "shipcard", "wall", "landed"]);
 const CONTROLS = join(toolRoot(import.meta), "skills/postmaster/controls.md");
 
@@ -330,6 +339,37 @@ function logAction(
       console.error(
         "log-action: a switch-off's detail carries the decision, then the entry and the user's words",
       );
+      return 1;
+    }
+  }
+  if (
+    action === "library-yes" ||
+    action === "age-waiver" ||
+    action === "script-allow" ||
+    action === "pm-word"
+  ) {
+    if (actor !== "postmaster") {
+      console.error(`log-action: ${action} takes the actor postmaster, never ${actor}`);
+      return 1;
+    }
+    const nameVersion = /^(?:@[^/ \t]+\/[^@ \t]+|[^@ \t/]+)@[^@ \t^~*|<>=]+$/u;
+    const bareName = /^(?:@[^/ \t]+\/[^@ \t/]+|[^@ \t/]+)$/u;
+    if (action === "library-yes" || action === "age-waiver") {
+      if (!nameVersion.test(target)) {
+        console.error(`log-action: ${action}'s target is the exact name@version it approves`);
+        return 1;
+      }
+    } else if (action === "script-allow") {
+      if (!bareName.test(target)) {
+        console.error("log-action: script-allow's target is the bare package name it allows");
+        return 1;
+      }
+    } else if (!/^[a-z]+(?:,[a-z]+)*$/u.test(target)) {
+      console.error("log-action: pm-word's target is the comma-separated managers the word covers");
+      return 1;
+    }
+    if (!detail.trim()) {
+      console.error(`log-action: ${action}'s detail carries the user's words`);
       return 1;
     }
   }

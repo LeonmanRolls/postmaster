@@ -128,6 +128,9 @@ describe("story-picture", () => {
 
   test("stub codex plus stub convert writes the picture", () => {
     stub("codex", CODEX_STUB);
+    // The adapter prefers magick to convert, so a host with ImageMagick 7 on its PATH
+    // would bypass a convert-only stub.
+    stub("magick", CONVERT_STUB);
     stub("convert", CONVERT_STUB);
     const out = join(dir, "sub", "pic.jpg");
     const r = picture(

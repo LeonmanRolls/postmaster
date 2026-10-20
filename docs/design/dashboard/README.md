@@ -1,9 +1,9 @@
 # The dashboard's look
 
-This folder holds the look chosen for the dashboard in
-[#238, Design: clickable prototypes of the dashboard from every model, before it is built](https://github.com/brindlewick/postmaster/issues/238).
+This folder holds the look chosen for the dashboard in the ticket "Design: clickable
+prototypes of the dashboard from every model, before it is built".
 The dashboard is built to it, in
-[#146, A read-only web dashboard of every run, on the tailnet, for phone, iPad and desktop](https://github.com/brindlewick/postmaster/issues/146)
+[#32, A read-only web dashboard of every run, on the tailnet, for phone, iPad and desktop](https://github.com/LeonmanRolls/postmaster/issues/32)
 and the tickets after it. What the dashboard shows, and what it must never do, is in
 [the dashboard concept](../../../wiki/concepts/dashboard.md). This folder covers how it looks.
 

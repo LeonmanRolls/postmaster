@@ -20,6 +20,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { parseTomlText } from "./lib/data";
 import {
+  generatedFilesOf,
   globalConfigPath,
   ignoreSettings,
   isTracked,
@@ -399,6 +400,20 @@ describe("refusals", () => {
         "---" +
         '-"\n',
     ],
+    ["generated_files that is not a list", '[project]\ngenerated_files = "**/*.gen.ts"\n'],
+    ["a blank generated_files pattern", '[project]\ngenerated_files = [" "]\n'],
+    ["a generated_files pattern that is not text", "[project]\ngenerated_files = [1]\n"],
+    ["an absolute generated_files pattern", '[project]\ngenerated_files = ["/src/x.gen.ts"]\n'],
+    [
+      "a generated_files pattern with a parent segment",
+      '[project]\ngenerated_files = ["../x.gen.ts"]\n',
+    ],
+    [
+      "a generated_files pattern with a backslash",
+      '[project]\ngenerated_files = ["src\\\\x.gen.ts"]\n',
+    ],
+    ["a negated generated_files pattern", '[project]\ngenerated_files = ["!x.gen.ts"]\n'],
+    ["a generated_files pattern of wildcards only", '[project]\ngenerated_files = ["**/*"]\n'],
   ];
   for (const [label, contents] of rejects) {
     test(`rejects ${label}`, () => {
@@ -494,6 +509,22 @@ describe("acceptances", () => {
     ["a keyword-prefixed natural word", '[tracker]\nbinding="Tokenomics review"\n', true],
     ["a token prefix too short to be a token", '[tracker]\nbinding="ghp_abc"\n', true],
     ["an assignment without a credential word", '[tracker]\nbinding="a=b"\n', true],
+    [
+      "generated_files globs in the shared file",
+      '[project]\ngenerated_files = ["**/*.gen.ts", "**/*.gen.d.ts"]\n',
+      false,
+    ],
+    [
+      "generated_files globs in the person's file",
+      '[project]\ngenerated_files = ["**/*.gen.ts", "docs/api/**"]\n',
+      true,
+    ],
+    ["an empty generated_files list", "[project]\ngenerated_files = []\n", true],
+    [
+      "a generated_files glob with braces",
+      '[project]\ngenerated_files = ["**/*.{gen,generated}.ts"]\n',
+      false,
+    ],
   ];
   for (const [label, contents, localSettings] of accepts) {
     test(`accepts ${label}`, () => {
@@ -781,6 +812,49 @@ describe("project overrides", () => {
   }, 30000);
 });
 
+describe("the tracker board setting", () => {
+  test("tracker.board stays a project fact, and the person's file overrides the shared one", () => {
+    const r = at("board-fact");
+    write(join(r, ".postmaster", "project.toml"), '[tracker]\nboard = "off"\n');
+    const shared = inspect(r);
+    expect((shared.tracker as Rec).board).toBe("off");
+    expect((shared.sources as Rec)["tracker.board"]).toBe("shared");
+    write(join(r, ".postmaster", "settings.toml"), '[tracker]\nkind = "github"\nboard = "on"\n');
+    const local = inspect(r);
+    expect((local.tracker as Rec).board).toBe("on");
+    expect((local.sources as Rec)["tracker.board"]).toBe("local");
+    const merged = effectiveConfig(r, loadMachine(machine));
+    expect((merged.tracker as Rec).kind).toBe("github");
+    expect(Object.hasOwn(merged.tracker as Rec, "board")).toBe(false);
+  });
+
+  test("with neither file naming the board, it is left to discovery", () => {
+    const r = at("board-unset");
+    mkdirSync(r, { recursive: true });
+    const facts = inspect(r);
+    expect(Object.hasOwn(facts.tracker as Rec, "board")).toBe(false);
+    expect((facts.sources as Rec)["tracker.board"]).toBe("discovery");
+  });
+
+  test("a board setting other than on or off is refused in either file, naming it", () => {
+    for (const [file, label] of [
+      ["project.toml", "shared"],
+      ["settings.toml", "local"],
+    ] as const) {
+      const r = at(`board-bad-${label}`);
+      write(join(r, ".postmaster", file), "[tracker]\nboard = false\n");
+      let message = "";
+      try {
+        inspect(r);
+      } catch (e) {
+        if (isDie(e)) message = e.message;
+        else throw e;
+      }
+      expect(message).toBe(`${label} project settings.tracker.board must be "on" or "off"`);
+    }
+  });
+});
+
 describe("tracked files", () => {
   const id = ["-c", "user.name=t", "-c", "user.email=t@example.invalid"];
 
@@ -824,5 +898,60 @@ describe("global config path", () => {
       if (saveHome === undefined) delete process.env.HOME;
       else process.env.HOME = saveHome;
     }
+  });
+});
+
+describe("the generated_files project setting", () => {
+  const listed = '[project]\ngenerated_files = ["**/*.gen.ts", "docs/api/**"]\n';
+
+  function projectWith(name: string, shared: string | null, local: string | null): string {
+    const dir = at(name);
+    mkdirSync(dir, { recursive: true });
+    if (shared !== null) {
+      const candidate = at(`${name}-shared.toml`);
+      write(candidate, shared);
+      writeProfile(dir, "project", candidate);
+    }
+    if (local !== null) {
+      const candidate = at(`${name}-local.toml`);
+      write(candidate, local);
+      writeProfile(dir, "local", candidate);
+    }
+    return dir;
+  }
+
+  test("the shared file lists generated files and the report names it as the source", () => {
+    const dir = projectWith("generated-shared", listed, null);
+    const got = inspect(dir);
+    expect(JSON.stringify((got.project as Rec).generated_files)).toBe(
+      '["**/*.gen.ts","docs/api/**"]',
+    );
+    expect((got.sources as Rec)["project.generated_files"]).toBe("shared");
+    expect(generatedFilesOf(dir)).toEqual(["**/*.gen.ts", "docs/api/**"]);
+  });
+
+  test("the person's file replaces the shared list whole", () => {
+    const dir = projectWith("generated-local", listed, '[project]\ngenerated_files = ["gen/**"]\n');
+    expect(generatedFilesOf(dir)).toEqual(["gen/**"]);
+    expect((inspect(dir).sources as Rec)["project.generated_files"]).toBe("local");
+  });
+
+  test("an empty list in the person's file clears the shared list", () => {
+    const dir = projectWith("generated-cleared", listed, "[project]\ngenerated_files = []\n");
+    expect(generatedFilesOf(dir)).toEqual([]);
+  });
+
+  test("a project that names none gains no key and no source, so records stay as they were", () => {
+    const dir = projectWith("generated-none", '[project]\ndefault_turnpikes = ["bug"]\n', null);
+    const got = inspect(dir);
+    expect(Object.hasOwn(got.project as Rec, "generated_files")).toBe(false);
+    expect(Object.hasOwn(got.sources as Rec, "project.generated_files")).toBe(false);
+    expect(generatedFilesOf(dir)).toEqual([]);
+  });
+
+  test("a project with no settings files reads as none", () => {
+    const dir = at("generated-no-files");
+    mkdirSync(dir, { recursive: true });
+    expect(generatedFilesOf(dir)).toEqual([]);
   });
 });
