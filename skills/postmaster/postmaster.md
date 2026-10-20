@@ -657,7 +657,8 @@ Write your report to `<runs>/postmaster/helper-d-ready-consume-<pid>.md`, pid yo
 id, before you end, and end as the brief contract says.
 ```
 
-If the ticket no longer passes readiness, drop its mark the same way and tell the user;
+This brief is work on no run: no hold. If the ticket no longer passes readiness, drop its
+mark the same way and tell the user;
 never dispatch it from the old queue entry. The watcher keeps waiting when the run ceiling
 is full, then wakes you as soon as a run closes and frees a slot. A clerk started in the
 user's own session writes the same ready marker and follows this path.
@@ -674,7 +675,8 @@ Write your report to `<runs>/postmaster/helper-d-experiments-<pid>.md`, pid your
 id, before you end, and end as the brief contract says.
 ```
 
-When an experiment is due, tell the user once: its question, its levels, what was measured.
+This brief reads only: no hold. When an experiment is due, tell the user once: its question,
+its levels, what was measured.
 The user decides whether it concludes or gets a new date, and only on their word brief a
 helper to conclude or move it and write the change to the page at once, as the Experiments
 section says:
@@ -691,7 +693,8 @@ Write your report to `<runs>/postmaster/helper-d-experiments-act-<pid>.md`, pid 
 process id, before you end, and end as the brief contract says.
 ```
 
-The list of runs waiting on the user is `<runs>/postmaster/ESCALATION.md`, kept by the
+This brief is work on no run: no hold. The list of runs waiting on the user is
+`<runs>/postmaster/ESCALATION.md`, kept by the
 waiting commands, never by hand. When the user asks which runs are waiting, brief a helper
 to read it:
 
@@ -702,6 +705,8 @@ Run `<tool>/scripts/run host leg waiting list <runs>` and report what it prints 
 Write your report to `<runs>/postmaster/helper-d-waiting-<pid>.md`, pid your own process id,
 before you end, and end as the brief contract says.
 ```
+
+This brief reads only: no hold.
 
 **Hold a run for a helper** with
 `<tool>/scripts/run runs-hold hold <runs> <TICKET> --helper <brief>` before you start it,
@@ -1048,6 +1053,8 @@ the page is current whenever it is opened. Report what started.
 Write your report to `<runs>/postmaster/helper-x-start-<pid>.md`, pid your own process id,
 before you end, and end as the brief contract says.
 ```
+
+This brief is work on no run: no hold.
 
 **Conclude one on the user's verdict** through the `d-experiments-act` brief, which writes
 the change to the page at once. Each project has its own page
