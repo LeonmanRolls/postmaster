@@ -168,6 +168,33 @@ describe("the lock", () => {
     }
   });
 
+  test("two holds racing on a stale lock leave exactly one", async () => {
+    const dir = scratch("stale-race");
+    try {
+      const { cfg, root } = rootFor(dir);
+      writeFileSync(join(root, "postmaster", ".held.lock"), "4242424242\n");
+      const env = { ...process.env, ...envFor(cfg) } as Record<string, string>;
+      const a = Bun.spawn([SELF, "runs-hold", "hold", root, "T-1", "--helper", "a"], {
+        env,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const b = Bun.spawn([SELF, "runs-hold", "hold", root, "T-1", "--helper", "b"], {
+        env,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [ca, cb] = await Promise.all([a.exited, b.exited]);
+      expect([ca, cb].sort()).toEqual([0, 2]);
+      const lines = readFileSync(join(root, "postmaster", "held"), "utf8")
+        .split("\n")
+        .filter((l) => l !== "");
+      expect(lines).toHaveLength(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("two holds racing on one run leave exactly one", async () => {
     const dir = scratch("race");
     try {

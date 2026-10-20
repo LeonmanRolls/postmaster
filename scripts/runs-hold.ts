@@ -19,11 +19,20 @@
 //   exit 2  refused: the run is already held, or not held in the kind named
 //
 // The held list is read and written under `.held.lock`, taken O_EXCL with
-// the holder's pid, waited on while the holder lives and taken past a dead
-// one, and written atomically, so the watcher's re-read never sees a torn
-// list and two holds racing on one run leave exactly one.
+// the holder's pid, waited on while the holder lives and reclaimed past a
+// dead one by renaming it aside, so racers on a stale lock elect one winner,
+// and written atomically, so the watcher's re-read never sees a torn list
+// and two holds racing on one run leave exactly one.
 import { randomBytes } from "node:crypto";
-import { closeSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { atomicWriteFileSync } from "./lib/effective-config.ts";
 import {
@@ -104,7 +113,21 @@ function withHeldLock<T>(pmDir: string, fn: () => T): T {
         continue;
       }
       if (Date.now() >= deadline) die(`runs-hold: cannot take ${lock}: it cannot be replaced`, 1);
-      rmSync(lock, { force: true });
+      // Reclaim a stale lock by renaming it aside: the rename elects exactly
+      // one winner when racers meet on it, and a lost rename (ENOENT) loops
+      // back to queue. Re-read first, so a lock that changed since the check
+      // above is never moved. Moving a live holder's file needs a reclaim, a
+      // steal and a fresh acquire to interleave between the re-read and the
+      // rename: a stale lock with three parties in one beat.
+      if (holder() !== pid) continue;
+      const stale = join(pmDir, `.held.stale.${process.pid}.${randomBytes(8).toString("hex")}`);
+      try {
+        renameSync(lock, stale);
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException)?.code === "ENOENT") continue;
+        die(`runs-hold: cannot take ${lock}: it cannot be replaced`, 1);
+      }
+      rmSync(stale, { force: true });
     }
   }
   try {
