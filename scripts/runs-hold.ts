@@ -25,14 +25,7 @@
 // winner; and the list is written atomically, so the watcher's re-read never
 // sees a torn list and two holds racing on one run leave exactly one.
 import { randomBytes } from "node:crypto";
-import {
-  linkSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { linkSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { atomicWriteFileSync } from "./lib/effective-config.ts";
 import {
