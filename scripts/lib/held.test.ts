@@ -2,12 +2,14 @@
 // read-modify-write computations the hold command runs under its lock.
 import { describe, expect, test } from "bun:test";
 import {
+  addHandHold,
   addHold,
   dropStaleHolds,
   formatHelperHold,
   heldTicketOf,
   isHelperHold,
   parseHeldLine,
+  removeHandHold,
   removeHelperHold,
 } from "./held.ts";
 
@@ -92,6 +94,38 @@ describe("addHold", () => {
       held: "T-1 helper=old session=s",
     });
     expect(addHold("T-1\n", "T-1", "h", "t")).toEqual({ ok: false, held: "T-1" });
+  });
+});
+
+describe("addHandHold", () => {
+  test("appends the bare ticket", () => {
+    expect(addHandHold("T-9\n", "T-1")).toEqual({ ok: true, text: "T-9\nT-1\n" });
+  });
+
+  test("any existing line for the run refuses, carrying that line", () => {
+    expect(addHandHold("T-1 helper=h session=s\n", "T-1")).toEqual({
+      ok: false,
+      held: "T-1 helper=h session=s",
+    });
+    expect(addHandHold("T-1\n", "T-1")).toEqual({ ok: false, held: "T-1" });
+  });
+});
+
+describe("removeHandHold", () => {
+  test("removes the hand line and keeps the rest byte for byte", () => {
+    expect(removeHandHold("T-1\nT-9 helper=h session=s\n", "T-1")).toEqual({
+      ok: true,
+      text: "T-9 helper=h session=s\n",
+      removed: ["T-1"],
+    });
+  });
+
+  test("an unheld run and a helper-held run refuse distinctly", () => {
+    expect(removeHandHold("T-9\n", "T-1")).toEqual({ ok: false, reason: "not-held" });
+    expect(removeHandHold("T-1 helper=h session=s\n", "T-1")).toEqual({
+      ok: false,
+      reason: "helper-held",
+    });
   });
 });
 

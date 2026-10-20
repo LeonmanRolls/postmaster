@@ -51,16 +51,23 @@ export function formatHelperHold(ticket: string, helper: string, session: string
 export type AddHold = { ok: true; text: string } | { ok: false; held: string };
 
 /**
+ * Append a hand-written hold: the bare ticket. Refused when any line already
+ * holds the run, carrying that line for the message.
+ */
+export function addHandHold(text: string, ticket: string): AddHold {
+  for (const raw of text.split("\n")) {
+    if (heldTicketOf(raw) === ticket) return { ok: false, held: raw.trim() };
+  }
+  const prefix = text === "" || text.endsWith("\n") ? text : `${text}\n`;
+  return { ok: true, text: `${prefix}${ticket}\n` };
+}
+
+/**
  * Append a helper's hold. Refused when any line already holds the run, by
  * hand or by a helper, carrying that line for the message. The existing
  * text is kept byte for byte.
  */
-export function addHold(
-  text: string,
-  ticket: string,
-  helper: string,
-  session: string,
-): AddHold {
+export function addHold(text: string, ticket: string, helper: string, session: string): AddHold {
   for (const raw of text.split("\n")) {
     if (heldTicketOf(raw) === ticket) return { ok: false, held: raw.trim() };
   }
@@ -93,6 +100,33 @@ export function removeHelperHold(text: string, ticket: string): RemoveHold {
     }
   }
   if (removed.length === 0) return { ok: false, reason: hand ? "hand-held" : "not-held" };
+  return { ok: true, text: kept.join("\n"), removed };
+}
+
+export type RemoveHandHold =
+  | { ok: true; text: string; removed: string[] }
+  | { ok: false; reason: "not-held" | "helper-held" };
+
+/**
+ * Remove a run's hand-written holds. A helper's hold is never touched: when
+ * the run has one and no hand-written line, the refusal says so.
+ */
+export function removeHandHold(text: string, ticket: string): RemoveHandHold {
+  const kept: string[] = [];
+  const removed: string[] = [];
+  let helper = false;
+  for (const raw of text.split("\n")) {
+    const line = parseHeldLine(raw);
+    if (line === null || line.ticket !== ticket) {
+      kept.push(raw);
+      continue;
+    }
+    if (isHelperHold(line)) {
+      helper = true;
+      kept.push(raw);
+    } else removed.push(raw.trim());
+  }
+  if (removed.length === 0) return { ok: false, reason: helper ? "helper-held" : "not-held" };
   return { ok: true, text: kept.join("\n"), removed };
 }
 

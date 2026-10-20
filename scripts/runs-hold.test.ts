@@ -91,6 +91,39 @@ describe("release refusals", () => {
   });
 });
 
+describe("hold-hand and release-hand", () => {
+  test("a hand hold round-trips and refuses a second hold of either kind", () => {
+    const dir = scratch("hand");
+    try {
+      const { cfg, root } = rootFor(dir);
+      expect(hold(["hold-hand", root, "T-1"], cfg).code).toBe(0);
+      expect(readFileSync(join(root, "postmaster", "held"), "utf8")).toBe("T-1\n");
+      const second = hold(["hold", root, "T-1", "--helper", "h"], cfg);
+      expect(second.code).toBe(2);
+      const hand = hold(["hold-hand", root, "T-1"], cfg);
+      expect(hand.code).toBe(2);
+      expect(hold(["release-hand", root, "T-1"], cfg).code).toBe(0);
+      expect(readFileSync(join(root, "postmaster", "held"), "utf8")).toBe("");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("release-hand refuses a helper-held run without touching it", () => {
+    const dir = scratch("hand-helper");
+    try {
+      const { cfg, root } = rootFor(dir);
+      expect(hold(["hold", root, "T-1", "--helper", "h"], cfg).code).toBe(0);
+      const r = hold(["release-hand", root, "T-1"], cfg);
+      expect(r.code).toBe(2);
+      expect(`${r.out}${r.err}`).toContain("held by a helper");
+      expect(readFileSync(join(root, "postmaster", "held"), "utf8")).toMatch(/^T-1 helper=h /u);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("the session file", () => {
   test("a blank session file is replaced with a fresh token", () => {
     const dir = scratch("session");
