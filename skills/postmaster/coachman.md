@@ -228,7 +228,12 @@ leg continues.
 **A workhorse may run anything it needs in its own copy, including the project's gate,
 lint, build, tests and browser suite. A reviewer may run a targeted probe to check a finding,
 but does not run the project's gate, lint, build or tests; the coachman runs the recorded checks
-once per review round on that round's snapshot.** Browser work uses the project's own browser
+once per review round on that round's snapshot.** The coachman never runs a bare package
+manager: every install in the synthesis worktree goes through `<tool>/scripts/run
+install-guard exec <dispatch> <manager> <args...>`, which checks the combined tree against
+the ticket's list, the recorded approvals and the base the way it checks a lane's. A refusal
+there stops the install the way a lane refusal would: fix the tree or escalate, never route
+around it. Browser work uses the project's own browser
 library, driven from a shell command inside the lane's folder. Never route a lane's browser
 work through a browser server shared with other sessions: a call into one can be acknowledged
 and never return, with no timeout. If the browser is genuinely unavailable, record QA as
@@ -1000,8 +1005,8 @@ Set the stage first, `<tool>/scripts/run stage <dispatch> review`, then:
    recorded checks once on the snapshot; reviewers do not build or run them.
 
    Never install into a scratch. If the synthesis worktree has no installed dependencies,
-   install there first and clone from it. Every reviewer reviews from a scratch, never from the
-   synthesis worktree.
+   install there first through the guard's exec, and clone from it. Every reviewer reviews
+   from a scratch, never from the synthesis worktree.
 
    **Launch:** the call below resolves every open lens's lanes — a lens whose lanes do not
    resolve stopping it — then refuses a brief one of its reviewers needs that is missing,
