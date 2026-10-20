@@ -161,3 +161,9 @@ checkpoint_mode = "autonomous"
 # Optional. A template for the review link the ship card carries, with {path} replaced by the
 # absolute path of the synthesis worktree. Leave empty to ship the path alone.
 review_link = ""
+
+# Whether a project's runs open their pull requests as drafts: "on" or "off",
+# "off" when absent. A draft is marked ready for review only on the user's
+# word, and only then do its checks decide the merge. A project's own settings
+# may turn drafts on for that project alone (scripts/run setup --project).
+draft_pull_requests = "off"

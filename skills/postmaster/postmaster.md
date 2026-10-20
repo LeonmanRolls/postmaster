@@ -791,21 +791,44 @@ every project and does not change that project's gate.
      line notes the user's word that there is nothing to land instead of an already-merged
      branch. A squash merge the provider did not report answers `land`: the pull request
      shows the person what is already there. On `land`, push the
-     ticket branch; where an open pull request already names it, adopt it instead of
-     opening another. Otherwise open the pull request against the default branch
-     (`gh pr create` on a GitHub project). Include the card, final checks, diff stat,
-     preview and review links, and thread ids. Log a `note` with the push and
+     ticket branch; then open the pull request against the default branch with
+     `<tool>/scripts/run landing open-pr --repo <repo> --dispatch <dispatch> --base
+     <the default branch> --head <the ticket branch> --title "<the ticket id>, <the ticket
+     title>" --body-file <the scanned description file>`. Compose the description first,
+     carrying the card, final checks, diff stat, preview and review links, and thread ids,
+     and scan it as above. The step adopts an open pull request that already names the
+     branch instead of opening another, and opens a draft pull request where the run's
+     `ship.draft_pull_requests` says `on`, a ready one otherwise. On `opened <url> ready`
+     or `adopted <url> ready`, go on as below. On `opened <url> draft` or `adopted <url>
+     draft`, the pull request waits for the user's word once its checks pass, as below. On
+     `refused <message>`, no draft pull request can open here: put the message and the
+     question to the user in `.waiting-on-user`, offering to
+     open the pull request ready for review instead, and open nothing until they answer;
+     on their yes, log it with `<tool>/scripts/run log-action
+     <dispatch> postmaster note <the ticket branch>
+     open-ready <the user's words>`, then call `open-pr` again with `--ready`
+     and go on as below, and on any other answer keep waiting. Log a `note` with the push and
      pull-request URL, and leave a dated tracker comment linking the pull request and
      summarizing the same evidence, logging `ticket-comment`. Before saying it is ready to
      merge or writing merge instructions, ask the pull request's checks at the card's HEAD:
      `<tool>/scripts/run landing pull-request-checks --repo <repo> --pr <pull-request-url>
-     --card-head <the card's final HEAD>`. On `pass`, put the pull-request URL and
-     merge instructions in `.waiting-on-user`; the user merges it in the project's review
-     surface and says so, and that word is the answer step 3 waits on. On `none`, write
+     --card-head <the card's final HEAD>`. On `pass`, a ready pull request gets the
+     pull-request URL and merge instructions in `.waiting-on-user`; the user merges it in
+     the project's review surface and says so, and that word is the answer step 3 waits on.
+     A draft pull request instead gets its URL and the question asking the user to look at
+     it, and waits for their word; on a word approving the mark, log it with
+     `<tool>/scripts/run log-action <dispatch> postmaster note <the pull-request URL>
+     mark-ready <the user's words>`, then mark the draft ready with
+     `<tool>/scripts/run landing mark-ready --repo <repo> --pr <pull-request-url>`, and on
+     `ready` ask `pull-request-checks` again — nothing the draft's checks said is carried
+     over — following the `pass`, `none`, `pending` and `fail:` branches again from the new
+     answer; only a `pass` after the mark writes the merge instructions. On any other
+     answer keep waiting. On `none`, write
      the run's wait as below with `noneCount` 1, since GitHub creates the checks seconds
      after the pull request opens and this first ask can land before they exist; the
      watcher's next `none` at least a minute after the first is the second in a row,
-     and only then does it wake you to move on as a second `none` does here. On
+     and only then does it wake you to move on — a second `none` reads as a `pass`
+     for what is written. On
      `pending`, write
      nothing to `.waiting-on-user`; write the waiting run's wait in its dispatch
      directory instead: `wait.json` holding `{"kind": "pull-request", "repo": "<the
