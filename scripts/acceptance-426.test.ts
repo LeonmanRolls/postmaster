@@ -14,9 +14,10 @@
 // name the package and tell the agent to stop and report it; the dispatch
 // hold exits 2. Berry's decisions run against a stub yarn here and for real
 // in the hand-run transcript on the run's card: no deterministic Berry binary
-// exists for CI, so the oracle never downloads one. One case pins that the
-// shim never recurses: bun through the shim under a waiting sh, with the
-// process group watched and a trip-wire that kills the tree within seconds.
+// exists for CI, so the oracle never downloads one. Two cases pin that the
+// shim never recurses: a held-open tree the watcher must see two deep, and
+// bun through the shim with the process group watched and a trip-wire that
+// kills the tree within seconds.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -1101,6 +1102,29 @@ describe("the shim never recurses", () => {
   const sleep = (ms: number): Promise<void> =>
     new Promise((resolve) => setTimeout(() => resolve(), ms));
 
+  test("the watcher sees a held-open tree two deep", async () => {
+    // Positive control for the trip-wire below: this tree stays two deep
+    // until the test kills it, so the sampler observes depth by
+    // construction instead of by timing. The script ends in a builtin:
+    // bash, which is macOS's /bin/sh, execs a bare trailing command
+    // instead of forking and would leave the tree one deep.
+    const held = Bun.spawn(["sh", "-c", 'sleep 30; exit "$?"'], {
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    let seen = 0;
+    const deadline = Date.now() + 5000;
+    for (;;) {
+      seen = Math.max(seen, treeOf(held.pid).length);
+      if (seen >= 2 || Date.now() > deadline) break;
+      await sleep(25);
+    }
+    killTree(held.pid);
+    await held.exited;
+    expect(seen).toBeGreaterThanOrEqual(2);
+  });
+
   test.skipIf(!avail.bun)(
     "bun through the shim answers with a small group",
     async () => {
@@ -1124,27 +1148,24 @@ describe("the shim never recurses", () => {
       // A recursing shim forks without end, so this run carries two bounds:
       // a 60s wall clock enforced below (there is no `timeout` binary on
       // macOS), and a group-size trip that kills the tree and fails the
-      // test within seconds instead of filling the machine. The shim runs
-      // under a waiting sh, so the watched tree is two deep for the whole
-      // run and the depth assertion below cannot miss a transient child
-      // under load the way a bare spawn can. The wrapper script ends in a
-      // builtin on purpose: bash, which is macOS's /bin/sh, execs the last
-      // simple command of a -c string instead of forking, so a bare
-      // '"$0" "$@"' would leave the tree one deep there; the trailing
-      // exit keeps the shell waiting on every shell.
+      // test within seconds instead of filling the machine. There is no
+      // lower bound on the peak: the run lasts about 150 ms while one
+      // snapshot costs tens of milliseconds (a full ps listing on macOS),
+      // so the sampler may only ever see the shell alone in its start and
+      // exit windows, and a lower bound would race the sampler on every
+      // machine. Depth is verified by the held-open control above instead.
+      // The trip-wire stays sound: unbounded growth outlives any sampling
+      // gap over the 60s wall clock.
       const TRIP = 60;
       const WALL_MS = 60000;
       const started = Date.now();
-      const child = Bun.spawn(
-        ["sh", "-c", '"$0" "$@"; rc=$?; exit "$rc"', join(bin, "bun"), "--version"],
-        {
-          cwd: project,
-          env,
-          stdin: "ignore",
-          stdout: "pipe",
-          stderr: "pipe",
-        },
-      );
+      const child = Bun.spawn([join(bin, "bun"), "--version"], {
+        cwd: project,
+        env,
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+      });
       let peak = 0;
       let code = -1;
       for (;;) {
@@ -1174,7 +1195,6 @@ describe("the shim never recurses", () => {
       expect(code).toBe(0);
       expect(`${out}\n${err}`).toMatch(/[0-9]+\.[0-9]+\.[0-9]+/u);
       expect(elapsed).toBeLessThan(30000);
-      expect(peak).toBeGreaterThanOrEqual(2);
       expect(peak).toBeLessThanOrEqual(TRIP);
     },
     120000,
