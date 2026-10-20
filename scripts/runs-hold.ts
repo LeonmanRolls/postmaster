@@ -53,6 +53,7 @@ function postmasterDir(root: string): string {
 }
 
 function checkTicket(ticket: string): void {
+  // ASCII: a ticket holds no whitespace of any kind.
   if (!/^\S+$/u.test(ticket)) die(`runs-hold: '${ticket}' is not a ticket`, 1);
 }
 
@@ -121,6 +122,7 @@ function sessionToken(pmDir: string): string {
   const p = join(pmDir, "session");
   try {
     const token = readFileSync(p, "utf8").trim();
+    // ASCII: the stored token is one whitespace-free blob, renewed when it is not.
     if (/^\S+$/u.test(token)) return token;
   } catch (e) {
     if ((e as NodeJS.ErrnoException)?.code !== "ENOENT") die(`runs-hold: cannot read ${p}`, 1);
