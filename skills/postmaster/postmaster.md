@@ -65,7 +65,10 @@ nothing else: never your conversation, which would carry everything you have rea
 of its steps. Name each helper for its brief, letters, digits, dots and dashes only. Read
 only what you are handed: the user's messages, the watcher's wake, and a helper's report.
 Every check, change, test run and look through the records is a helper's — even a quick
-look at a run's status.
+look at a run's status. Name only runs the user, the watcher or a report named: never list,
+count or open the records yourself to scope a brief. Where a task names no records, brief a
+`u-read` helper to survey first — hand it the task and have it report what the step needs —
+and scope every later brief from handed reports only.
 
 **Hold the run before starting a helper that changes it, and only then.** A change is
 anything beyond the helper's own report: markers, the manifest, branches, launches, ticket
@@ -83,11 +86,14 @@ ends.
 
 When the helper ends, its report reaches you as its completion notice, and the full report
 is already on disk at the path the brief named: in the run's dispatch directory for work
-on a run, in `<runs>/postmaster/` for work on no run. Act on the report only once it is on
-disk; a notice with no report is a failure: release the hold and either brief again,
-narrower, or rule on what you have. Where nobody types to you, as in a fixture copy, wait
-for each helper to finish instead of ending your turn, so the same helper steps run there
-as in a real session.
+on a run, in `<runs>/postmaster/` for work on no run, named
+`helper-<brief>-<subject>-<rand>.md` with the run's ticket and six hex digits the helper
+picks fresh (`helper-<brief>-<rand>.md` for work on no run). The random part keeps two
+reports apart: helpers of one session share a process id, so it never names a report. Act
+on the report only once it is on disk; a notice with no report is a failure: release the
+hold and either brief again, narrower, or rule on what you have. Where nobody types to you,
+as in a fixture copy, wait for each helper to finish instead of ending your turn, so the
+same helper steps run there as in a real session.
 
 ### The brief contract
 
@@ -121,8 +127,7 @@ names as `tracker`, before any read or write. Report reachable or not, and for a
 with no board, or a local one with no store (exit 3), that it gets one only on the user's word:
 `board init` or `store init`. A github target with no origin remote can have no board; report
 `store init` as the proposal instead. Decide nothing: the postmaster puts the proposal to the user.
-Write your report to `<runs>/postmaster/helper-a-tracker-<pid>.md`, pid your own process id,
-before you end, and end as the brief contract says.
+Write your report to `<runs>/postmaster/helper-a-tracker-<rand>.md`, rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief reads only: no hold. On its report, put any proposal to the user.
@@ -137,8 +142,7 @@ List the tracker's open tickets (`trackers.md` beside that runbook) and read the
 stream touches: `<stream>`. The stream may already be ticketed in part; say what exists and
 what it covers. Then read `<tool>/wiki/index.md` and the concepts the stream touches, and say
 which you read. Report the tickets with their titles and state, and the concepts.
-Write your report to `<runs>/postmaster/helper-a-read-<pid>.md`, pid your own process id,
-before you end, and end as the brief contract says.
+Write your report to `<runs>/postmaster/helper-a-read-<rand>.md`, rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief reads only: no hold.
@@ -161,8 +165,7 @@ Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.
 Create exactly these tickets through the tracker adapter (`trackers.md` beside that runbook),
 with the title, request, priority and rationale each carries, and log `ticket-create` for each
 as the contract says: `<tickets>`. Create nothing beyond them, and draft no missing part.
-Write your report to `<runs>/postmaster/helper-a-create-<pid>.md`, pid your own process id,
-before you end, and end as the brief contract says.
+Write your report to `<runs>/postmaster/helper-a-create-<rand>.md`, rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief is work on no run: no hold.
@@ -175,8 +178,7 @@ Helper brief `a-order` for project `<repo>`: record the ticket order.
 Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
 Write this order and reason to `<runs>/postmaster/plan.md`, current state only, replacing what
 the plan holds: `<order>`. Change nothing else.
-Write your report to `<runs>/postmaster/helper-a-order-<pid>.md`, pid your own process id,
-before you end, and end as the brief contract says.
+Write your report to `<runs>/postmaster/helper-a-order-<rand>.md`, rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief is work on no run: no hold.
@@ -202,8 +204,7 @@ file outside the repo, and run the check as `<tool>/scripts/run ticket-ready --b
 `<repo> <id>` form. Pass `--labels` once per label, each flag one whole name; a lone flag with
 a comma is refused as ambiguous. Report ready or not, and never start anything: the
 postmaster decides what follows.
-Write your report to `<runs>/postmaster/helper-b-readiness-<pid>.md`, pid your own process id,
-before you end, and end as the brief contract says.
+Write your report to `<runs>/postmaster/helper-b-readiness-<rand>.md`, rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief reads only: no hold. Log the result yourself as `ticket-check` through
@@ -223,8 +224,7 @@ command it prints whole: the postmaster briefs again with that command once the 
 answered whatever holds the session. If there is no session host (exit 3), write the ticket
 id and a request to start `/clerk <id>` to `<runs>/postmaster/ESCALATION.md` yourself and
 report that the user must start it. Create no run directory, branch or worktree.
-Write your report to `<runs>/postmaster/helper-b-clerk-<pid>.md`, pid your own process id,
-before you end, and end as the brief contract says.
+Write your report to `<runs>/postmaster/helper-b-clerk-<rand>.md`, rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief is work on no run: no hold. Log the dispatch yourself with
@@ -243,8 +243,7 @@ Write the `clerk.*` keys the postmaster hands you to an answers file, one `key=v
 line, then run `<tool>/scripts/run setup --add-clerk --answers <file>` with that file, then
 run `<tool>/scripts/run clerk start <repo> <id>` with the ticket the postmaster hands you, and
 report each exit. Start nothing until the setup passes.
-Write your report to `<runs>/postmaster/helper-b-clerk-config-<pid>.md`, pid your own process
-id, before you end, and end as the brief contract says.
+Write your report to `<runs>/postmaster/helper-b-clerk-config-<rand>.md`, rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief is work on no run: no hold. Start no clerk until the user answers.
@@ -263,8 +262,7 @@ Helper brief `b-queue` for ticket `<TICKET>` on project `<repo>`: queue the read
 Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
 Run `<tool>/scripts/run ticket-ready queue <repo> <id>` with the ticket the postmaster hands
 you, and report its exit.
-Write your report to `<runs>/postmaster/helper-b-queue-<pid>.md`, pid your own process id,
-before you end, and end as the brief contract says.
+Write your report to `<runs>/postmaster/helper-b-queue-<rand>.md`, rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief is work on no run: no hold.
@@ -290,8 +288,7 @@ report each exit: a refusal names what the config must change. Run the project's
 checks too, `<tool>/scripts/run verify checks <repo>`, and report a refusal, naming what
 `.postmaster/project.toml` must change. Decide nothing: the postmaster puts every refusal to
 the user, and nothing is dispatched on a refusal.
-Write your report to `<runs>/postmaster/helper-b-preflight-<pid>.md`, pid your own process id,
-before you end, and end as the brief contract says.
+Write your report to `<runs>/postmaster/helper-b-preflight-<rand>.md`, rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief reads only: no hold. On a dirty tree (exit 2), the question goes to the user
@@ -311,8 +308,7 @@ Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.
 Run `<tool>/scripts/run run-clash <repo> <TICKET>` and report its exit whole: exit 0, or on
 exit 2 the run directory and each branch it names, or on exit 1 the refusal. Write nothing,
 whatever it says: the postmaster decides.
-Write your report to `<runs>/postmaster/helper-b-clash-<pid>.md`, pid your own process id,
-before you end, and end as the brief contract says.
+Write your report to `<runs>/postmaster/helper-b-clash-<rand>.md`, rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief reads only: no hold.
@@ -323,8 +319,7 @@ before you end, and end as the brief contract says.
 Helper brief `b-exclude` for ticket `<TICKET>` on project `<repo>`: exclude the worktrees.
 Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
 Run `<tool>/scripts/run project-settings exclude-worktrees <repo>` and report its exit.
-Write your report to `<runs>/postmaster/helper-b-exclude-<pid>.md`, pid your own process id,
-before you end, and end as the brief contract says.
+Write your report to `<runs>/postmaster/helper-b-exclude-<rand>.md`, rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief is work on no run: no hold.
@@ -352,8 +347,8 @@ over the launch card's, and `record` says so. Then run `<tool>/scripts/run verif
 the run reads it; without local verifiers it records none. Report every refusal whole and
 stop there: the postmaster logs a `note` with the config error, tells the user what to fix,
 and sets the undispatched run to `abandoned`.
-Write your report to `<dispatch>/helper-b-records-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-b-records-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -374,8 +369,8 @@ Helper brief `b-abandon` for ticket `<TICKET>` on project `<repo>`: abandon the 
 Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
 Run `<tool>/scripts/run stage <dispatch> abandoned postmaster` with the dispatch path the
 postmaster hands you, and report its exit.
-Write your report to `<dispatch>/helper-b-abandon-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-b-abandon-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -390,8 +385,8 @@ Helper brief `b-worktree` for ticket `<TICKET>` on project `<repo>`: cut the syn
 Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
 Run `git -C <repo> worktree add .worktrees/<TICKET> -b <TICKET> <sha>` with the repo, ticket
 and base sha the postmaster hands you, on the default branch, and report its exit whole.
-Write your report to `<dispatch>/helper-b-worktree-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-b-worktree-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -429,8 +424,8 @@ output whole and stop on any other exit. Record `coachman contract fixture: pend
 front-door` reports one), add the brief's line "wall ruling: go on — this fixture run asks
 nobody: the postmaster rules every wall go on itself as soon as it is told; the coachman
 escalates and waits". Report the waybill's path when it is written.
-Write your report to `<dispatch>/helper-b-brief-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-b-brief-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -444,8 +439,8 @@ Helper brief `b-premises` for ticket `<TICKET>` on project `<repo>`: check the p
 Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
 Run `<tool>/scripts/run premises <repo> <whole-body-file> <BASE>` with the repo, the
 whole-body file and the base the postmaster hands you, and report its output whole.
-Write your report to `<dispatch>/helper-b-premises-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-b-premises-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief runs while the run's records are under construction: hold it first with
@@ -469,8 +464,8 @@ Helper brief `b-inprogress` for ticket `<TICKET>` on project `<repo>`: mark it i
 Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
 Move the ticket to in-progress through the tracker adapter (`trackers.md` beside that
 runbook) and report the move.
-Write your report to `<dispatch>/helper-b-inprogress-<pid>.md`, pid your own process id,
-before you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-b-inprogress-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -510,8 +505,8 @@ prompt. When the run's ticket notes are held back — `<tool>/scripts/run run-me
 The ticket's technical notes are held back on purpose and are not to be looked up, in the tracker or anywhere else.
 When the run's ticket notes are held back, nothing sent to the coachman quotes the technical notes: not a leg's prompt, a ruling, or a resume.
 Nothing else: the runbook and the files carry the rest. Report the prompt's path.
-Write your report to `<dispatch>/helper-c-prompt-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-c-prompt-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -532,8 +527,8 @@ launched it, with its leg, through the host: `<tool>/scripts/run run-meta run-pi
 <dispatch> host leg resume <dispatch> <repo>/.worktrees/<TICKET> <leg-name> <p> <thread-id>
 <dispatch>/leg-<p>-resume-<time>.txt` with the thread id from `coachman.legs.<p>.thread_id`.
 Report the resume and that the postmaster waits for its done marker.
-Write your report to `<dispatch>/helper-c-handoff-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-c-handoff-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -560,8 +555,8 @@ error paths:
 with the dispatch path, repo, ticket, leg name, leg number and prompt file the postmaster
 hands you. The script records the thread id and role in the manifest and appends the outcome
 to `<dispatch>/logs/coachman-leg-<n>-attempts.jsonl`. Report the thread id.
-Write your report to `<dispatch>/helper-c-launch-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-c-launch-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -593,8 +588,8 @@ appends to the stream, keeps `.err` to this attempt, clears the done and exited 
 records its outcome; it keeps the role from the last attempt, including a fallback takeover.
 Report the resume. A remount and a ruling reach a leg this way. A merge word reaches only a
 legacy ship leg; contract 2 is merged by the postmaster after the final coachman hand-off.
-Write your report to `<dispatch>/helper-c-resume-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-c-resume-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -652,8 +647,7 @@ Helper brief `d-ready-consume` for ticket `<TICKET>` on project `<repo>`: drop t
 Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
 Run `<tool>/scripts/run ticket-ready consume <repo> <id>` with the ticket the postmaster hands
 you, and report its exit.
-Write your report to `<runs>/postmaster/helper-d-ready-consume-<pid>.md`, pid your own process
-id, before you end, and end as the brief contract says.
+Write your report to `<runs>/postmaster/helper-d-ready-consume-<rand>.md`, rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
 This brief is work on no run: no hold. If the ticket no longer passes readiness, drop its
@@ -670,8 +664,7 @@ Helper brief `d-experiments` for project `<repo>`: list the experiments.
 Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
 Run `<tool>/scripts/run experiments list --project <repo>` and report each experiment with its
 question, its levels, what was measured, and whether it is due.
-Write your report to `<runs>/postmaster/helper-d-experiments-<pid>.md`, pid your own process
-id, before you end, and end as the brief contract says.
+Write your report to `<runs>/postmaster/helper-d-experiments-<rand>.md`, rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
 This brief reads only: no hold. When an experiment is due, tell the user once: its question,
@@ -688,8 +681,7 @@ Run `<tool>/scripts/run experiments conclude --project <repo> <id> --result <r> 
 words the postmaster hands you, then print the rows with `experiments push-docs` and write
 them to the page's store with ArtifactData at once, so the page is current whenever it is
 opened. Report what changed.
-Write your report to `<runs>/postmaster/helper-d-experiments-act-<pid>.md`, pid your own
-process id, before you end, and end as the brief contract says.
+Write your report to `<runs>/postmaster/helper-d-experiments-act-<rand>.md`, rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
 This brief is work on no run: no hold. The list of runs waiting on the user is
@@ -701,8 +693,7 @@ to read it:
 Helper brief `d-waiting` for project `<repo>`: list the waiting runs.
 Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
 Run `<tool>/scripts/run host leg waiting list <runs>` and report what it prints whole.
-Write your report to `<runs>/postmaster/helper-d-waiting-<pid>.md`, pid your own process id,
-before you end, and end as the brief contract says.
+Write your report to `<runs>/postmaster/helper-d-waiting-<rand>.md`, rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
 This brief reads only: no hold.
@@ -733,8 +724,8 @@ finding — including one hidden by a valid made-up-data marker — with its rul
 place only; never include scanned text or a path value. A later gate run may have logged the
 same finding again; the matching rule, file, line and commit mean it is already told. Decide
 nothing: the postmaster tells the user, then briefs the record.
-Write your report to `<dispatch>/helper-d-tell-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-d-tell-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
   This brief reads only: no hold. Tell the user once for each untold finding, then brief a
@@ -746,8 +737,8 @@ Helper brief `d-tell-record` for run `<TICKET>` at `<dispatch>`: record the told
 Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
 Append each told record the postmaster hands you to `<dispatch>/.detections-told` with the
 same rule, file, line and commit fields, omitting its timestamp. Report what you appended.
-Write your report to `<dispatch>/helper-d-tell-record-<pid>.md`, pid your own process id,
-before you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-d-tell-record-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
   This brief changes run `<TICKET>`: hold it first with
@@ -763,8 +754,8 @@ Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.
 Run `<tool>/scripts/run walls show <dispatch>` and report every new wall of this look: the
 run, the lane and its role, the provider's message, and the reset with its date in the
 machine's time zone, as `show` prints them. Decide nothing: the postmaster tells the user.
-Write your report to `<dispatch>/helper-d-wall-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-d-wall-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
   This brief reads only: no hold. Tell the user about every new wall of this look in one
@@ -779,8 +770,8 @@ with a new wall, so a wall is told exactly once. Write the wall's question to th
 add the run to the waiting list with `<tool>/scripts/run host leg waiting add <runs> <ticket>
 <dispatch>/.waiting-on-user`, so a question already waiting stays open beside the wall's.
 Report what you marked and wrote.
-Write your report to `<dispatch>/helper-d-wall-told-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-d-wall-told-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
   This brief changes run `<TICKET>`: hold it first with
@@ -800,8 +791,8 @@ Helper brief `d-unwait` for run `<TICKET>` at `<dispatch>`: clear the user's wai
 Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
 Remove `<dispatch>/.waiting-on-user` and remove the run from the waiting list with
 `<tool>/scripts/run host leg waiting remove <runs> <ticket>`. Report what you removed.
-Write your report to `<dispatch>/helper-d-unwait-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-d-unwait-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
   This brief changes run `<TICKET>`: hold it first with
@@ -817,8 +808,8 @@ Read the attempt record and `.err` only to explain what happened; outcome classi
 comes from the record. Put the question in `.waiting-on-user`, and add the run to the waiting
 list with `<tool>/scripts/run host leg waiting add <runs> <ticket>
 <dispatch>/.waiting-on-user`. Report the explanation whole.
-Write your report to `<dispatch>/helper-d-ask-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-d-ask-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
   This brief changes run `<TICKET>`: hold it first with
@@ -834,8 +825,8 @@ Run `<tool>/scripts/run run-meta run-pinned <dispatch> host leg retry <dispatch>
 leg number the postmaster hands you. The script replays the stored attempt prompt and thread
 id. In particular, a refused resume delivers the prompt it was carrying after the user
 answers. Report the retry's outcome.
-Write your report to `<dispatch>/helper-d-ask-retry-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-d-ask-retry-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
   This brief changes run `<TICKET>`: hold it first with
@@ -855,8 +846,8 @@ Resolve the run's tool checkout per run with `<tool>/scripts/run run-meta path <
 and follow the Spec review section of `<rt>/skills/postmaster/postmaster.md` there, running
 each step with `<rt>`'s scripts, where `<rt>` is that checkout. Report what the section says
 to do and what you did.
-Write your report to `<dispatch>/helper-d-spec-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-d-spec-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
   This brief changes run `<TICKET>`: hold it first with
@@ -888,8 +879,8 @@ the postmaster launches again only when it clearly ended, never a second leg ont
 one. A wake that says the run was held mid-step names its partial state: report it whole, and
 take no fresh step. Decide nothing beyond the failed-check resume: the postmaster rules every
 other branch.
-Write your report to `<dispatch>/helper-d-dispatch-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-d-dispatch-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
   This brief changes run `<TICKET>`: hold it first with
@@ -921,8 +912,8 @@ absolute path. Then run `<tool>/scripts/run run-meta run-pinned <dispatch> host 
 <dispatch> <repo>/.worktrees/<TICKET> <leg-name> <n> <dispatch>/leg-<n>-takeover.txt`. The
 script preserves the old stream, starts a fresh fallback stream and records its outcome and
 thread id. Report the takeover and the thread id.
-Write your report to `<dispatch>/helper-d-takeover-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-d-takeover-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
   This brief changes run `<TICKET>`: hold it first with
@@ -943,8 +934,8 @@ Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.
 Read the checkpoint card the postmaster hands you and report its substance whole, then remove
 its `.checkpoint-*-ready` marker. In consult mode the card comes with an escalation, which the
 postmaster handles as RULE; say whether one is there.
-Write your report to `<dispatch>/helper-d-read-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-d-read-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
   This brief changes run `<TICKET>`: hold it first with
@@ -961,8 +952,8 @@ Read the leg's `.err` file and the stream tail and report: a live process that i
 is left alone; an exit without an attempt record, or a last record line that is corrupt,
 stops the leg. Never infer an action from `.err` text and never kill a running leg for being
 slow. Decide nothing: the postmaster rules.
-Write your report to `<dispatch>/helper-d-inspect-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-d-inspect-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
   This brief reads only: no hold. A live leg that is merely slow is left alone. If it exited
@@ -977,8 +968,8 @@ leg name and leg number the postmaster hands you, which classifies the dead atte
 evidence and appends its record, and report the backfilled outcome. When it appends no
 record, report the files that remain whole: the evidence is gone and only the user can
 decide.
-Write your report to `<dispatch>/helper-d-inspect-backfill-<pid>.md`, pid your own process id,
-before you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-d-inspect-backfill-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
   This brief changes run `<TICKET>`: hold it first with
@@ -1001,8 +992,8 @@ again), remove `wait.json` once you have acted on the answer, and report the ans
 Where the answer resumes a leg, remove `wait.json` before the resume, so no look can name
 the wait over work in progress. Decide nothing beyond the re-ask: the postmaster carries on
 at the Stage F step that waited.
-Write your report to `<dispatch>/helper-d-waitdone-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-d-waitdone-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
   This brief changes run `<TICKET>`: hold it first with
@@ -1017,8 +1008,8 @@ Helper brief `d-waitfault` for run `<TICKET>` at `<dispatch>`: fix the unreadabl
 Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
 Read `wait.json` and the watcher's reason, fix or remove the wait, and re-ask its question
 yourself. Never treat it as over. Report what you fixed and the answer.
-Write your report to `<dispatch>/helper-d-waitfault-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-d-waitfault-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
   This brief changes run `<TICKET>`: hold it first with
@@ -1049,8 +1040,7 @@ Run `<tool>/scripts/run experiments start --project <repo> --question <q> --leve
 <b> --measure <m> --look <date>` with the words the postmaster hands you, then print the rows
 with `experiments push-docs` and write them to the page's store with ArtifactData at once, so
 the page is current whenever it is opened. Report what started.
-Write your report to `<runs>/postmaster/helper-x-start-<pid>.md`, pid your own process id,
-before you end, and end as the brief contract says.
+Write your report to `<runs>/postmaster/helper-x-start-<rand>.md`, rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
 This brief is work on no run: no hold.
@@ -1080,8 +1070,8 @@ sees, its recommendation, and the state of the branches. Where it names a rise s
 there is none. Where the escalation is a provider wall (`.wall-pause` is present), report the
 walls the user was told about; the wall is the user's to rule. Decide nothing: the postmaster
 rules.
-Write your report to `<dispatch>/helper-e-read-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-e-read-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief reads only: no hold.
@@ -1106,8 +1096,8 @@ the options, or the reason the survey is missing — and add the run and the que
 waiting list (`<runs>/postmaster/ESCALATION.md`, owned by `<tool>/scripts/run host leg waiting
 add <runs> <ticket> <question-file>`). Say what happens when the user answers: for an ASK
 outcome the attempt record's `on_answer` names it. Report what you wrote.
-Write your report to `<dispatch>/helper-e-send-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-e-send-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -1132,8 +1122,8 @@ ruling the postmaster hands you as the contract says, and start a clerk with
 the tracker has no adapter script, `unmark` refuses: remove the ready label through the
 tracker's own tooling (`trackers.md`, other), drop the marker with `<tool>/scripts/run
 ticket-ready consume <repo> <TICKET>`, then start the clerk. Report each step.
-Write your report to `<dispatch>/helper-e-sendback-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-e-sendback-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -1156,8 +1146,8 @@ typed into anything.
 When the run's ticket notes are held back, nothing sent to the coachman quotes the technical notes: not a leg's prompt, a ruling, or a resume.
 On `send it back`,
 leave the leg stopped and let the clerk prepare the ticket again. Report the delivery.
-Write your report to `<dispatch>/helper-e-deliver-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-e-deliver-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -1178,8 +1168,8 @@ Run `<tool>/scripts/run walls rule <dispatch> <lane> go-on` with the lane the po
 you; a ruling on a reviewer's wall keys the lane by its lens where the run has one. A refusal
 (exit 2) passes its reason on whole; on exit 0 the run is ruled, and the watcher delivers
 the pause. Report the exit whole.
-Write your report to `<dispatch>/helper-e-wall-rule-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-e-wall-rule-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -1197,8 +1187,8 @@ Helper brief `e-library-identity` for run `<TICKET>` at `<dispatch>`: read the l
 Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
 Run `<tool>/scripts/run libraries identity <name> <version>` with the name and version the
 postmaster hands you, and report what it prints, shaped `library:<16 hex>`.
-Write your report to `<dispatch>/helper-e-library-identity-<pid>.md`, pid your own process id,
-before you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-e-library-identity-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief reads only: no hold. Record the word yourself with
@@ -1232,8 +1222,8 @@ remote: the postmaster hands them to the briefs below, which take the upstream s
 `--ticket` on the pull-request route and the ticket branch itself on the `landing: local`
 route; `fresh` takes the ticket branch itself as `--ticket` on both routes. When a branch has
 no upstream, the briefs take the branch itself.
-Write your report to `<dispatch>/helper-f-fetch-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-f-fetch-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
 This brief changes run `<TICKET>`: hold it first with
@@ -1255,8 +1245,8 @@ run's records. Save the exact draft in a file and scan it with the run-pinned
 into a production scan. If it finds anything, reword the draft and scan it again; report only
 after exit 0. Markers are inert in posted text. This applies in every project and does not
 change that project's gate. Report the clean text whole.
-Write your report to `<dispatch>/helper-f-scribe-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-f-scribe-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
 This brief writes only its report: no hold.
@@ -1307,8 +1297,8 @@ lists are exactly what `<tool>/scripts/run style-findings list <dispatch>` print
 open findings, browser suite and QA when present, the review link, and every run-created
 branch. Report each claim pass or fail with its evidence. Decide nothing: the postmaster
 withholds or lands.
-Write your report to `<dispatch>/helper-f-verify-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-f-verify-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief reads only: no hold. The postmaster runs no gate of its own; log what the
@@ -1320,8 +1310,8 @@ Helper brief `f-worktree` for run `<TICKET>` at `<dispatch>`: move the worktree 
 Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
 Move the synthesis worktree to the ticket branch's head with the worktree path and branch the
 postmaster hands you, and report the head it sits at.
-Write your report to `<dispatch>/helper-f-worktree-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-f-worktree-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -1344,8 +1334,8 @@ On the waybill at `<dispatch>/brief.md`, replace `coachman contract fixture: pen
 the `yes` or `no` the postmaster hands you, fill `contract fixture check:` with the command,
 the commit and the score it hands you (`-` when no fixture runs), and record the commit a
 clean fixture score covered where it hands you one. Report the lines you wrote.
-Write your report to `<dispatch>/helper-f-waybill-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-f-waybill-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -1361,8 +1351,8 @@ out at the final branch, and write the waiting run's wait in its dispatch direct
 `wait.json` holding `{"kind": "fixture", "fixture": "<the fixture repo's absolute path>"}`.
 Report the fixture repo's path. Withhold landing and stop waiting in the postmaster's
 conversation: the watcher wakes it with WAIT-DONE when the fixture copy's postmaster ends.
-Write your report to `<dispatch>/helper-f-fixture-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-f-fixture-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -1391,8 +1381,8 @@ then resume that last leg only in the form that launched it, with its leg, throu
 <repo>/.worktrees/<TICKET> <leg-name> <n> <thread-id>
 <dispatch>/leg-<n>-resume-<time>.txt`. The resume carries no trial merge and no merge
 instructions of its own: the leg's step merges, resolves and gates. Report the send-back.
-Write your report to `<dispatch>/helper-f-sendback-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-f-sendback-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -1412,8 +1402,8 @@ they name and the reason beside each — or, for a settings entry, its file, its
 diff; exit 3 the entries missing their reasons; exit 4 the recorded refusal. Any other exit is
 an input fault: report it whole and stop. Decide nothing: the postmaster puts each entry to
 the user.
-Write your report to `<dispatch>/helper-f-switchoffs-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-f-switchoffs-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief reads only: no hold. On exit 2, put each listed entry to the user with the ship
@@ -1447,8 +1437,8 @@ whole: exit 0 the branch is clear; exit 2 the entries with their name, kind, old
 version, publish date, source, Socket's verdict and the packages each brings; exit 4 the
 recorded refusal. Any other exit is an input fault: report it whole and stop. Decide nothing:
 the postmaster puts each entry to the user.
-Write your report to `<dispatch>/helper-f-libraries-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-f-libraries-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief reads only: no hold. On exit 2, put each listed entry to the user with the ship
@@ -1470,8 +1460,8 @@ Helper brief `f-write-wait` for run `<TICKET>` at `<dispatch>`: write the wait m
 Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
 Write the text the postmaster hands you to `<dispatch>/.waiting-on-user`, replacing what the
 marker holds, and report what you wrote.
-Write your report to `<dispatch>/helper-f-write-wait-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-f-write-wait-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -1492,8 +1482,8 @@ provider reports a merged pull request for the ticket branch (for GitHub, `gh pr
 --json state,mergeCommit,headRefOid`, taking the merge oid and the head oid where `state` is
 `MERGED`), omitting each otherwise, and report what it prints whole: `landed`, `unpushed`,
 `re-verify` or `not-landed`. Decide nothing: the postmaster follows the answer's branch.
-Write your report to `<dispatch>/helper-f-landed-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-f-landed-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief reads only: no hold. On `landed`, skip landing and close instead: brief the
@@ -1512,8 +1502,8 @@ Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.
 Push the ticket branch, re-fetch, and report the push whole: pushed, rejected because the
 remote contains work the pusher lacks (`[rejected]`, fetch first or non-fast-forward), or any
 other failure. Decide nothing: the postmaster follows the answer's branch.
-Write your report to `<dispatch>/helper-f-push-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-f-push-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -1527,8 +1517,8 @@ Move the ticket to done through the tracker adapter, remove `<dispatch>/.waiting
 `<dispatch>/.card-ready` (either may already be gone), and `<dispatch>/wait.json` where one is
 written, and set the stage with `<tool>/scripts/run stage <dispatch> shipped postmaster`.
 Report each step. The postmaster logs `merge` and `ticket-state` itself.
-Write your report to `<dispatch>/helper-f-close-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-f-close-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -1543,8 +1533,8 @@ Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.
 Run `<tool>/scripts/run landing anything-to-land --repo <repo> --default <branch> --ticket
 <the ticket ref> --base <the manifest's base>` with the refs the postmaster hands you, and
 report what it prints whole: `nothing-to-land` or `land`.
-Write your report to `<dispatch>/helper-f-anything-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-f-anything-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
      This brief reads only: no hold. On `nothing-to-land`, write that to `.waiting-on-user`
@@ -1565,8 +1555,8 @@ checks, diff stat, preview and review links, and thread ids. Leave a dated track
 linking the pull request and summarizing the same evidence, with the comment text the
 postmaster hands you. Report the push and the pull-request URL whole. The postmaster logs a
 `note` with the push and pull-request URL, and `ticket-comment`, itself.
-Write your report to `<dispatch>/helper-f-land-pr-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-f-land-pr-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
      This brief changes run `<TICKET>`: hold it first with
@@ -1593,8 +1583,8 @@ with WAIT-DONE only when the answer is `pass`, a `fail:` line, or the second `no
 row, a minute or more after the first. On `fail:`, in either shape (`fail: <name> (<state>)
 <link>` or `fail: pull request head <sha> does not match card <sha> <pr>`), report the line
 whole: the postmaster sends the card back. Report what you asked and what you wrote.
-Write your report to `<dispatch>/helper-f-pr-checks-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-f-pr-checks-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
      This brief changes run `<TICKET>`: hold it first with
@@ -1629,8 +1619,8 @@ again resolving cleanly, and scan again. Any other exit is an input fault: repor
 and stop. Move the ticket to done, remove `<dispatch>/.card-ready`, and set the
 stage with `<tool>/scripts/run stage <dispatch> shipped postmaster`. Report each step. The
 postmaster logs `merge` and `ticket-state` itself.
-Write your report to `<dispatch>/helper-f-land-local-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-f-land-local-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
      This brief changes run `<TICKET>`: hold it first with
@@ -1674,8 +1664,8 @@ coachman leg that already handed off. When the run's ticket notes are held back,
 the notes stayed away before the cleanup: `<tool>/scripts/run ticket-reads <dispatch> --record`
 looks through every agent's record for a read of the ticket and writes its outcome
 to the run log and a note action. Report each result.
-Write your report to `<dispatch>/helper-g-confirm-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-g-confirm-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -1696,8 +1686,8 @@ Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.
 Run `<tool>/scripts/run aftercare <dispatch> --dry-run --comment "<text>" --run-log "<text>"`
 with the closing comment and run-log line the postmaster hands you, which prints its plan and
 changes nothing, and report the plan whole.
-Write your report to `<dispatch>/helper-g-aftercare-dry-<pid>.md`, pid your own process id,
-before you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-g-aftercare-dry-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief reads only: no hold. Read the plan, then brief the run:
@@ -1716,8 +1706,8 @@ them by hand) and releases its pinned tool, logging every action as it happens. 
 the fault whole and stop — never work the cleanup's steps by hand, which would bring the
 judgment calls back. With `--json` its summary is one record a script can read. Never delete
 the dispatch or manifest; the run's branches stay. Report the summary.
-Write your report to `<dispatch>/helper-g-aftercare-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-g-aftercare-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -1750,8 +1740,8 @@ prints no branch and the corrections are already kept, so report them as kept. A
 clears offers nothing. The pass from here is the postmaster's to offer: report the marked
 verifiers and stop there. Archive finished threads where the harness has an archive form
 (`harnesses.md`), and report what you archived.
-Write your report to `<dispatch>/helper-g-verifier-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-g-verifier-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief is work on the project, not the run: no hold. For the verifiers it marks,
@@ -1769,8 +1759,7 @@ the new confirmation reaches the default
 branch; a pass that printed a branch and a `kept` line carries both, so land the branch and
 report the kept corrections as kept; for local verifiers the pass prints no branch and the
 corrections are already kept, so report them as kept. A landing it clears offers nothing.
-Write your report to `<runs>/postmaster/helper-g-verifier-upkeep-<pid>.md`, pid your own
-process id, before you end, and end as the brief contract says.
+Write your report to `<runs>/postmaster/helper-g-verifier-upkeep-<rand>.md`, rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief is work on no run: no hold. Report kept corrections as kept.
@@ -1802,8 +1791,8 @@ its result is — a check that did not run is `not run`, never passed and never 
 that the Style residue's count is what `<tool>/scripts/run style-findings count <dispatch>`
 prints. Report each claim pass or fail with its evidence. Decide nothing: the postmaster
 grants or withholds.
-Write your report to `<dispatch>/helper-lf-verify-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-lf-verify-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief reads only: no hold. Log `gate` yourself with the reported gate exit. Check
@@ -1842,8 +1831,8 @@ style sort too, once the last leg's process has exited (`.leg-3-exited`):
 host, with its lines and "Fix the style sort as `coachman.md` says, and end the leg" as the
 prompt, then wait for its done marker and report. On exit 1, report what it printed whole:
 the postmaster tells the user. Report each result.
-Write your report to `<dispatch>/helper-lg-confirm-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-lg-confirm-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -1866,8 +1855,8 @@ run dispatched before workhorse copies is a worktree on its `wb/` branch, which 
 refuses; remove those with `git -C <repo> worktree remove <folder>` instead. Teardown uses
 the live checkout's run host, never the run's pinned one: it must work even when the pin is
 gone or fails its check. Report each removal. The postmaster logs `teardown` itself.
-Write your report to `<dispatch>/helper-lg-teardown-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-lg-teardown-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -1885,8 +1874,8 @@ whose `run.json` names it is still in flight (manifest stage other than `done` o
 `abandoned`); a run dispatched at the same commit keeps it. Report the result with the
 checkout path. The postmaster logs it as `teardown` itself. Never delete the dispatch
 directory.
-Write your report to `<dispatch>/helper-lg-close-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-lg-close-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -1907,8 +1896,8 @@ or asked, draft the ticket it would become in `<dispatch>/style-drafts/`, in the
 for the user to approve or change and `default` as its turnpikes; check each draft with
 `<tool>/scripts/run ticket-check --body <draft> --title "<title>" --project <repo>`, and
 log `ticket-check`. Report every proposal with its draft or its ledger mark.
-Write your report to `<dispatch>/helper-lg-style-drafts-<pid>.md`, pid your own process id,
-before you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-lg-style-drafts-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief changes run `<TICKET>`: hold it first with
@@ -1941,8 +1930,8 @@ refuses; remove those with `git -C <repo> worktree remove <folder>` instead. Rel
 run's pinned tool (`<tool>/scripts/run run-meta release <dispatch>`), and move the ticket back
 to todo or to cancelled as the user says. The dispatch directory stays. Report each step. The
 postmaster logs the release as `teardown` itself.
-Write your report to `<dispatch>/helper-ab-abandon-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-ab-abandon-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
 This brief changes run `<TICKET>`: hold it first with
@@ -1970,8 +1959,8 @@ Run `<tool>/scripts/run tool-faults harvest <dispatch>`, then the same for
 for each, and looks each up on postmaster's own tracker. Report the state each line gives:
 `known`, `new` with the draft its line names, its `.title` beside it and any ticket the line
 says it is like, `asked`, `unchecked`, or `kept` with why and where the drafts are.
-Write your report to `<dispatch>/helper-tf-harvest-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-tf-harvest-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
 This brief reads only: no hold.
@@ -1983,8 +1972,8 @@ Helper brief `tf-known` for run `<TICKET>` at `<dispatch>`: comment the known fa
 Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
 Run `<tool>/scripts/run tool-faults comment <dispatch> <id>` with the fault the postmaster
 hands you, and report what it did.
-Write your report to `<dispatch>/helper-tf-known-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-tf-known-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief reads only: no hold.
@@ -2001,8 +1990,8 @@ With the word the postmaster hands you, run `<tool>/scripts/run tool-faults file
 <id> "<their word>"`. With `tracker.postmaster_may_create` true, file each at once and report
 what was filed. A draft changes only on the user's word, and `file` refuses one that is no
 longer safe to publish. Report what you did.
-Write your report to `<dispatch>/helper-tf-file-<pid>.md`, pid your own process id, before
-you end, and end as the brief contract says.
+Write your report to `<dispatch>/helper-tf-file-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
    This brief is work on postmaster's tracker, not the run: no hold.
@@ -2028,8 +2017,7 @@ Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.
 Read what answers the question the postmaster hands you from `<runs>`: the status table
 (`<tool>/scripts/run runs-status <runs>`), the ledger, the cards. Report what you read whole:
 the postmaster answers from the report.
-Write your report to `<runs>/postmaster/helper-u-read-<pid>.md`, pid your own process id,
-before you end, and end as the brief contract says.
+Write your report to `<runs>/postmaster/helper-u-read-<rand>.md`, rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
 This brief reads only: no hold. A change of plan from the user is logged as a `note`
