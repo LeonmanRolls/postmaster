@@ -2,8 +2,8 @@
 title: The review loop
 type: concept
 standing: claimed
-sources: [runs/2026-09-26-postmaster-36]
-updated: 2026-09-27
+sources: [runs/2026-09-26-postmaster-36, trials/2026-10-11-review-rounds]
+updated: 2026-10-15
 ---
 
 # The review loop
@@ -12,13 +12,17 @@ updated: 2026-09-27
 passes in three legs. Each round runs every lens still open on one snapshot: all three in round
 1, then the gating lenses while a round logs a verified P1 or P2 finding. It should take fewer
 rounds, it needs one leg start-up instead of three, and every fix is re-reviewed by the gating
-lenses a ticket names unless the loop stops at its round cap.
+lenses a ticket names unless the loop stops for a ruling.
 
-**What ends the loop.** Round 2 runs whenever round 1 applied a fix. After that, round `r+1`
-runs only when round `r` logged a verified P1 or P2 finding; a P3 finding does not keep the loop
-going and is carried to the user unfixed. The cap of three rounds stays as a backstop: when
-round 3 logs a verified P1 or P2 finding, the loop stops and escalates with the residue.
-`scripts/run review-decide` decides this from the round's `finding` and `apply` lines.
+**What ends the loop.** Round 2 runs whenever round 1 applied a fix. From round 2 on, the loop
+goes on while a round logs no more verified P1 or P2 findings than the round before: a round with
+none ends it, and a round with more stops it for the user's ruling. There is no cap on rounds. A
+P3 finding does not keep the loop going and is carried to the user unfixed, and two rounds running
+without a working reviewer for a gating lens also stop the loop for a ruling. This has been the
+rule since 9 October (#316); before it, a cap of three rounds ended the loop
+[@trials/2026-10-11-review-rounds/results/loop-rule.md]. Apart from the count, the coachman
+escalates when one class of defect is found in three consecutive rounds. `scripts/run
+review-decide` decides from the round's `finding` and `apply` lines.
 
 **Standing: claimed.** This is a decision taken on reasoning. No run has been recorded under
 either design, so neither the time saved nor the coverage gained is measured yet. The change is
@@ -47,17 +51,21 @@ either design, so neither the time saved nor the coverage gained is measured yet
   added only if runs show one is needed. Each lane also runs three reviews at once on one
   account, so it can reach a usage limit sooner. A lane that does is DEGRADED for the round, as
   any walled lane is. So is a reviewer still running at the round's time limit, which is
-  stopped. The limit is a config value, `review.round_timeout_seconds`. Its default, 2400
-  seconds, is the limit a round had when it ran one lens. The `degrade` lines whose cause is
-  `timeout` will show whether round 1 needs more.
-- **Context.** One leg now carries all three lenses' findings. The three-round cap bounds it. If
+  stopped. The limit is a config value, `review.round_timeout_seconds`, set in a project's
+  settings.toml or the global config; a run keeps the value recorded in its run.json at
+  dispatch. Its default is 3600 seconds, because a reviewer's own code review of a large change
+  runs ten finder agents in parallel and spends most of an hour on them before it verifies
+  anything. The `degrade` lines whose cause is `timeout` show when a round needs still more.
+- **Context.** One leg now carries all three lenses' findings, and no cap bounds its rounds: a
+  rise stops it for a ruling instead. If
   a leg's context still runs out, the leg would be split at a round boundary, never by lens,
   since a split by lens would bring back the gap the loop closes.
 - **Colliding fixes.** Fixes from different lenses can touch the same code. One coachman sees
   them together and reconciles them before applying.
-- **The cap ends all review.** One three-round cap covers the whole loop, so a loop stopped at
-  the cap ships its last round's fixes unreviewed. In sequence, a capped bug pass was still
-  followed by the whole security pass.
+- **A stop ends all review.** One rule covers the whole loop, so a loop stopped for a ruling
+  leaves its last round's fixes unreviewed unless the ruling asks for another round; the
+  escalation lists them. In sequence, a stopped bug pass was still followed by the whole security
+  pass.
 - **Same-lane duplicates.** Round 1 puts one snapshot in front of every lens, so one lane can
   report the same defect under two lenses. That is one model agreeing with itself, not
   corroboration. H2 in [combining models](combining-models.md) counts corroboration by lane, and
@@ -144,15 +152,17 @@ by the lens other than the one whose finding each fix addressed: 3.06, 3.08 and 
 
 ## What changed because of it
 
-A run has three legs, `synthesis`, `review` and `ship`, where it had five.
-`skills/postmaster/coachman.md` runs review as one stage, `review`, with one checkpoint card,
-and `scripts/run stage` refuses the three review stages it replaces. `[team.coachman_legs]` in
-the config takes `synthesis`, `review` and `ship`, and `scripts/run launch` refuses a config
-that names `style`, `bug` or `security`.
+The loop took a run from five legs to three, `synthesis`, `review` and `ship`, and the two-leg
+change later folded the ship card into the end of the last leg, so a run now has at most two,
+`synthesis` and `review`. `skills/postmaster/coachman.md` runs review as one stage, `review`, with
+one checkpoint card, and `scripts/run stage` refuses the three review stages it replaces.
+`[team.coachman_legs]` in the config takes `synthesis` and `review`, and `ship` for a run
+dispatched before the two-leg change; `scripts/run launch` refuses any other name.
 
 The cap was five rounds when the loop was introduced. On 2026-09-26 the user set it at three,
 after #39's own review ran four rounds without a clean one and stopped on the repeated-class
-rule. It stays at three as a backstop.
+rule. On 9 October #316 removed it: a rise in serious findings stops the loop for a ruling
+instead [@trials/2026-10-11-review-rounds/results/loop-rule.md].
 Each lens may have its own reviewer lanes (#63). With one list, a lane chosen for one lens, a
 Claude lane for Claude Code's `/security-review` say, would review style and bugs as well, and
 the choice of a lane for what its harness does well would cost a lane in every lens. A lens
@@ -167,9 +177,10 @@ names none has no review leg:
 On 2026-09-27, with #59 reported, the user chose the rule the loop runs under #80: "in the first
 round we fix as much as we can, then we repeat until there are no more P1 and P2s." Round 1
 applies every verified gating finding, P1, P2 and P3 alike; from round 2 on only P1 and P2 are
-fixed, and a P3 goes to the user unfixed. The cap of three rounds stays as a backstop
-([when a review loop should stop](review-convergence.md)). Many bugs reaching production stays
-the signal to revisit the rule.
+fixed, and a P3 goes to the user unfixed. The cap of three rounds that backed it was removed on 9
+October, when #316 made a rise the stop ([when a review loop should stop](review-convergence.md),
+[why runs take the rounds they do](review-rounds.md)). Many bugs reaching production stays the
+signal to revisit the rule.
 
 Since issue #55, style gates nothing. `skills/postmaster/coachman.md` applies no style finding,
 the ship card counts them, and aftercare sorts them; `skills/postmaster/postmaster.md` puts the

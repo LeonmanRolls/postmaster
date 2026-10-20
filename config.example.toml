@@ -130,8 +130,9 @@ postmaster_may_create = false   # true lets the postmaster create tickets withou
 [review]
 # Seconds a review round may run; a run keeps the value recorded in its run.json at dispatch.
 # A reviewer still running at the limit is stopped and recorded DEGRADED, with timeout as the
-# cause (scripts/run review-round). 2400 when unset.
-round_timeout_seconds = 2400
+# cause (scripts/run review-round). 3600 (60 minutes) when unset; a project's settings.toml
+# or this file sets another value, 1 to 86400.
+round_timeout_seconds = 3600
 
 [planning]
 # Optional. A template for the link that puts a ticket draft to the user while

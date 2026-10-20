@@ -1,12 +1,63 @@
 ---
 title: Log
 type: schema
-updated: 2026-10-13
+updated: 2026-10-16
 ---
 
 # Log
 
 Append-only. Newest first. One entry per operation, prefixed so it can be parsed.
+
+## [2026-10-16] update | a review round may run 3600 seconds by default
+
+At the user's request: the default limit of a review round rose from 2400 to 3600 seconds, 60
+minutes. Round 1 of a test run on a change of 92 files closed at 2400 seconds with one of its five
+reviewers cut off: the Claude bug lane's `/code-review` at max effort had started ten finder agents
+(1,398 tool calls and 4.7 million tokens between them), four were still reading at 35 minutes, and
+its verification and sweep had not begun. The limit was already a config value,
+`review.round_timeout_seconds`, in a project's settings.toml, the global config and each run's
+run.json; only its default moved: `config.example.toml`, the setup prompt, the survey's fallback
+and the review-loop page. `scripts/review-round.ts`, a coachman contract file, keeps its own 2400
+fallback, reached only when a run's record holds no value; it changes with the next contract
+change. No standing changed.
+
+## [2026-10-16] update | the clerk settles the architecture at the level of parts, not files
+
+At the user's request: the clerk makes the high-level decisions on code architecture and names no
+specific file. The clerk runbook and the ticket template now say that the architecture, meaning what
+runs where, which part owns what, what is shared between the apps and what stays in one, which
+existing module or library each part builds on and what each part knows, is settled in the ticket as
+decisions named by the part's role, and that a name, a file or an order is still the lanes' choice.
+No standing changed.
+
+## [2026-10-15] update | the clerk plans from menus of the whole API
+
+At the user's request, after a second clerk, started with the first ticket's references closed, again passed over
+settings that sat beside the ones it used. Added `scripts/run api-index` (a package's declared API, its family's
+packages included) and `scripts/run code-index` (the project's own exports): each saves a menu of the entries nearest
+the draft's words and a map of every name, under a key of the draft's words. `ticket-capabilities --candidates` refuses
+a menu made from an older draft and a custom part with no `Searched:` line. The user's ruling: the clerk must know
+every function available while it plans, and the ticket lists none of them. The clerk runbook and the template carry
+the step. The menu of the libraries is made for every library the project declares (`api-index --all`): a directory
+with the names near the draft, every function and method, and a file for each library's own menu. Standing unchanged:
+`claimed`, with no record behind it.
+
+## [2026-10-15] ingest | capabilities are checked before a ticket picks a design
+
+At the user's request, after a run built a consent mechanism beside the one its analytics SDK already offered and a
+reviewer asked for the rework. Wrote [the page](concepts/capabilities-before-design.md) at standing `claimed`, with no
+record behind it, and changed the clerk runbook and the ticket template to carry the check. No standing changed.
+
+## [2026-10-15] update | the review loop has had no round cap since 9 October
+
+The README's flow links the review-loop page, and that page still said a cap of three rounds ends
+the loop. Since #316, merged on 9 October, the loop goes on while a round logs no more verified P1
+or P2 findings than the one before, a rise stops it for a ruling, and there is no cap, as
+`scripts/review-decide.ts` says and the review-rounds trial recorded. Changed [the review
+loop](concepts/review-loop.md), [when a review loop should stop](concepts/review-convergence.md)
+and the index to say so, citing the trial's loop-rule results. The review-loop page also said a
+run has three legs; since the two-leg change it has at most two, as the config example says, and
+the page now says that. No standing changed.
 
 ## [2026-10-13] update | lanes may read the wiki; contamination is recorded, not prohibited
 

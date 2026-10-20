@@ -226,6 +226,43 @@ beforeAll(() => {
   mkRun("legacy-gate", "shipping", 3, ".card-ready");
   mkRun("legacy-dispatch", "review", 2, ".leg-2-done", ".leg-2-exited");
   mkRun("legacy-last", "shipped", 3, ".leg-3-done", ".leg-3-exited");
+  const fixtureCopy = join(tmp, "fixture-copy");
+  const fixtureDone = join(tmp, "fixture-done");
+  mkdirSync(join(fixtureCopy, ".postmaster", "runs", "postmaster"), { recursive: true });
+  mkdirSync(join(fixtureDone, ".postmaster", "runs", "postmaster"), { recursive: true });
+  mkRun("waitopen", "shipping", 1, ".card-ready");
+  writeFileSync(
+    join(root, "waitopen", "wait.json"),
+    `${JSON.stringify({ kind: "fixture", fixture: fixtureCopy })}\n`,
+  );
+  mkRun("waitdone", "shipping", 1, ".card-ready");
+  writeFileSync(
+    join(root, "waitdone", "wait.json"),
+    `${JSON.stringify({ kind: "fixture", fixture: fixtureDone })}\n`,
+  );
+  writeFileSync(join(fixtureDone, ".postmaster", "runs", "postmaster", ".exited"), "");
+  mkRun("waitpr", "shipping", 1, ".card-ready");
+  writeFileSync(
+    join(root, "waitpr", "wait.json"),
+    `${JSON.stringify({
+      kind: "pull-request",
+      repo: tmp,
+      pr: "https://example.invalid/pr/1",
+      cardHead: "a".repeat(40),
+    })}\n`,
+  );
+  mkRun("waitbad", "shipping", 1, ".card-ready");
+  writeFileSync(join(root, "waitbad", "wait.json"), "{not json\n");
+  mkRun("waitrule", "shipping", 1, ".card-ready", ".escalation-ready");
+  writeFileSync(
+    join(root, "waitrule", "wait.json"),
+    `${JSON.stringify({ kind: "fixture", fixture: fixtureCopy })}\n`,
+  );
+  mkRun("waitclosed", "done", 1, ".card-ready");
+  writeFileSync(
+    join(root, "waitclosed", "wait.json"),
+    `${JSON.stringify({ kind: "fixture", fixture: fixtureCopy })}\n`,
+  );
   const detection = (time: string, via = "") =>
     `${JSON.stringify({ rule: "email", file: "notes.txt", line: 1, commit: "a".repeat(40), time, ...(via ? { via } : {}) })}\n`;
   mkRun("tell-waiting", "review", 2, ".waiting-on-user");
@@ -441,6 +478,32 @@ describe("non-string legs print in Python's spelling", () => {
 
   test("a run with no markers shows a dash, not blanks", () => {
     expect(pyWords(rowOf("wait"))[3]).toBe("-");
+  });
+});
+
+describe("external waits", () => {
+  test("an open fixture wait reads WAITING, not GATE", () => {
+    expect(nextOf("waitopen")).toBe("WAITING");
+  });
+
+  test("a fixture wait whose marker landed reads WAIT-DONE", () => {
+    expect(nextOf("waitdone")).toBe("WAIT-DONE");
+  });
+
+  test("a pull-request wait reads WAITING, since the status asks nothing", () => {
+    expect(nextOf("waitpr")).toBe("WAITING");
+  });
+
+  test("an unreadable wait reads WAIT-FAULT, never over", () => {
+    expect(nextOf("waitbad")).toBe("WAIT-FAULT");
+  });
+
+  test("an escalation still beats an open wait", () => {
+    expect(nextOf("waitrule")).toBe("RULE");
+  });
+
+  test("a closed run stays closed with a wait", () => {
+    expect(nextOf("waitclosed")).toBe("-");
   });
 });
 

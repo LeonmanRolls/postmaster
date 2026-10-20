@@ -14,6 +14,11 @@
 //          USER      the postmaster has put this run's question to the user and waits for the
 //                    answer (.waiting-on-user)
 //          RULE      an escalation is waiting (.escalation-ready)
+//          WAITING   an external wait in wait.json is still open (a fixture
+//                    marker that has not landed, or a pull request the
+//                    watcher has not yet seen pass or fail): never wakes
+//          WAIT-DONE a fixture wait's marker has landed: the wait is over
+//          WAIT-FAULT wait.json cannot be read: a fault, never over
 //          GATE      the ship card is complete (.card-ready)
 //          SPEC      a spec review package is waiting (.spec-review-ready): the postmaster puts
 //                    each workhorse's spec to the user, one at a time
@@ -38,6 +43,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { processStart } from "./lib/processes.ts";
+import { readWait } from "./lib/wait.ts";
 import { readWalls } from "./walls.ts";
 import { isDraftRecord } from "./scrub-report.ts";
 
@@ -288,6 +294,7 @@ export function status(root: string): number {
         /* the marker went away between listing and stat: reads as older */
       }
     }
+    const wait = readWait(d);
     let next: string;
     if (hasUntoldDetections(d)) next = "TELL";
     else if (stage === "done" || stage === "abandoned") next = "-";
@@ -295,6 +302,9 @@ export function status(root: string): number {
       next = markers.includes(".waiting-on-user") && waitingMtime > newestUntold ? "USER" : "WALL";
     else if (markers.includes(".waiting-on-user")) next = "USER";
     else if (markers.includes(".escalation-ready")) next = "RULE";
+    else if (wait.state === "fault") next = "WAIT-FAULT";
+    else if (wait.state === "done") next = "WAIT-DONE";
+    else if (wait.state === "open") next = "WAITING";
     else if (markers.includes(".card-ready")) next = "GATE";
     else if (active) next = "WAIT";
     else if (gap || corrupt) next = "INSPECT";

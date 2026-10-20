@@ -459,8 +459,8 @@ describe("positive controls", () => {
     expect(out).toContain("reviewer.tasks_max must be");
   });
 
-  test("a review round's time limit defaults to 2400 seconds, under [review]", () => {
-    expect(limit("plain")).toBe("2400");
+  test("a review round's time limit defaults to 3600 seconds, under [review]", () => {
+    expect(limit("plain")).toBe("3600");
   });
 
   test("an answer sets it, up to 86400", () => {

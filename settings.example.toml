@@ -36,9 +36,11 @@
 #
 # [project]
 # default_turnpikes = ["style", "bug"]
+# generated_files = ["**/*.gen.ts"] # files this project's tools generate; project.toml says what it means
 #
 # [tracker]
 # binding = "the board, workspace or team name for this checkout"
+# board = "off"   # github only: the issues alone, with no Projects board; project.toml says what it means
 #
 # This person's landing choices for this project.
 #

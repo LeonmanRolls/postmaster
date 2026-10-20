@@ -525,3 +525,9 @@ file = "scripts/acceptance-409.test.ts"
 name = "C5: fixture runs > without the notes scores clean and the log holds the outcome"
 reason = "needs a model run from this branch; the postmaster dispatches and scores it at landing"
 systems = ["linux", "darwin"]
+
+[[skip]]
+file = "scripts/acceptance-426.test.ts"
+name = "C6: the fixture mechanics > a run dispatched from this branch against it scores clean"
+reason = "needs a model run from this branch; the postmaster dispatches and scores it at landing"
+systems = ["linux", "darwin"]

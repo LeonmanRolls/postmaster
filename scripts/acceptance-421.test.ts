@@ -629,15 +629,18 @@ describe("C5: the postmaster keeps the record and the page current", () => {
 });
 
 describe("C6: the README states the design goal", () => {
-  test("the two sentences stand after the opening paragraph, before the roles", () => {
+  // The README is a short hub now: the two sentences stand in its first section, "The idea",
+  // before the roles in "Who does what".
+  test("the two sentences stand in the opening section, before the roles", () => {
     const text = readFileSync(README, "utf8");
     const sentences =
       "A design goal of postmaster is not to give you a complete solution. " +
       "It is to let you run experiments on different flows, so that you can find what works for your project.";
     const at = text.indexOf(sentences);
     expect(at).toBeGreaterThanOrEqual(0);
-    expect(text.slice(0, at)).toContain("the merge authority in the config.");
-    expect(at).toBeLessThan(text.indexOf("## The four roles"));
+    expect(text).toContain("## The idea");
+    expect(at).toBeGreaterThan(text.indexOf("## The idea"));
+    expect(at).toBeLessThan(text.indexOf("## Who does what"));
     expect(text.slice(0, at).endsWith("\n\n")).toBe(true);
     expect(text[at + sentences.length]).toBe("\n");
   });

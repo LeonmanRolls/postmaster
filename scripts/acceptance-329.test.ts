@@ -136,7 +136,7 @@ describe("C1: the step surveys a rise, and only a rise", () => {
           expect(flagOf(argv, "--name")).toBe(`rise-r${rise.round}`);
           expect(flagOf(argv, "--snapshot")).toBe(rise.sha);
           expect(flagOf(argv, "--question")).toBe(QUESTION);
-          expect(flagOf(argv, "--timeout")).toBe("2400");
+          expect(flagOf(argv, "--timeout")).toBe("3600");
           const materials = materialsOf(argv);
           const reports = expectedReports(rise.run, rise.round).map((f) =>
             join(lay.dispatch, "logs", f),
@@ -967,7 +967,7 @@ describe("timeout", () => {
         ]);
         expect(r.code).toBe(0);
         const argv = standinCalls(lay.record)[0]?.argv ?? [];
-        expect(flagOf(argv, "--timeout")).toBe("2400");
+        expect(flagOf(argv, "--timeout")).toBe("3600");
         expect(r.err).toContain("default");
       },
     );

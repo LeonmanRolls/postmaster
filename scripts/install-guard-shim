@@ -1,0 +1,57 @@
+#!/bin/sh
+# The guard's shim: one file behind the npm, pnpm, yarn, bun, npx, bunx,
+# corepack, pn, pnx, pnpx and yarnpkg names on a lane's PATH. Hands the
+# invocation to the guard with the shim dir, so the guard's own manager
+# lookup skips the shims instead of recursing into them.
+#
+# The shim starts Bun by absolute path, found by walking PATH without the shim
+# directory: this dir shadows the bun name, so starting Bun by name here (or
+# through scripts/run, which starts bare `bun`) would recurse into this shim
+# without end. Below that the invocation matches scripts/run: the same version
+# check, the same isolation flags.
+set -eu
+if [ -z "${POSTMASTER_TOOL:-}" ]; then
+  echo "install-guard: POSTMASTER_TOOL is not set; the launch did not arm the guard" >&2
+  exit 1
+fi
+prog=$0
+case "$prog" in
+  *"/"*) : ;;
+  *) prog=$(command -v "$prog") ;;
+esac
+dir=$(dirname "$prog")
+case "$dir" in
+  "/"*) : ;;
+  *) dir=$(cd "$dir" && pwd) ;;
+esac
+name=$(basename "$prog")
+real_bun=""
+old_ifs=$IFS
+IFS=:
+set -f
+for d in ${PATH:-}; do
+  # Empty entries never count, as in the guard's own lookup: a bun in the
+  # working directory must not become the guard's interpreter.
+  [ -n "$d" ] || continue
+  case "$d" in
+    "/"*) abs_d=$d ;;
+    *) abs_d=$(cd "$d" 2>/dev/null && pwd) || continue ;;
+  esac
+  [ "$abs_d" = "$dir" ] && continue
+  if [ -x "$abs_d/bun" ] && [ ! -d "$abs_d/bun" ]; then
+    real_bun="$abs_d/bun"
+    break
+  fi
+done
+set +f
+IFS=$old_ifs
+if [ -z "$real_bun" ]; then
+  echo "install-guard: no bun outside the guard's shims" >&2
+  exit 1
+fi
+if [ -f "$POSTMASTER_TOOL/scripts/lib/bun-min.ts" ] && [ -f "$POSTMASTER_TOOL/package.json" ]; then
+  "$real_bun" --no-env-file "--config=$POSTMASTER_TOOL/bunfig.toml" \
+    "$POSTMASTER_TOOL/scripts/lib/bun-min.ts" "$POSTMASTER_TOOL/package.json" || exit $?
+fi
+exec "$real_bun" --no-env-file "--config=$POSTMASTER_TOOL/bunfig.toml" \
+  "$POSTMASTER_TOOL/scripts/install-guard.ts" run --shim-dir "$dir" "$name" "$@"

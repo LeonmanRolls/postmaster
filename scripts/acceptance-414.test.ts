@@ -145,13 +145,16 @@ suite("C5: a manual run gives every named file the check's limit", () => {
   }, 420_000);
 
   test("both slow tests still exceed the bare five-second default", () => {
-    // Pins the probes: under an explicit five-second default both slow
-    // tests fail, so a future limit or speedup fails here, loud, instead
-    // of hollowing the pair above into a pass at the base.
+    // Pins the probes: under the bare five-second default both slow tests
+    // fail, so a future limit or speedup fails here, loud, instead of
+    // hollowing the pair above into a pass at the base. The run reads no
+    // bunfig, so no preload: a preload's default outranks --timeout in the
+    // first file of a serial run, and would spare whichever probe ran first.
     const r = run(
       "bun",
       [
         "test",
+        "--config=/dev/null",
         "--timeout=5000",
         "scripts/clean-checkout.test.ts",
         "scripts/acceptance-414.test.ts",
@@ -163,7 +166,15 @@ suite("C5: a manual run gives every named file the check's limit", () => {
     );
     const output = r.out + r.err;
     expect(r.code).not.toBe(0);
-    expect(output).toMatch(/outlives its bound.*timed out after 5000ms/su);
-    expect(output).toMatch(/C5 probe: six seconds.*timed out after 5000ms/su);
+    // Each probe's own failure line, with Bun's timed-out note directly
+    // under it. A pattern free to span lines joins one test's name to
+    // another test's note, and so passed on a probe's passing line wherever
+    // Bun prints those, which it does only when it detects no agent.
+    expect(output).toMatch(
+      /^\(fail\) cleanCheckout > a command that outlives its bound .*\n[ \t]*\^ this test timed out after 5000ms\./mu,
+    );
+    expect(output).toMatch(
+      /^\(fail\) C5 probe: six seconds with no stated limit .*\n[ \t]*\^ this test timed out after 5000ms\./mu,
+    );
   }, 420_000);
 });

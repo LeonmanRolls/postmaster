@@ -133,7 +133,9 @@ global config:
   kanban the user can open, needing only `gh` logged in with the `project` scope. When
   the probe says `partial`, it names the one command that finishes it (`gh auth login`,
   `gh auth refresh -s project`); the user runs it, since a login is theirs, and you probe
-  again. Plane is another named kind: ask for the API origin and the workspace slug, ask
+  again. A project that wants its issues alone, with no board, needs no `project` scope:
+  offer `[tracker] board = "off"` for its `.postmaster/` settings (`skills/postmaster/trackers.md`).
+  Plane is another named kind: ask for the API origin and the workspace slug, ask
   the user to write `~/.postmaster/plane.env` with `PLANE_API_KEY=<key>` themselves,
   since a key never passes through a conversation, and confirm with `scripts/run plane
   projects`. `local` needs no service and no login: it keeps each repo's tickets in the
@@ -279,9 +281,10 @@ the ticket's `## Libraries` list is welcome, used at run time or only by the che
 user has said yes to adding it. A library used at run time is copied into the repository at a
 fixed version, the way `scripts/lib/vendor/` holds @babel/parser: one version with its licence
 and the registry's checksum, written by a refresh script that applies the approval, the week-old
-age and Socket's scan. A library the checks alone use installs under the same approval,
-and `bun run check` is the type check, Oxlint, the Biome format check, the
-tests beside every script, the runbook reference check and the wiki lint.
+age and Socket's scan. A library the checks alone use installs under the same approval: the
+pinned `npm`, `pnpm` and `yarn` binaries the install-guard oracle drives are development
+dependencies on those terms, and `bun run check` is the type check, Oxlint, the Biome format
+check, the tests beside every script, the runbook reference check and the wiki lint.
 
 ### Where a setting comes from
 

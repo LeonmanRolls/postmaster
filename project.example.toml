@@ -8,7 +8,8 @@
 #
 # [project] describes project-owned facts that discovery cannot know: what `default` means in a
 # ticket and the risk surfaces the security lens should probe. `[tracker].binding` names the
-# project's board, workspace or team; service hosts, account details and credentials stay in the
+# project's board, workspace or team, and on GitHub `[tracker].board = "off"` tracks the project's
+# issues alone, with no Projects board; service hosts, account details and credentials stay in the
 # machine config. These are requirements and shared facts, not a team's role assignment.
 # Risk surfaces are prose: they may name a path or a secret's name, since that is what the
 # security lens must probe. Every other value here is a name and may not be a path.
@@ -18,6 +19,15 @@
 # setting by setting for this project; ~/.postmaster/config.toml supplies the machine's
 # defaults. None of these sets a floor of turnpikes: a ticket names the turnpikes its run
 # passes through, and this file only says what `default` means for this project.
+#
+# `generated_files` lists globs, relative to the project's root, of files a tool writes and the
+# project commits, such as a router's generated route tree. The switch-off check
+# (scripts/run landing switch-offs) does not list a run's regeneration of such a file as the run's
+# own switch-off: the generator, not the run, owns the comments in it, and a reason written there is
+# overwritten at the next regeneration. Each file skipped is named on stderr. Keep the list to files
+# the project's tools generate, since a file listed here is not checked for switch-offs at all. A
+# pattern is a glob with forward slashes, inside the project, with no negation and more than
+# wildcards. The person's settings.toml may name it too and replaces the shared list whole.
 #
 # The checks say how a change to the project is shown to work. A project that declares none gets
 # defaults (scripts/run verify): the gate, always, and by what discovery finds, a command-line
@@ -30,10 +40,12 @@
 #
 # [project]
 # default_turnpikes = ["style", "bug", "security"]
+# generated_files = ["**/*.gen.ts"]
 # risk_surfaces = "Processes, network bindings, credentials and data stores the security lens should inspect."
 #
 # [tracker]
 # binding = "the board, workspace or team name"
+# board = "off"   # github only: the issues alone, with no Projects board; "on" when left out
 #
 # A check is a table named for it, in a lowercase word. It has either
 #   command    a shell command, run from the root of the worktree under test with bash -e -o
