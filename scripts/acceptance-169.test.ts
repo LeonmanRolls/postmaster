@@ -31,12 +31,12 @@ import { run } from "./lib/proc.ts";
 
 const ALLOWED_SELF = ["log-action", "runs-hold", "host", "runs-watch", "wait-for-markers"];
 
-function heldRoot(dir: string, ticket: string): string {
+function heldRoot(dir: string, ticket: string): { cfg: string; root: string } {
   const cfg = configFor(dir);
   const root = join(dir, "runs");
   mkdirSync(join(root, "postmaster"), { recursive: true });
   mkRun(root, ticket, null);
-  return root;
+  return { cfg, root };
 }
 
 describe("C1b: the postmaster itself runs only the closed list", () => {
@@ -58,8 +58,7 @@ describe("C4a: a held run is left alone, a released run is named", () => {
   test("hold then watch exits 3 naming nothing; release then watch names at its first look", () => {
     const dir = scratch("c4a");
     try {
-      const cfg = configFor(dir);
-      const root = heldRoot(dir, "T-1");
+      const { cfg, root } = heldRoot(dir, "T-1");
       const h = hold(root, cfg, "T-1", "stage-f");
       expect(h.code).toBe(0);
       const lines = heldLines(root);
@@ -82,8 +81,7 @@ describe("C4a: a held run is left alone, a released run is named", () => {
   test("an unheld run is named (positive control)", () => {
     const dir = scratch("c4a-control");
     try {
-      const cfg = configFor(dir);
-      const root = heldRoot(dir, "T-1");
+      const { cfg, root } = heldRoot(dir, "T-1");
       expect(statusNext(root, cfg, "T-1")).toBe("GATE");
       const r = watch(root, cfg, "0");
       expect(r.code).toBe(0);
@@ -98,8 +96,7 @@ describe("C4c: a hold from an earlier session is released at the next start", ()
   test("release-stale drops the helper hold and keeps the hand-written line", () => {
     const dir = scratch("c4c");
     try {
-      const cfg = configFor(dir);
-      const root = heldRoot(dir, "T-1");
+      const { cfg, root } = heldRoot(dir, "T-1");
       writeFileSync(join(root, "postmaster", "held"), "T-9\n");
       expect(hold(root, cfg, "T-1", "stage-f").code).toBe(0);
       const before = sessionToken(root);
@@ -119,8 +116,7 @@ describe("C5: a second hold on the run is refused", () => {
   test("a second helper hold is refused and the first stays", () => {
     const dir = scratch("c5");
     try {
-      const cfg = configFor(dir);
-      const root = heldRoot(dir, "T-1");
+      const { cfg, root } = heldRoot(dir, "T-1");
       expect(hold(root, cfg, "T-1", "first").code).toBe(0);
       const second = hold(root, cfg, "T-1", "second");
       expect(second.code).not.toBe(0);
@@ -136,8 +132,7 @@ describe("C5: a second hold on the run is refused", () => {
   test("a hold on a hand-held run is refused and the hand line stays", () => {
     const dir = scratch("c5-hand");
     try {
-      const cfg = configFor(dir);
-      const root = heldRoot(dir, "T-1");
+      const { cfg, root } = heldRoot(dir, "T-1");
       writeFileSync(join(root, "postmaster", "held"), "T-1\n");
       const h = hold(root, cfg, "T-1", "stage-f");
       expect(h.code).not.toBe(0);
