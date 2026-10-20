@@ -57,11 +57,15 @@
 // external wait still open) and - (closed) never do.
 //
 // It looks at once, then every postmaster.poll_seconds (default 120) from the watched
-// project's effective config (POSTMASTER_CONFIG overrides the path). A run listed in
-// <runs>/postmaster/held, one ticket
-// per line, is never touched: hold a run by writing its ticket there exactly as the RUN column
-// shows it, and release it by removing the line. A held line that matches no run warns on
-// stderr. The held list and the config are read on every look, and the held list is re-read
+// project's effective config (POSTMASTER_CONFIG overrides the path). A run named in
+// <runs>/postmaster/held, one run
+// per line, is never touched: hold a run for a helper with `run runs-hold hold`, which
+// refuses a second hold on the run, and release it with `run runs-hold release`; hold it
+// by hand by writing its ticket there exactly as the RUN column shows it, and release it
+// by removing the line. Matching is on each line's first field, so a helper's line, which
+// also names its helper and session, holds its run, and a held line that matches no run
+// warns on stderr, as does a line with trailing fields the watcher ignores.
+// The held list and the config are read on every look, and the held list is re-read
 // immediately before every mutation, so a hold takes effect without restarting the watcher.
 // A hold that lands mid-step aborts the step: silently before its first mutation, and by
 // waking the postmaster with the partial state after one.
@@ -110,6 +114,7 @@ import {
   effectiveConfigForProject,
   globalConfigPath,
 } from "./lib/effective-config.ts";
+import { heldTicketOf, parseHeldLine } from "./lib/held.ts";
 import { beside, scriptsDir } from "./lib/paths.ts";
 import { pinnedCommand, runPinned } from "./lib/pinned.ts";
 import { readWait } from "./lib/wait.ts";
@@ -657,7 +662,7 @@ function isHeldRun(wanted: string, pmDir: string): 0 | 1 | 2 {
   const text = tryReadHeld(pmDir);
   if (text === null) return 2;
   for (const raw of text.split("\n")) {
-    if (raw.replace(/^[ \t]+|[ \t]+$/gu, "") === wanted) return 0;
+    if (heldTicketOf(raw) === wanted) return 0;
   }
   return 1;
 }
@@ -683,12 +688,18 @@ interface Waking {
 function wakingRuns(table: string, heldText: string): Waking {
   const hold: string[] = [];
   const holdSet = new Set<string>();
+  const warnings: string[] = [];
   for (const raw of heldText.split("\n")) {
-    const h = raw.replace(/^[ \t]+|[ \t]+$/gu, "");
-    if (h !== "" && !holdSet.has(h)) {
-      holdSet.add(h);
-      hold.push(h);
+    const line = parseHeldLine(raw);
+    if (line === null) continue;
+    if (!holdSet.has(line.ticket)) {
+      holdSet.add(line.ticket);
+      hold.push(raw.replace(/^[ \t]+|[ \t]+$/gu, ""));
     }
+    if (line.extra.length > 0)
+      warnings.push(
+        `runs-watch: held "${line.ticket}" has trailing fields the watcher ignores: ${line.extra.join(" ")}`,
+      );
   }
   const needs: string[] = [];
   const seen = new Set<string>();
@@ -704,9 +715,10 @@ function wakingRuns(table: string, heldText: string): Waking {
     if (holdSet.has(first)) continue;
     needs.push(`needs ${first} ${last}`);
   }
-  const warnings: string[] = [];
   for (const h of hold) {
-    if (!seen.has(h)) warnings.push(`runs-watch: held "${h}" matches no run`);
+    const ticket = heldTicketOf(h);
+    if (ticket !== null && !seen.has(ticket))
+      warnings.push(`runs-watch: held "${h}" matches no run`);
   }
   return { needs, warnings };
 }
