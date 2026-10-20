@@ -508,9 +508,8 @@ leg's job from the legs table. `<rt>` is the run's tool checkout, which
 prompt. When the run's ticket notes are held back — `<tool>/scripts/run run-meta ticket-notes
 <dispatch>` prints held-back — the prompt carries this line too:
 The ticket's technical notes are held back on purpose and are not to be looked up, in the tracker or anywhere else.
-When the run's ticket notes are held back, nothing sent to the coachman quotes the technical
-notes: not a leg's prompt, a ruling, or a resume. Nothing else: the runbook and the files
-carry the rest. Report the prompt's path.
+When the run's ticket notes are held back, nothing sent to the coachman quotes the technical notes: not a leg's prompt, a ruling, or a resume.
+Nothing else: the runbook and the files carry the rest. Report the prompt's path.
 Write your report to `<dispatch>/helper-c-prompt-<pid>.md`, pid your own process id, before
 you end, and end as the brief contract says.
 ```
@@ -1153,8 +1152,9 @@ prints, then resume the current leg only in the form that launched it, with its 
 the host: `<tool>/scripts/run run-meta run-pinned <dispatch> host leg resume <dispatch>
 <repo>/.worktrees/<TICKET> <leg-name> <n> <thread-id>
 <dispatch>/leg-<n>-resume-<time>.txt`. The ruling is a prompt to a resumed thread, never text
-typed into anything. When the run's ticket notes are held back, nothing sent to the coachman
-quotes the technical notes: not a leg's prompt, a ruling, or a resume. On `send it back`,
+typed into anything.
+When the run's ticket notes are held back, nothing sent to the coachman quotes the technical notes: not a leg's prompt, a ruling, or a resume.
+On `send it back`,
 leave the leg stopped and let the clerk prepare the ticket again. Report the delivery.
 Write your report to `<dispatch>/helper-e-deliver-<pid>.md`, pid your own process id, before
 you end, and end as the brief contract says.
@@ -1330,8 +1330,8 @@ you end, and end as the brief contract says.
    claim-fail clause below with the gate result as the exact discrepancy. On `stale`,
    withhold: brief the `f-sendback` brief with the stale line as the exact discrepancy,
    asking the leg to repeat its merge step and raise the card again, and wait for the
-   corrected card. Log the send-back yourself with the leg, the thread id and the stale line
-   as `send-back: <stale line>`.
+   corrected card. The re-raise runs the card step's card-write over the stale card. Log the
+   send-back yourself with the leg, the thread id and the stale line as `send-back: <stale line>`.
    For a change to the coachman contract, a merge means a new fixture run from the final
    branch only when what the merge brought in changes the coachman contract; otherwise the
    earlier fixture result stands. Record the reported command, result and checked commit on
@@ -1399,8 +1399,8 @@ you end, and end as the brief contract says.
    `<tool>/scripts/run runs-hold hold <runs> <TICKET> --helper f-sendback`, and release it
    when the report lands.
 
-   Check switch-offs through a helper after the claims and before step 2's landing route, on
-   both routes:
+   Check switch-offs after the claims and before step 2's landing route, on both routes,
+   through a helper:
 
 ```helper
 Helper brief `f-switchoffs` for run `<TICKET>` at `<dispatch>`: check the switch-offs.
@@ -1427,15 +1427,16 @@ you end, and end as the brief contract says.
    `.waiting-on-user` through the `f-write-wait` brief; remove it through the `d-unwait`
    brief when the user's word arrives. On exit 3, withhold under the claim-fail clause with
    the listed entries as the exact discrepancy; the leg gives each its reason, or removes
-   what it should not switch off. On exit 4, withhold the same way. The merge authority never
-   approves these entries and never unholds them: where it is the postmaster itself, it still
-   asks and records the word before it opens a pull request or merges. Compare the card's
+   what it should not switch off. On exit 4, withhold the same way.
+   The merge authority never approves these entries and never unholds them: where
+   it is the postmaster itself, it still asks and records the word before it opens a
+   pull request or merges. Compare the card's
    `## Switch-offs` section with the fresh report, approval marks aside, and withhold on any
    difference with the mismatch as the exact discrepancy; a card from a run pinned before
    this check has no such section, and those runs are judged by the live list alone.
 
-   Check libraries through a helper after the switch-offs and before step 2's landing route,
-   on both routes:
+   Check libraries after the switch-offs and before step 2's landing route, on both routes,
+   through a helper:
 
 ```helper
 Helper brief `f-libraries` for run `<TICKET>` at `<dispatch>`: check the libraries.
@@ -1459,9 +1460,10 @@ you end, and end as the brief contract says.
    remainder repeats the ask, and anything still unapproved after the user's word withholds
    the same way. While an ask is outstanding, the question sits in the run's
    `.waiting-on-user` through the `f-write-wait` brief; remove it through the `d-unwait`
-   brief when the user's word arrives. On exit 4, withhold the same way. The merge authority
-   never approves these entries and never unholds them: where it is the postmaster itself, it
-   still asks and records the word before it opens a pull request or merges.
+   brief when the user's word arrives. On exit 4, withhold the same way.
+   The merge authority never approves these entries and never unholds them: where
+   it is the postmaster itself, it still asks and records the word before it opens a
+   pull request or merges.
 
 ```helper
 Helper brief `f-write-wait` for run `<TICKET>` at `<dispatch>`: write the wait marker.
@@ -1476,7 +1478,7 @@ you end, and end as the brief contract says.
    `<tool>/scripts/run runs-hold hold <runs> <TICKET> --helper f-write-wait`, and release it
    when the report lands.
 
-2. **Follow the landing route in the waybill** through helpers. First brief one to ask whether
+2. **Follow the landing route in the waybill.** Through helpers: first brief one to ask whether
    the ticket already landed:
 
 ```helper
@@ -1669,8 +1671,8 @@ still says `nothing-to-land` with the refs the postmaster hands you. Run
 `<dispatch>/style-sort.md` using the sorting rules in `coachman.md` beside that runbook, then
 check it again until exit 0; on exit 1 report what it printed whole. It does not resume a
 coachman leg that already handed off. When the run's ticket notes are held back, check whether
-the notes stayed away before the cleanup: `<tool>/scripts/run ticket-reads <dispatch>
---record` looks through every agent's record for a read of the ticket and writes its outcome
+the notes stayed away before the cleanup: `<tool>/scripts/run ticket-reads <dispatch> --record`
+looks through every agent's record for a read of the ticket and writes its outcome
 to the run log and a note action. Report each result.
 Write your report to `<dispatch>/helper-g-confirm-<pid>.md`, pid your own process id, before
 you end, and end as the brief contract says.
@@ -1683,7 +1685,8 @@ you end, and end as the brief contract says.
    `run-log.md` (per-lane win record — none in a single-thread run, which has no lanes —
    findings counts, cost) and a dated closing comment for the ticket, the comment through the
    `f-scribe` brief with every finding fixed before aftercare posts it. The shipped mark is
-   the proof of the landing; confirm nothing by hand again.
+   the proof of the landing; confirm nothing by hand again. The `ticket-reads` outcome the
+   brief recorded is in the run log.
 2. **Run the cleanup command through a helper, first as a dry run.** Brief one for the dry
    run, read its plan, then brief the run:
 
@@ -1736,10 +1739,17 @@ changed or added verifier at the merge — each change that clashes with one kep
 started prints as `not kept:` and stays as the project has it — and report each named file.
 Then check whether any verifier may have gone stale on the landing: advance `<repo>`'s
 checkout of the default branch to the landed merge commit first, so the stale query reads the
-landing's own index, then run `<tool>/scripts/run verifier stale <repo> --at <merge>` once,
-and report the verifiers it marks. Decide nothing: the postmaster offers the upkeep pass.
-Archive finished threads where the harness has an archive form (`harnesses.md`), and report
-what you archived.
+landing's own index, then run `<tool>/scripts/run verifier stale <repo> --at <merge>` once;
+for the verifiers it marks, offer one correcting upkeep pass
+(`run verifier upkeep <repo> --run <dispatch> --correct`), naming the changed files, and a yes
+starts it; when the pass completes, land the pass's branch only where the pass printed one
+(`run verifier land <repo> <branch> --run <dispatch> --report <report>`), so the new
+confirmation reaches the default branch; a pass that printed a branch and a `kept` line carries
+both, so land the branch and report the kept corrections as kept; for local verifiers the pass
+prints no branch and the corrections are already kept, so report them as kept. A landing it
+clears offers nothing. The pass from here is the postmaster's to offer: report the marked
+verifiers and stop there. Archive finished threads where the harness has an archive form
+(`harnesses.md`), and report what you archived.
 Write your report to `<dispatch>/helper-g-verifier-<pid>.md`, pid your own process id, before
 you end, and end as the brief contract says.
 ```
@@ -1896,7 +1906,7 @@ or asked, draft the ticket it would become in `<dispatch>/style-drafts/`, in the
 (`skills/clerk/ticket-template.md` beside that runbook), with the direction the proposal gives
 for the user to approve or change and `default` as its turnpikes; check each draft with
 `<tool>/scripts/run ticket-check --body <draft> --title "<title>" --project <repo>`, and
-report each check. Report every proposal with its draft or its ledger mark.
+log `ticket-check`. Report every proposal with its draft or its ledger mark.
 Write your report to `<dispatch>/helper-lg-style-drafts-<pid>.md`, pid your own process id,
 before you end, and end as the brief contract says.
 ```
@@ -1904,7 +1914,7 @@ before you end, and end as the brief contract says.
    This brief changes run `<TICKET>`: hold it first with
    `<tool>/scripts/run runs-hold hold <runs> <TICKET> --helper lg-style-drafts`, and release
    it when the report lands. Show the user every line of `<dispatch>/style-sort.md` with its
-   reason, the drafts, and the proposals the ledger already marks; log a `note` yourself
+   reason, the drafts, and the proposals the ledger already marks; log a `note`
    with `style proposal asked: <proposal>` for each draft shown; and carry on with the
    stream. On the user's word for a proposal, create its ticket through the `a-create` brief,
    with `style proposal: <proposal>` as the detail of the `ticket-create` line you log
