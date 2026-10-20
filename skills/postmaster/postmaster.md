@@ -411,23 +411,28 @@ ticket-notes <dispatch>` prints them from the record. When the notes are held ba
 postmaster hands you the whole ticket body in a temporary file outside the run directory:
 run `<tool>/scripts/run ticket-cut` on it, paste the cut output as the waybill's ticket, then
 remove the file; the whole ticket stays in the tracker and no copy of it sits where the run
-reads. Then the project profile (gate, build, browser suite, landing, the checks as
-`<tool>/scripts/run verify record` printed them, docs to read first, tracker, risk surfaces),
-the team from `run.json` with its reviewer lines as `<tool>/scripts/run reviewers lines
---project <repo>` prints them, the `mode:` line pasted whole from the `mode:` line
-`<tool>/scripts/run run-meta mode <dispatch>` printed (the Team section's first line), and the
-`workhorses:` line only when that mode is `synthesis`, and the `efforts:` line pasted from
-`<tool>/scripts/run run-meta efforts <dispatch>`, never composed by hand; each project's facts
-sourced as discovered, shared or local, `CHECKPOINT_MODE` from `ship.checkpoint_mode` and
-`MERGE_AUTHORITY` from `ship.merge_authority`, either overridden only where the user said so
-for this run, the dispatch path and the run's pinned tool — `<tool>/scripts/run run-meta path
-<dispatch>`, which the template names as `tool:`. Then `<tool>/scripts/run turnpikes legs
-<dispatch> --expect '<that turnpikes: line>'` must exit 0 and print the legs; report its
-output whole and stop on any other exit. Record `coachman contract fixture: pending` and
-`contract fixture check: -`. Where the target is a fixture copy (`<tool>/scripts/run
-front-door` reports one), add the brief's line "wall ruling: go on — this fixture run asks
-nobody: the postmaster rules every wall go on itself as soon as it is told; the coachman
-escalates and waits". Report the waybill's path when it is written.
+reads. Then the project profile (gate, build, browser suite, landing (`pull-request` or
+`local`), the checks as `<tool>/scripts/run verify record` printed them, docs to read first,
+tracker, risk surfaces), the team from `run.json` — the resolved machine config step 6
+recorded — with its reviewer lines as `<tool>/scripts/run reviewers lines --project <repo>`
+prints them, the `mode:` line pasted whole from the `mode:` line `<tool>/scripts/run run-meta
+mode <dispatch>` printed (the Team section's first line), and the `workhorses:` line **only
+when that mode is `synthesis`**: a single-thread waybill names no workhorse lane, so nothing
+downstream finds one to run, and the `efforts:` line pasted from `<tool>/scripts/run run-meta
+efforts <dispatch>`, never composed by hand; each project's facts sourced as discovered,
+shared or local, `CHECKPOINT_MODE` from `ship.checkpoint_mode` and `MERGE_AUTHORITY` from
+`ship.merge_authority`, either overridden only where the user said so for this run, the
+dispatch path and the run's pinned tool — `<tool>/scripts/run run-meta path <dispatch>`, the
+checkout step 7 cut, which the template names as `tool:` and the coachman uses as its `<tool>`.
+Then `<tool>/scripts/run turnpikes legs <dispatch> --expect '<that turnpikes: line>'` exits 0
+and prints the legs for the `turnpikes:` line step 1 printed, before anything is launched;
+report its output whole and stop on any other exit. Record `coachman contract fixture: pending`
+and `contract fixture check: -`; no implementation branch exists yet to classify. Where the
+target is a fixture copy (`<tool>/scripts/run front-door` reports one), add the brief's line
+"wall ruling: go on — this fixture run asks nobody: the postmaster rules every wall go on
+itself as soon as it is told; the coachman escalates and waits", so the run's postmaster
+rules its own walls and a fixture run never waits on a user (D7). Report the waybill's path
+when it is written.
 Write your report to `<dispatch>/helper-b-brief-<subject>-<rand>.md`, subject the run's
 ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
@@ -456,8 +461,31 @@ ticket and rand six hex digits you pick fresh, before you end, and end as the br
    step 4 says but with no leg started — on go on, write the waybill and dispatch, on send
    it back, abandon as that step says — and in a fixture run, with no user to ask, abandon
    the run rather than dispatch on premises that do not hold. Paste the cut output as the
-   waybill's ticket only once the check holds or the ruling says go on.
-9. **Move the ticket to in-progress through a helper** through the tracker adapter. Brief one
+   waybill's ticket only once the check holds or the ruling says go on. Without the notes
+   the coachman skips this step.
+9. **Gate the dispatch on the target's managers through a helper.** Brief one with the
+   `b-install-guard` brief to check the managers and report:
+
+```helper
+Helper brief `b-install-guard` for ticket `<TICKET>` on project `<repo>`: check the managers.
+Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
+Run `<tool>/scripts/run install-guard dispatch-check <repo> --dispatch <dispatch>` with the
+repo and dispatch path the postmaster hands you, and report its exit whole: held with the
+named managers unguarded, or clear. Decide nothing: the postmaster follows the answer.
+Write your report to `<dispatch>/helper-b-install-guard-<subject>-<rand>.md`, subject the
+run's ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
+```
+
+   This brief reads only: no hold. When it holds the dispatch, stop before the ticket
+   moves and ask the user whether the run may go on with the named managers unguarded; on
+   their yes, record it with `<tool>/scripts/run log-action <dispatch> postmaster pm-word
+   <managers> '<the user's words>'`, the held managers comma-separated, and brief the
+   check again. A word already recorded clears its managers with nothing to ask, as does a
+   project whose managers are all covered. On no, abandon the run through the `b-abandon`
+   brief and leave the ticket ready: the ticket is fine, the run just cannot proceed
+   guarded, so no clerk restarts. In a fixture run, with no user to ask, abandon the run
+   rather than dispatch past the hold.
+10. **Move the ticket to in-progress through a helper** through the tracker adapter. Brief one
    to move it, log the move, and report it. Under contract 2 the
    coachman never touches the ticket's state and the postmaster marks it done after the
    merge; under the legacy contract the coachman touches it only at stage 3's merge. The
@@ -1459,7 +1487,8 @@ ticket and rand six hex digits you pick fresh, before you end, and end as the br
    brief when the user's word arrives. On exit 4, withhold the same way.
    The merge authority never approves these entries and never unholds them: where
    it is the postmaster itself, it still asks and records the word before it opens a
-   pull request or merges.
+   pull request or merges. Any other exit is an input fault: stop the stage, fix the
+   inputs and re-run.
 
 ```helper
 Helper brief `f-write-wait` for run `<TICKET>` at `<dispatch>`: write the wait marker.
@@ -1556,23 +1585,56 @@ ticket and rand six hex digits you pick fresh, before you end, and end as the br
 ```helper
 Helper brief `f-land-pr` for run `<TICKET>` at `<dispatch>`: push and open the pull request.
 Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
-Push the ticket branch; where an open pull request already names it, adopt it instead of
-opening another. Otherwise open the pull request against the default branch (`gh pr create`
-on a GitHub project) with the description the postmaster hands you. Include the card, final
-checks, diff stat, preview and review links, and thread ids. Leave a dated tracker comment
-linking the pull request and summarizing the same evidence, with the comment text the
-postmaster hands you. Report the push and the pull-request URL whole, and log
-`ticket-comment` for the comment as the contract says. The postmaster logs a `note` with
-the push and pull-request URL itself.
+Push the ticket branch, then open the pull request against the default branch with
+`<tool>/scripts/run landing open-pr --repo <repo> --dispatch <dispatch> --base <the default
+branch> --head <the ticket branch> --title "<the ticket id>, <the ticket title>" --body-file
+<the scanned description file>` with the values the postmaster hands you, adding `--ready`
+where the postmaster hands you ready after a refused draft. The step adopts an open pull
+request that already names the branch instead of opening another, and opens a draft pull
+request where the run's `ship.draft_pull_requests` says `on`, a ready one otherwise. Report
+what it prints whole: `opened <url> ready`, `opened <url> draft`, `adopted <url> ready`,
+`adopted <url> draft`, or `refused <message>`. On an opened or adopted pull request, leave a
+dated tracker comment linking the pull request and summarizing the card, final checks, diff
+stat, preview and review links, and thread ids, with the comment text the postmaster hands
+you, and log `ticket-comment` for the comment as the contract says. Decide nothing: the
+postmaster follows the answer's branch.
 Write your report to `<dispatch>/helper-f-land-pr-<subject>-<rand>.md`, subject the run's
 ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
 ```
 
      This brief changes run `<TICKET>`: hold it first with
      `<tool>/scripts/run runs-hold hold <runs> <TICKET> --helper f-land-pr`, and release it
-     when the report lands. Hand it the description and comment the `f-scribe` brief reported
-     clean. Log a `note` yourself with the push and pull-request URL; the brief logs
-     `ticket-comment`.
+     when the report lands. Hand it the title, the scanned description file and the comment
+     the `f-scribe` brief reported clean. Log a `note` yourself with the push and
+     pull-request URL. On `refused <message>`, no draft pull request can open here: put the
+     message and the question to the user in `.waiting-on-user` through the `f-write-wait`
+     brief, offering to open the pull request ready for review instead, and open nothing
+     until they answer; on their yes, log it with `<tool>/scripts/run log-action <dispatch>
+     postmaster note <the ticket branch> open-ready <the user's words>`, then brief
+     `f-land-pr` again with ready, and on any other answer keep waiting. On `opened <url>
+     ready` or `adopted <url> ready`, go on to the checks below. On `opened <url> draft` or
+     `adopted <url> draft`, put the URL and the question asking the user to look at it in
+     `.waiting-on-user` through the `f-write-wait` brief, and wait for their word; on a word
+     approving the mark, log it with `<tool>/scripts/run log-action <dispatch> postmaster
+     note <the pull-request URL> mark-ready <the user's words>`, then brief the
+     `f-mark-ready` brief:
+
+```helper
+Helper brief `f-mark-ready` for run `<TICKET>` at `<dispatch>`: mark the draft ready.
+Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.md` first.
+Run `<tool>/scripts/run landing mark-ready --repo <repo> --pr <pull-request-url>` with the
+values the postmaster hands you, and report what it prints whole. Decide nothing: the
+postmaster follows the answer.
+Write your report to `<dispatch>/helper-f-mark-ready-<subject>-<rand>.md`, subject the run's
+ticket and rand six hex digits you pick fresh, before you end, and end as the brief contract says.
+```
+
+     This brief changes run `<TICKET>`: hold it first with
+     `<tool>/scripts/run runs-hold hold <runs> <TICKET> --helper f-mark-ready`, and release it
+     when the report lands. On `ready`, brief the `f-pr-checks` brief below — nothing the
+     draft's checks said is carried over — and follow the `pass`, `none`, `pending` and
+     `fail:` branches again from the new answer; only a `pass` after the mark writes the
+     merge instructions. On any other answer keep waiting.
      Before saying it is ready to merge or writing merge instructions, brief a helper to ask
      the pull request's checks at the card's HEAD:
 
@@ -1590,7 +1652,8 @@ they exist; the watcher's next `none` at least a minute after the first is the s
 row. On `pending`, write the same wait with `noneCount` 0, and stop asking in the
 postmaster's conversation: the watcher asks the same question at every look and wakes it
 with WAIT-DONE only when the answer is `pass`, a `fail:` line, or the second `none` in a
-row, a minute or more after the first. On `fail:`, in either shape (`fail: <name> (<state>)
+row, a minute or more after the first. A second `none` reads as a `pass` for what is
+written. On `fail:`, in either shape (`fail: <name> (<state>)
 <link>` or `fail: pull request head <sha> does not match card <sha> <pr>`), report the line
 whole: the postmaster sends the card back. Report what you asked and what you wrote.
 Write your report to `<dispatch>/helper-f-pr-checks-<subject>-<rand>.md`, subject the run's
@@ -1605,8 +1668,9 @@ ticket and rand six hex digits you pick fresh, before you end, and end as the br
      WAIT-DONE wake, the `d-waitdone` brief asks the question once more and removes
      `wait.json`; follow the answer's branch here from its report: an answer of `pending`
      again is briefed through `f-pr-checks` again, and an answer of `none` again is the
-     second `none` in a row: move on as a second `none` does above, without writing the wait
-     again. On `fail:`, brief `f-sendback` with the exact `fail:` line as the discrepancy and
+     second `none` in a row: it reads as a `pass` for what is written, so write the merge
+     instructions as on `pass`, without writing the wait again. On `fail:`, brief `f-sendback`
+     with the exact `fail:` line as the discrepancy and
      wait for its corrected card. Do not use `MERGE_AUTHORITY` to merge a pull request on the
      user's behalf.
    - For `landing: local`, obey `MERGE_AUTHORITY` yourself. With `user`, put the card and
@@ -1621,7 +1685,8 @@ Read the brief contract under `Helpers` in `<tool>/skills/postmaster/postmaster.
 Verify the default checkout is still clean and on its default branch; if it is not, stop and
 report that, and take no further step. Leave a dated ready-to-merge tracker comment with the
 evidence the postmaster hands you (what the change does, branch name, gate output summary,
-diff stat, review link, thread ids). Merge the ticket branch with `git merge --no-ff`; never
+diff stat, review link, thread ids), and log `ticket-comment` for the comment as the contract
+says. Merge the ticket branch with `git merge --no-ff`; never
 rebase. Then scan the merge: `<tool>/scripts/run verify-merge <repo> --dispatch <dispatch>`
 reads HEAD, which must be the merge. Exit 0, the resolution is clean. Exit 1 names a finding
 the resolution introduced: undo the merge with `git reset --hard` to the pre-merge tip, merge

@@ -731,6 +731,10 @@ declare module "node:readline" {
   };
 }
 
+declare module "node:module" {
+  export function createRequire(filename: string): (id: string) => unknown;
+}
+
 declare module "node:net" {
   export interface Socket {
     destroy(): void;
@@ -810,6 +814,7 @@ declare class Response {
 interface ServeRequest {
   readonly method: string;
   readonly url: string;
+  readonly headers: { get(name: string): string | null };
   text(): Promise<string>;
 }
 declare const crypto: {

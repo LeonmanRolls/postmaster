@@ -69,7 +69,10 @@ import {
   specPairFor,
 } from "./lib/effective-config.ts";
 import { startCheck, wrapCommand } from "./lib/confine.ts";
-import { scriptsDir } from "./lib/paths.ts";
+import { scriptsDir, toolRoot } from "./lib/paths.ts";
+import { GUARD_SHIM_NAMES, ensureGuardBin } from "./lib/guardbin.ts";
+
+export { GUARD_SHIM_NAMES, ensureGuardBin };
 import { mkstempSync, run, signalExitCode } from "./lib/proc.ts";
 import { BOUND_L, BOUND_R, PY_S_CLASS } from "./lib/text.ts";
 import { parseWallReset } from "./lib/wall.ts";
@@ -569,6 +572,23 @@ function nextShlvl(seen: string | undefined): string {
   }
   return String(v);
 }
+/** The guard context a lane env file must not change: the bin the
+ * wrappers re-arm from and the variables the shims and the guard read.
+ * Saved before the source, restored after, unset-ness preserved, so a
+ * file that unsets or redirects any of them cannot launch the lane
+ * unguarded or pointed at another tool or registry. Held once; the
+ * three sourcing wrappers below interpolate both fragments. */
+const SAVE_GUARD_CTX =
+  "__pg_bin=${POSTMASTER_GUARD_BIN:-}; __pg_dispatch=${POSTMASTER_DISPATCH:-}; __pg_tool=${POSTMASTER_TOOL:-}; __pg_lane=${POSTMASTER_GUARD_LANE:-}; __pg_registry=${POSTMASTER_GUARD_REGISTRY:-}; __pg_socket=${POSTMASTER_GUARD_SOCKET_API:-};";
+const RESTORE_GUARD_CTX = [
+  'if [ -n "$__pg_bin" ]; then export POSTMASTER_GUARD_BIN="$__pg_bin"; else unset POSTMASTER_GUARD_BIN; fi;',
+  'if [ -n "$__pg_dispatch" ]; then export POSTMASTER_DISPATCH="$__pg_dispatch"; else unset POSTMASTER_DISPATCH; fi;',
+  'if [ -n "$__pg_tool" ]; then export POSTMASTER_TOOL="$__pg_tool"; else unset POSTMASTER_TOOL; fi;',
+  'if [ -n "$__pg_lane" ]; then export POSTMASTER_GUARD_LANE="$__pg_lane"; else unset POSTMASTER_GUARD_LANE; fi;',
+  'if [ -n "$__pg_registry" ]; then export POSTMASTER_GUARD_REGISTRY="$__pg_registry"; else unset POSTMASTER_GUARD_REGISTRY; fi;',
+  'if [ -n "$__pg_socket" ]; then export POSTMASTER_GUARD_SOCKET_API="$__pg_socket"; else unset POSTMASTER_GUARD_SOCKET_API; fi;',
+].join(" ");
+
 /** argv for `bash` to source an env_file and run cmd, as main's launcher
  * does: `set -a; . file; set +a` in the shell, then the fixed assignment main
  * makes after the source, then the harness as a child. File output reaches
@@ -582,7 +602,7 @@ function nextShlvl(seen: string | undefined): string {
 function sourcedLaunch(file: string, cmd: string[], level: string): string[] {
   return [
     "-c",
-    'SHLVL=$1; export SHLVL; f=$2; shift 2; s=${POSTMASTER_EVENT_STREAM:-}; set -a; . "$f"; set +a; POSTMASTER_EVENT_STREAM=$s; unset POSTMASTER_LAUNCH_NAME POSTMASTER_LAUNCH_ROLE; "$@"; s=$?; exit $s',
+    `SHLVL=$1; export SHLVL; f=$2; shift 2; s=\${POSTMASTER_EVENT_STREAM:-}; ${SAVE_GUARD_CTX} set -a; . "$f"; set +a; ${RESTORE_GUARD_CTX} if [ -n "\${POSTMASTER_GUARD_BIN:-}" ]; then PATH="$POSTMASTER_GUARD_BIN:$PATH"; export PATH; fi; POSTMASTER_EVENT_STREAM=$s; unset POSTMASTER_LAUNCH_NAME POSTMASTER_LAUNCH_ROLE; "$@"; s=$?; exit $s`,
     "_",
     level,
     file,
@@ -619,7 +639,7 @@ function sourcedLaunch(file: string, cmd: string[], level: string): string[] {
 function sourcedExec(file: string, cmd: string[], level: string): string[] {
   return [
     "-c",
-    'SHLVL=$1; export SHLVL; f=$2; shift 2; __postmaster_exec_env=$(command -v env); s=${POSTMASTER_EVENT_STREAM:-}; set -a; . "$f"; set +a; POSTMASTER_EVENT_STREAM=$s; unset POSTMASTER_LAUNCH_NAME POSTMASTER_LAUNCH_ROLE; if [ -n "${SHLVL+set}" ]; then exec "${__postmaster_exec_env:-/usr/bin/env}" "SHLVL=$SHLVL" "$@"; else exec "${__postmaster_exec_env:-/usr/bin/env}" -u SHLVL "$@"; fi',
+    `SHLVL=$1; export SHLVL; f=$2; shift 2; __postmaster_exec_env=$(command -v env); s=\${POSTMASTER_EVENT_STREAM:-}; ${SAVE_GUARD_CTX} set -a; . "$f"; set +a; ${RESTORE_GUARD_CTX} if [ -n "\${POSTMASTER_GUARD_BIN:-}" ]; then PATH="$POSTMASTER_GUARD_BIN:$PATH"; export PATH; fi; POSTMASTER_EVENT_STREAM=$s; unset POSTMASTER_LAUNCH_NAME POSTMASTER_LAUNCH_ROLE; if [ -n "\${SHLVL+set}" ]; then exec "\${__postmaster_exec_env:-/usr/bin/env}" "SHLVL=$SHLVL" "$@"; else exec "\${__postmaster_exec_env:-/usr/bin/env}" -u SHLVL "$@"; fi`,
     "_",
     level,
     file,
@@ -670,7 +690,7 @@ function sourcedPrompted(
 ): string[] {
   return [
     "-c",
-    'SHLVL=$1; export SHLVL; t=$(cat "$2") || exit 1; f=$3; i=$4; shift 4; s=${POSTMASTER_EVENT_STREAM:-}; set -a; . "$f"; set +a; POSTMASTER_EVENT_STREAM=$s; unset POSTMASTER_LAUNCH_NAME POSTMASTER_LAUNCH_ROLE; set -- "${@:1:$i}" "$t" "${@:$((i + 2))}"; "$@"; s=$?; exit $s',
+    `SHLVL=$1; export SHLVL; t=$(cat "$2") || exit 1; f=$3; i=$4; shift 4; s=\${POSTMASTER_EVENT_STREAM:-}; ${SAVE_GUARD_CTX} set -a; . "$f"; set +a; ${RESTORE_GUARD_CTX} if [ -n "\${POSTMASTER_GUARD_BIN:-}" ]; then PATH="$POSTMASTER_GUARD_BIN:$PATH"; export PATH; fi; POSTMASTER_EVENT_STREAM=$s; unset POSTMASTER_LAUNCH_NAME POSTMASTER_LAUNCH_ROLE; set -- "\${@:1:$i}" "$t" "\${@:$((i + 2))}"; "$@"; s=$?; exit $s`,
     "_",
     level,
     promptFile,
@@ -1296,6 +1316,84 @@ function readRegularFile(path: string, missing: string): string {
   }
 }
 
+/** Verify every shim name resolves inside the guard bin through the shells
+ * the launch wrappers create: the probe sources the lane's env file and
+ * re-arms the PATH the way the wrapper does, so a file that drops the bin
+ * or a missing shim fails here, and the launch refuses instead of running a
+ * lane that reads as guarded but is not. */
+export function verifyGuardResolution(opts: {
+  guardBin: string;
+  envFile: string | null;
+  env: Record<string, string | undefined>;
+}): { ok: boolean; detail: string } {
+  const script = [
+    "b=$GUARD_PROBE_BIN",
+    'if [ -n "${GUARD_PROBE_ENV:-}" ]; then set -a; . "$GUARD_PROBE_ENV"; set +a; fi',
+    'PATH="$b:$PATH"; export PATH',
+    "fail=''",
+    'for n in "$@"; do',
+    '  d=$(command -v "$n" 2>/dev/null || true)',
+    '  [ "$d" = "$b/$n" ] || fail="$fail $n:${d:-missing}"',
+    "done",
+    'if [ -z "$fail" ]; then exit 0; fi',
+    'echo "shadowed:$fail"; exit 1',
+  ].join("\n");
+  const env: Record<string, string | undefined> = {
+    ...opts.env,
+    GUARD_PROBE_BIN: opts.guardBin,
+    GUARD_PROBE_ENV: opts.envFile ?? "",
+    PATH: `${opts.guardBin}:${opts.env.PATH ?? ""}`,
+  };
+  const r = run("bash", ["-c", script, "_", ...GUARD_SHIM_NAMES], { env, timeout: 30000 });
+  if (r.timedOut) {
+    return { ok: false, detail: "the resolution probe timed out" };
+  }
+  if (r.code !== 0) {
+    const shadowed = r.out
+      .trim()
+      .replace(/^shadowed:/u, "")
+      .trim();
+    return {
+      ok: false,
+      detail:
+        shadowed === ""
+          ? "the shell resolves outside the guard bin"
+          : `the shell resolves outside the guard bin:${shadowed}`,
+    };
+  }
+  return { ok: true, detail: "" };
+}
+
+/** Name the shim names a login shell resolves outside the guard bin, or the
+ * empty string when none escapes. A login shell reads the user's profile,
+ * which launch does not control, so an escape warns instead of refusing: a
+ * lane that deliberately invokes a login shell whose profile prepends the
+ * real managers installs outside the guard. */
+export function probeLoginEscape(opts: {
+  guardBin: string;
+  env: Record<string, string | undefined>;
+}): string {
+  const script = [
+    "b=$GUARD_PROBE_BIN",
+    "fail=''",
+    'for n in "$@"; do',
+    '  d=$(command -v "$n" 2>/dev/null || true)',
+    '  [ "$d" = "$b/$n" ] || fail="$fail $n:${d:-missing}"',
+    "done",
+    'printf "escaped:%s" "$fail"',
+  ].join("\n");
+  const env: Record<string, string | undefined> = {
+    ...opts.env,
+    GUARD_PROBE_BIN: opts.guardBin,
+    PATH: `${opts.guardBin}:${opts.env.PATH ?? ""}`,
+  };
+  const r = run("bash", ["-lc", script, "_", ...GUARD_SHIM_NAMES], { env, timeout: 30000 });
+  if (r.timedOut) return GUARD_SHIM_NAMES.map((n) => `${n}:timeout`).join(" ");
+  // A chatty profile may print before the marker; only what follows it counts.
+  const at = r.out.lastIndexOf("escaped:");
+  return (at < 0 ? r.out : r.out.slice(at + "escaped:".length)).trim();
+}
+
 // --- entry ------------------------------------------------------------------------------
 const argv = process.argv.slice(2);
 
@@ -1882,6 +1980,44 @@ exit "$rc"
   delete process.env.POSTMASTER_LAUNCH_NAME;
   delete process.env.POSTMASTER_LAUNCH_ROLE;
   delete process.env.POSTMASTER_ATTEMPT_PHASE;
+  // A lane or reviewer inside a run starts with the install guard armed: the
+  // run's shim bin dir first on its PATH, and the dispatch, tool and lane
+  // the guard decides from. Anything else (a coachman, the postmaster, a
+  // clerk, or outside a run) starts as before. Arming that cannot land
+  // refuses the launch: a lane that reads as guarded but is not would
+  // install unguarded.
+  if (RUN && (launchRole === "lane" || launchRole === "reviewer")) {
+    const tool = toolRoot(import.meta);
+    let guardBin = "";
+    try {
+      guardBin = ensureGuardBin(RUN, tool);
+    } catch (e) {
+      die(
+        `cannot arm the install guard for ${NAME}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+    process.env.PATH = `${guardBin}:${process.env.PATH ?? ""}`;
+    process.env.POSTMASTER_DISPATCH = RUN;
+    process.env.POSTMASTER_TOOL = tool;
+    process.env.POSTMASTER_GUARD_LANE = NAME;
+    // The sourcing wrappers re-arm this bin after the env file, and the
+    // probe proves the shells a lane runs resolve through it.
+    process.env.POSTMASTER_GUARD_BIN = guardBin;
+    const probe = verifyGuardResolution({ guardBin, envFile: ENV_FILE || null, env: process.env });
+    if (!probe.ok) {
+      die(
+        `cannot arm the install guard for ${NAME}: ${probe.detail}; the lane would run unguarded`,
+      );
+    }
+    // A login shell reads the user's profile, which launch does not control:
+    // an escape warns, since a lane reaching one installs outside the guard.
+    const escaped = probeLoginEscape({ guardBin, env: process.env });
+    if (escaped !== "") {
+      console.error(
+        `launch: warning: a login shell on this machine resolves outside the guard bin (${escaped}); a lane that invokes one installs unguarded`,
+      );
+    }
+  }
   // Re-hand the cd pair after the deletes: PWD and OLDPWD are the last
   // additions the harness must inherit, so they are set last, closest to
   // the spawn, where no later mutation can drop them unnoticed.

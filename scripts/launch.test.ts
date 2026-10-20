@@ -17,6 +17,7 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   rmSync,
   statSync,
@@ -26,8 +27,16 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { harnessData, makeHeldDir } from "./launch.ts";
+import {
+  GUARD_SHIM_NAMES,
+  ensureGuardBin,
+  harnessData,
+  makeHeldDir,
+  probeLoginEscape,
+  verifyGuardResolution,
+} from "./launch.ts";
 import { startCheck, wrapCommand } from "./lib/confine.ts";
+import { claimShimLink } from "./lib/guardbin.ts";
 import { toolRoot } from "./lib/paths.ts";
 import { run, withTempDir } from "./lib/proc.ts";
 import { BOUND_R, DOT_ALL, PY_M_START, PY_S_CLASS, pySplitLines, pyWords } from "./lib/text.ts";
@@ -197,6 +206,10 @@ beforeAll(() => {
       const rest = args.slice(1);
       const env: Record<string, string | undefined> = {
         ...process.env,
+        // Armed launches refuse when a login profile shadows the guard, so
+        // the tests never inherit the machine's own profile; a case that
+        // needs its own home overrides through envx.
+        HOME: join(tmp, "home"),
         ...envx,
         POSTMASTER_CONFIG: join(tmp, `${f}.toml`),
         PATH: `${join(tmp, "bin")}:${process.env.PATH ?? ""}`,
@@ -645,6 +658,9 @@ beforeAll(() => {
         stdio: ["inherit", fd, "pipe"],
         env: {
           ...process.env,
+          // Armed launches refuse when a login profile shadows the guard,
+          // so the tests never inherit the machine's own profile.
+          HOME: join(tmp, "home"),
           POSTMASTER_LAUNCH_ROLE: role,
           POSTMASTER_EVENT_STREAM: streamFile,
           POSTMASTER_CONFIG: join(tmp, `${fixture}.toml`),
@@ -6320,5 +6336,326 @@ describe("C4: a grok lane ending on a limit message is handled as today", () => 
     expect(step.rc).toBe(0);
     expect(existsSync(step.marker)).toBe(true);
     expect(wallsIn(step.actions).length).toBe(0);
+  });
+});
+
+describe("the install guard arms lanes", () => {
+  const TOOL = toolRoot(import.meta);
+
+  function runDir(tmp: string): { d: string; wt: string } {
+    const d = join(tmp, "run");
+    const wt = join(tmp, "wt");
+    mkdirSync(join(d, "logs"), { recursive: true });
+    mkdirSync(wt, { recursive: true });
+    writeFileSync(
+      join(d, "run.json"),
+      `${JSON.stringify({
+        config: {
+          lanes: { one: { harness: "claude", model: "m" } },
+          team: { coachman: { harness: "claude", model: "cm" } },
+        },
+      })}\n`,
+    );
+    writeFileSync(join(tmp, "prompt.txt"), "Do the work.\n");
+    return { d, wt };
+  }
+
+  function launchWithRole(
+    tmp: string,
+    d: string,
+    wt: string,
+    role: string,
+    name: string,
+    extra: string[] = [],
+  ): { rc: number; err: string; handed: Record<string, string> } {
+    const bin = join(tmp, "bin");
+    mkdirSync(bin, { recursive: true });
+    const handedPath = join(tmp, "handed.out");
+    writeFileSync(join(bin, "claude"), envDumpStub(handedPath));
+    chmodSync(join(bin, "claude"), 0o755);
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      HOME: join(tmp, "home"),
+      POSTMASTER_LAUNCH_ROLE: role,
+      POSTMASTER_CONFIG: undefined,
+      POSTMASTER_DISPATCH: undefined,
+      POSTMASTER_TOOL: undefined,
+      POSTMASTER_GUARD_LANE: undefined,
+      POSTMASTER_GUARD_REGISTRY: undefined,
+      POSTMASTER_GUARD_SOCKET_API: undefined,
+    };
+    const r = spawnSync(
+      join(import.meta.dir, "run"),
+      ["launch", "launch", name, wt, join(tmp, "prompt.txt"), "--run", d, ...extra],
+      { encoding: "utf8", env },
+    );
+    const handed: Record<string, string> = {};
+    try {
+      for (const e of readFileSync(handedPath, "utf8").split("\0")) {
+        const at = e.indexOf("=");
+        if (at > 0) handed[e.slice(0, at)] = e.slice(at + 1);
+      }
+    } catch {
+      // The stub never ran.
+    }
+    return { rc: r.status ?? 1, err: r.stderr ?? "", handed };
+  }
+
+  test.skipIf(skipToml)(
+    "a lane launch arms the guard: shim bin first, dispatch, tool and lane",
+    () => {
+      withTempDir((tmp) => {
+        const { d, wt } = runDir(tmp);
+        const r = launchWithRole(tmp, d, wt, "lane", "one");
+        expect(r.rc).toBe(0);
+        expect(r.handed["PATH"]?.startsWith(`${join(d, "guard", "bin")}:`)).toBe(true);
+        expect(r.handed["POSTMASTER_DISPATCH"]).toBe(d);
+        expect(r.handed["POSTMASTER_TOOL"]).toBe(TOOL);
+        expect(r.handed["POSTMASTER_GUARD_LANE"]).toBe("one");
+        for (const name of GUARD_SHIM_NAMES) {
+          expect(readlinkSync(join(d, "guard", "bin", name))).toBe(
+            join(TOOL, "scripts", "install-guard-shim"),
+          );
+        }
+      });
+    },
+  );
+
+  test.skipIf(skipToml)("a reviewer launch arms the guard the same way", () => {
+    withTempDir((tmp) => {
+      const { d, wt } = runDir(tmp);
+      const r = launchWithRole(tmp, d, wt, "reviewer", "one");
+      expect(r.rc).toBe(0);
+      expect(r.handed["PATH"]?.startsWith(`${join(d, "guard", "bin")}:`)).toBe(true);
+      expect(r.handed["POSTMASTER_DISPATCH"]).toBe(d);
+      expect(r.handed["POSTMASTER_GUARD_LANE"]).toBe("one");
+    });
+  });
+
+  test.skipIf(skipToml)("a coachman launch starts unarmed", () => {
+    withTempDir((tmp) => {
+      const { d, wt } = runDir(tmp);
+      const r = launchWithRole(tmp, d, wt, "coachman", "coachman", ["--leg", "synthesis"]);
+      expect(r.rc).toBe(0);
+      expect(existsSync(join(d, "guard"))).toBe(false);
+      expect(r.handed["PATH"]?.includes("guard/bin") ?? false).toBe(false);
+      expect(r.handed["POSTMASTER_DISPATCH"]).toBeUndefined();
+    });
+  });
+
+  test.skipIf(skipToml)("arming that cannot land refuses the launch", () => {
+    withTempDir((tmp) => {
+      const { d, wt } = runDir(tmp);
+      writeFileSync(join(d, "guard"), "in the way");
+      const r = launchWithRole(tmp, d, wt, "lane", "one");
+      expect(r.rc).not.toBe(0);
+      expect(r.err).toContain("cannot arm the install guard");
+    });
+  });
+
+  test.skipIf(skipToml)("an env file that assigns PATH keeps the guard bin first", () => {
+    withTempDir((tmp) => {
+      const { d, wt } = runDir(tmp);
+      const envFile = join(tmp, "lane.env");
+      // A PATH that still resolves the harness but drops the guard bin: the
+      // launch hands the harness a PATH with the bin re-armed first.
+      writeFileSync(envFile, `PATH=/usr/bin:/bin:${join(tmp, "bin")}\nLANE_MARK=yes\n`);
+      writeFileSync(
+        join(d, "run.json"),
+        `${JSON.stringify({
+          config: {
+            lanes: { one: { harness: "claude", model: "m", env_file: envFile } },
+            team: { coachman: { harness: "claude", model: "cm" } },
+          },
+        })}\n`,
+      );
+      const r = launchWithRole(tmp, d, wt, "lane", "one");
+      expect(r.rc).toBe(0);
+      expect(r.handed["PATH"]?.startsWith(`${join(d, "guard", "bin")}:`)).toBe(true);
+      expect(r.handed["LANE_MARK"]).toBe("yes");
+    });
+  });
+
+  test.skipIf(skipToml)("an env file that attacks the guard context is restored", () => {
+    withTempDir((tmp) => {
+      const { d, wt } = runDir(tmp);
+      const envFile = join(tmp, "lane.env");
+      writeFileSync(
+        envFile,
+        [
+          "unset POSTMASTER_GUARD_BIN",
+          "POSTMASTER_TOOL=/evil",
+          "POSTMASTER_DISPATCH=/evil",
+          "POSTMASTER_GUARD_LANE=evil",
+          "POSTMASTER_GUARD_REGISTRY=https://evil.example",
+          `PATH=/usr/bin:/bin:${join(tmp, "bin")}`,
+          "",
+        ].join("\n"),
+      );
+      writeFileSync(
+        join(d, "run.json"),
+        `${JSON.stringify({
+          config: {
+            lanes: { one: { harness: "claude", model: "m", env_file: envFile } },
+            team: { coachman: { harness: "claude", model: "cm" } },
+          },
+        })}\n`,
+      );
+      const r = launchWithRole(tmp, d, wt, "lane", "one");
+      expect(r.rc).toBe(0);
+      expect(r.handed["PATH"]?.startsWith(`${join(d, "guard", "bin")}:`)).toBe(true);
+      expect(r.handed["POSTMASTER_GUARD_BIN"]).toBe(join(d, "guard", "bin"));
+      expect(r.handed["POSTMASTER_TOOL"]).toBe(TOOL);
+      expect(r.handed["POSTMASTER_DISPATCH"]).toBe(d);
+      expect(r.handed["POSTMASTER_GUARD_LANE"]).toBe("one");
+      expect(r.handed["POSTMASTER_GUARD_REGISTRY"]).toBeUndefined();
+    });
+  });
+
+  test.skipIf(skipToml)("a login profile that shadows the guard warns and proceeds", () => {
+    withTempDir((tmp) => {
+      const { d, wt } = runDir(tmp);
+      const home = join(tmp, "home");
+      const shadow = join(tmp, "shadow");
+      mkdirSync(home, { recursive: true });
+      mkdirSync(shadow, { recursive: true });
+      writeFileSync(join(shadow, "npm"), "#!/bin/sh\nexit 0\n");
+      chmodSync(join(shadow, "npm"), 0o755);
+      writeFileSync(join(home, ".profile"), `PATH="${shadow}:$PATH"\n`);
+      const r = launchWithRole(tmp, d, wt, "lane", "one");
+      // The profile is the operator's, not the lane's: refusing on it would
+      // deny ordinary machines their launches, so the launch warns instead.
+      expect(r.rc).toBe(0);
+      expect(r.err).toContain("a login shell on this machine resolves outside the guard bin");
+      expect(r.err).toContain(`npm:${join(shadow, "npm")}`);
+      expect(r.handed["PATH"]?.startsWith(`${join(d, "guard", "bin")}:`)).toBe(true);
+    });
+  });
+
+  test("verifyGuardResolution re-arms after an env file that assigns PATH", () => {
+    withTempDir((tmp) => {
+      const d = join(tmp, "run");
+      const bin = ensureGuardBin(d, TOOL);
+      const envFile = join(tmp, "lane.env");
+      writeFileSync(envFile, "PATH=/usr/bin:/bin\n");
+      const home = join(tmp, "home");
+      mkdirSync(home, { recursive: true });
+      const r = verifyGuardResolution({
+        guardBin: bin,
+        envFile,
+        env: { ...process.env, HOME: home },
+      });
+      expect(r.ok).toBe(true);
+    });
+  });
+
+  test("verifyGuardResolution refuses when a shim is missing", () => {
+    withTempDir((tmp) => {
+      const d = join(tmp, "run");
+      const bin = ensureGuardBin(d, TOOL);
+      rmSync(join(bin, "npm"), { force: true });
+      const r = verifyGuardResolution({ guardBin: bin, envFile: null, env: { ...process.env } });
+      expect(r.ok).toBe(false);
+      expect(r.detail).toContain("npm:");
+    });
+  });
+
+  test("probeLoginEscape names the escape the profile adds", () => {
+    withTempDir((tmp) => {
+      const d = join(tmp, "run");
+      const bin = ensureGuardBin(d, TOOL);
+      const home = join(tmp, "home");
+      const shadow = join(tmp, "shadow");
+      mkdirSync(home, { recursive: true });
+      mkdirSync(shadow, { recursive: true });
+      writeFileSync(join(shadow, "npm"), "#!/bin/sh\nexit 0\n");
+      chmodSync(join(shadow, "npm"), 0o755);
+      // The baseline is whatever this machine's login shells resolve: macOS
+      // /etc/profile reorders PATH, so the test never asserts it is empty.
+      const probe = () => probeLoginEscape({ guardBin: bin, env: { ...process.env, HOME: home } });
+      const baseline = probe();
+      expect(baseline).not.toContain(`npm:${join(shadow, "npm")}`);
+      writeFileSync(join(home, ".profile"), `PATH="${shadow}:$PATH"\n`);
+      expect(probe()).toContain(`npm:${join(shadow, "npm")}`);
+      rmSync(join(home, ".profile"));
+      expect(probe()).toBe(baseline);
+    });
+  });
+
+  test("ensureGuardBin is idempotent and returns the bin dir", () => {
+    withTempDir((tmp) => {
+      const d = join(tmp, "run");
+      const first = ensureGuardBin(d, TOOL);
+      expect(first).toBe(join(d, "guard", "bin"));
+      const second = ensureGuardBin(d, TOOL);
+      expect(second).toBe(first);
+      for (const name of GUARD_SHIM_NAMES) {
+        expect(readlinkSync(join(first, name))).toBe(join(TOOL, "scripts", "install-guard-shim"));
+      }
+    });
+  });
+
+  test("ensureGuardBin repairs a dangling shim link instead of throwing EEXIST", () => {
+    withTempDir((tmp) => {
+      const d = join(tmp, "run");
+      const bin = ensureGuardBin(d, TOOL);
+      const victim = join(bin, GUARD_SHIM_NAMES[0] ?? "npm");
+      rmSync(victim, { force: true });
+      symlinkSync(join(tmp, "tool-gone", "scripts", "install-guard-shim"), victim);
+      expect(() => ensureGuardBin(d, TOOL)).not.toThrow();
+      expect(readlinkSync(victim)).toBe(join(TOOL, "scripts", "install-guard-shim"));
+    });
+  });
+
+  test("claimShimLink lands, keeps a concurrent correct link, and repairs a wrong one", () => {
+    withTempDir((tmp) => {
+      const shim = join(TOOL, "scripts", "install-guard-shim");
+      const fresh = join(tmp, "fresh");
+      claimShimLink(fresh, shim);
+      expect(readlinkSync(fresh)).toBe(shim);
+      // Another lane landed the same link first: the EEXIST stands.
+      claimShimLink(fresh, shim);
+      expect(readlinkSync(fresh)).toBe(shim);
+      // Another lane left a wrong link: it repairs instead of throwing.
+      const wrong = join(tmp, "wrong");
+      symlinkSync(join(tmp, "elsewhere"), wrong);
+      claimShimLink(wrong, shim);
+      expect(readlinkSync(wrong)).toBe(shim);
+    });
+  });
+
+  test("claimShimLink throws when a file is in the way", () => {
+    withTempDir((tmp) => {
+      const shim = join(TOOL, "scripts", "install-guard-shim");
+      const blocked = join(tmp, "blocked");
+      writeFileSync(blocked, "in the way");
+      expect(() => claimShimLink(blocked, shim)).toThrow("is in the way");
+    });
+  });
+
+  test("ensureGuardBin arms every shim name the guard knows", () => {
+    withTempDir((tmp) => {
+      const d = join(tmp, "run");
+      const bin = ensureGuardBin(d, TOOL);
+      expect([...GUARD_SHIM_NAMES].sort()).toEqual(
+        [
+          "bun",
+          "bunx",
+          "corepack",
+          "npm",
+          "npx",
+          "pn",
+          "pnpm",
+          "pnx",
+          "pnpx",
+          "yarn",
+          "yarnpkg",
+        ].sort(),
+      );
+      for (const name of GUARD_SHIM_NAMES) {
+        expect(readlinkSync(join(bin, name))).toBe(join(TOOL, "scripts", "install-guard-shim"));
+      }
+    });
   });
 });
