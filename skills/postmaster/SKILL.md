@@ -288,8 +288,9 @@ its env file, never in settings.
 7. **Write the brief** to `<runs>/postmaster/brief.md`: "You are the postmaster for <project>.
    First run `<tool>/scripts/run runs-hold release-stale <runs>`: a hold a helper left behind
    ends with the session that set it, so a new session drops every helper hold before it
-   starts; a hand-written line stays. Then read `<tool>/skills/postmaster/postmaster.md`",
-   then the stream paragraph, the project profile, the configured team, who says the merge
+   starts; a hand-written line stays. Then read `<tool>/skills/postmaster/postmaster.md`
+   before running any other command", then the stream paragraph, the project profile, the
+   configured team, who says the merge
    word, the session host, `<tool>` and the config path, the verifiers' outcome (kept,
    landed, given up, declined, or not offered and why), plus this session's report and the
    route result, and, when the route says `headless` or the host is none, that it runs
@@ -304,9 +305,9 @@ its env file, never in settings.
 8. **`self`: carry on as the postmaster.** First run
    `<tool>/scripts/run runs-hold release-stale <runs>`, as the brief says: a new session
    drops every helper hold before it starts. Then read
-   `<tool>/skills/postmaster/postmaster.md` and run the stream in this conversation. Log
-   every action through `run log-action` under `<runs>/postmaster/`, as that runbook says.
-   Do not start a second session.
+   `<tool>/skills/postmaster/postmaster.md` before running any other command, and run the
+   stream in this conversation. Log every action through `run log-action` under
+   `<runs>/postmaster/`, as that runbook says. Do not start a second session.
 9. **`spawn`: start a new postmaster session.** If the route has a `headless` line, use the
    headless form from `hosts.md` through `run host run` on every host. It starts the configured
    harness headless with the brief as its prompt, writes events and errors under
