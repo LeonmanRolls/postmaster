@@ -18,15 +18,15 @@
 //           held list unreadable, or the lock not taken
 //   exit 2  refused: the run is already held, or not held in the kind named
 //
-// The held list is read and written under `.held.lock`, taken O_EXCL with
-// the holder's pid, waited on while the holder lives and reclaimed past a
-// dead one by renaming it aside, so racers on a stale lock elect one winner,
-// and written atomically, so the watcher's re-read never sees a torn list
-// and two holds racing on one run leave exactly one.
+// The held list is read and written under `.held.lock`: the holder's pid goes
+// into a file of its own, then linked into place, so the lock path never
+// holds an empty file; it is waited on while the holder lives and reclaimed
+// past a dead one by renaming it aside, so racers on a stale lock elect one
+// winner; and the list is written atomically, so the watcher's re-read never
+// sees a torn list and two holds racing on one run leave exactly one.
 import { randomBytes } from "node:crypto";
 import {
-  closeSync,
-  openSync,
+  linkSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -84,7 +84,7 @@ function sleepSync(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-/** Take `.held.lock`, waiting while a live holder works and taking it past a
+/** Take `.held.lock`, waiting while a live holder works and reclaiming past a
  * dead one; the deadline bounds both the wait and a fight over a stale lock. */
 function withHeldLock<T>(pmDir: string, fn: () => T): T {
   const lock = join(pmDir, ".held.lock");
@@ -98,12 +98,23 @@ function withHeldLock<T>(pmDir: string, fn: () => T): T {
   };
   const deadline = Date.now() + 5000;
   for (;;) {
+    // Claim atomically: the pid goes into a file of our own first, then the
+    // claim is linked into place, so the lock path never holds an empty file
+    // a contender could read as pid 0 and reclaim under us. A claim left by a
+    // crash is inert: nothing reads it.
+    const claim = join(pmDir, `.held.claim.${process.pid}.${randomBytes(8).toString("hex")}`);
     try {
-      const fd = openSync(lock, "wx");
-      writeFileSync(fd, `${process.pid}\n`);
-      closeSync(fd);
+      writeFileSync(claim, `${process.pid}\n`, { flag: "wx" });
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException)?.code === "EEXIST") continue;
+      die(`runs-hold: cannot take ${lock}`, 1);
+    }
+    try {
+      linkSync(claim, lock);
+      rmSync(claim, { force: true });
       break;
     } catch (error) {
+      rmSync(claim, { force: true });
       if ((error as NodeJS.ErrnoException)?.code !== "EEXIST")
         die(`runs-hold: cannot take ${lock}`, 1);
       const pid = holder();
