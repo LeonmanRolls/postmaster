@@ -44,6 +44,7 @@ export function stripHelperBriefs(markdown: string): string {
   const out: string[] = [];
   let openLen = 0;
   for (const line of markdown.split("\n")) {
+    // ASCII: fence lines are backticks, a word and spaces.
     const fence = line.match(/^(`{3,})(\S*)\s*$/u);
     if (fence !== null) {
       const len = fence[1]?.length ?? 0;

@@ -63,7 +63,7 @@ describe("C4a: a held run is left alone, a released run is named", () => {
       expect(h.code).toBe(0);
       const lines = heldLines(root);
       expect(lines).toHaveLength(1);
-      expect(lines[0]).toMatch(/^T-1 helper=stage-f session=\S+$/u);
+      expect(lines[0]).toMatch(/^T-1 helper=stage-f session=\S+$/u); // ASCII: the session token is ASCII hex
       const early = watch(root, cfg, "2");
       expect(early.code).toBe(3);
       expect(`${early.out}${early.err}`).not.toContain("needs T-1");
@@ -123,7 +123,7 @@ describe("C5: a second hold on the run is refused", () => {
       expect(`${second.out}${second.err}`).toMatch(/already held/u);
       const lines = heldLines(root);
       expect(lines).toHaveLength(1);
-      expect(lines[0]).toMatch(/^T-1 helper=first session=\S+$/u);
+      expect(lines[0]).toMatch(/^T-1 helper=first session=\S+$/u); // ASCII: the session token is ASCII hex
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
