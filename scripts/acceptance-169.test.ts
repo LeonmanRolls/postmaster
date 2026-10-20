@@ -45,7 +45,11 @@ describe("C1b: the postmaster itself runs only the closed list", () => {
       join(import.meta.dir, "..", "skills", "postmaster", "postmaster.md"),
       "utf8",
     );
-    const extra = selfScripts(md).filter((name) => !ALLOWED_SELF.includes(name));
+    const found = selfScripts(md);
+    // Positive control: the allowed scripts are found, so an unclosed helper
+    // fence stripping the runbook fails here instead of passing vacuously.
+    for (const name of ALLOWED_SELF) expect(found).toContain(name);
+    const extra = found.filter((name) => !ALLOWED_SELF.includes(name));
     expect(extra).toEqual([]);
   });
 
