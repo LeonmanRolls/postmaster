@@ -141,6 +141,7 @@ describe("C5: a second hold on the run is refused", () => {
       writeFileSync(join(root, "postmaster", "held"), "T-1\n");
       const h = hold(root, cfg, "T-1", "stage-f");
       expect(h.code).not.toBe(0);
+      expect(`${h.out}${h.err}`).toMatch(/already held/u);
       expect(heldLines(root)).toEqual(["T-1"]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
