@@ -24,8 +24,10 @@ type Row = Record<string, unknown>;
 
 export type MessageWait = {
   seenWaitMs: number | null;
-  deliveredMs: number;
+  seenUnknown: boolean;
+  deliveredMs: number | null;
   answerWaitMs: number | null;
+  answerUnknown: boolean;
 };
 
 export type ResponsivenessReport = {
@@ -76,22 +78,31 @@ const jsonRows = (content: string): Row[] => {
 // task-notification and is not a user message. A message typed while the
 // session is idle is a user line with origin kind human and promptSource
 // typed. Each turn ends with a system line of subtype turn_duration, and
-// each compaction is a system line of subtype compact_boundary. The wait
-// before a message was seen runs from enqueue to its delivery; the wait for
-// its answer runs from delivery to the next turn_duration.
-type Enqueue = { deliveredMs: number | null; kind: unknown; messaged: boolean; ts: number };
+// each compaction is a system line of subtype compact_boundary. What the
+// reader may conclude from each shape, and where the wait is unknown
+// instead of guessed, is the pairing specification approved for this
+// reader; the reader below is that table in code.
+type Enqueue = { consumed: boolean; ts: number };
 
+type Candidate = {
+  deliveredMs: number | null;
+  enqueueMs: number | null;
+  evidenceMs: number;
+  kind: unknown;
+  rowMatched: boolean;
+  standalone: boolean;
+};
+
+// The reader is table-driven from the pairing specification the user
+// approved (pairing-spec.md in the run's dispatch): what each record
+// shape may conclude, and "unknown" wherever no key links two records.
+// An attachment's stamp is its enqueue time (E1); a queued user row's
+// time is its delivery time (E3); and where exactly one candidate in a
+// turn still waits for a delivery and exactly one unidentified delivery
+// stands in that turn, they belong together (E2), a task candidate
+// counting for that rule so a task delivery never takes a human
+// message's place.
 export const readClaude = (rows: Row[]): ResponsivenessReport => {
-  // Two passes. The first collects the record's queue operations,
-  // attachments, user rows and turn ends. The second pairs them: a
-  // delivery carrying a commandUuid or deliveryId belongs to the
-  // attachment naming that key (its source_uuid or delivery_id), whose
-  // timestamp is the enqueue time, so keyed messages pair exactly;
-  // deliveries without a key take the remaining enqueues in order, and
-  // a keyless attachment names the kind of the enqueue stamped nearest
-  // its own time. Only a delivery a human attachment or a queued user
-  // row named is a user message; a delivery nothing named is not
-  // promoted to one.
   const enqueues: Enqueue[] = [];
   const deliveries: { key: string | null; ts: number }[] = [];
   const attachments: { key: string | null; kind: unknown; ts: number }[] = [];
@@ -103,7 +114,7 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
     const ts = timestampMs(row);
     if (row.type === "queue-operation" && ts !== null) {
       if (row.operation === "enqueue") {
-        enqueues.push({ deliveredMs: null, kind: null, messaged: false, ts });
+        enqueues.push({ consumed: false, ts });
       } else if (row.operation === "remove" || row.operation === "dequeue") {
         // A row written because the queued message was cleared on
         // cancel or dropped by a hook is not a delivery.
@@ -140,138 +151,131 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
     }
     if (row.type === "system" && row.subtype === "turn_duration" && ts !== null) turns.push(ts);
   }
-
-  const messages: MessageWait[] = [];
-  const addMessage = (enqueueMs: number | null, deliveredMs: number): void => {
-    messages.push({
-      answerWaitMs: null,
-      deliveredMs,
-      seenWaitMs: enqueueMs === null ? null : Math.max(0, deliveredMs - enqueueMs),
-    });
+  turns.sort((a, b) => a - b);
+  const turnOf = (ts: number): number => {
+    const found = turns.findIndex((t) => t >= ts);
+    return found === -1 ? turns.length : found;
   };
+
   // An attachment is stamped with its enqueue's time: every measured
   // record sits within 16 ms, so no enqueue further away is its own.
   const MAX_ATTACHMENT_SKEW_MS = 16;
-  const nearestEnqueue = (ts: number, free: (e: Enqueue) => boolean): Enqueue | undefined => {
-    let nearest: Enqueue | undefined;
-    for (const entry of enqueues) {
-      if (!free(entry)) continue;
-      if (Math.abs(ts - entry.ts) > MAX_ATTACHMENT_SKEW_MS) continue;
-      if (!nearest || Math.abs(ts - entry.ts) < Math.abs(ts - nearest.ts)) nearest = entry;
-    }
-    return nearest;
-  };
-
-  // A delivery whose key no attachment claims joins the keyless pool in
-  // record order; a claimed key pairs with its attachment alone.
   const claimedKeys = new Set(attachments.map((a) => a.key).filter((k) => k !== null));
   const keyedDeliveries = new Map<string, number>();
-  const unkeyedDeliveries: number[] = [];
+  const unidentified: number[] = [];
   for (const delivery of deliveries) {
     if (delivery.key !== null && claimedKeys.has(delivery.key)) {
       keyedDeliveries.set(delivery.key, delivery.ts);
-    } else unkeyedDeliveries.push(delivery.ts);
+    } else unidentified.push(delivery.ts);
   }
 
-  // Keyed attachments pair with their own delivery first, and consume
-  // the enqueue they were stamped for, so that enqueue's slot is never
-  // handed to a keyless delivery.
-  const keylessAttachments: typeof attachments = [];
+  const candidates: Candidate[] = [];
   for (const attachment of attachments) {
-    const deliveredMs = attachment.key === null ? undefined : keyedDeliveries.get(attachment.key);
-    if (deliveredMs === undefined) {
-      keylessAttachments.push(attachment);
-      continue;
-    }
-    const consumed = nearestEnqueue(attachment.ts, (e) => e.kind === null && !e.messaged);
-    if (consumed) {
-      consumed.kind = attachment.kind;
-      consumed.deliveredMs = deliveredMs;
-      consumed.messaged = attachment.kind === "human";
-    }
-    if (attachment.kind === "human") addMessage(attachment.ts, deliveredMs);
-  }
-
-  // Keyless attachments name each enqueue's kind before any keyless
-  // delivery is handed out. A delivery then takes the earliest enqueue
-  // stamped at or before it, a named one first where both are waiting:
-  // a delivery can never belong to an enqueue stamped after it, and an
-  // enqueue nothing named (an orphan with no delivery of its own) never
-  // spends a later named message's delivery.
-  const standalone: number[] = [];
-  for (const attachment of keylessAttachments) {
-    const entry = nearestEnqueue(attachment.ts, (e) => e.kind === null);
-    if (!entry) {
-      // No enqueue to name: a human attachment is still a user message,
-      // timed from the earliest moment the record shows for it.
-      if (attachment.kind === "human") {
-        standalone.push(attachment.ts);
-        addMessage(null, attachment.ts);
+    let nearest: Enqueue | undefined;
+    for (const entry of enqueues) {
+      if (entry.consumed) continue;
+      if (Math.abs(attachment.ts - entry.ts) > MAX_ATTACHMENT_SKEW_MS) continue;
+      if (!nearest || Math.abs(attachment.ts - entry.ts) < Math.abs(attachment.ts - nearest.ts)) {
+        nearest = entry;
       }
-      continue;
     }
-    entry.kind = attachment.kind;
+    if (nearest) nearest.consumed = true;
+    const keyed =
+      attachment.key === null ? undefined : keyedDeliveries.get(attachment.key);
+    candidates.push({
+      deliveredMs: keyed ?? null,
+      enqueueMs: nearest ? attachment.ts : null,
+      evidenceMs: attachment.ts,
+      kind: attachment.kind,
+      rowMatched: false,
+      standalone: !nearest,
+    });
   }
-  for (const deliveredMs of unkeyedDeliveries) {
-    const waiting = enqueues.filter((e) => e.deliveredMs === null && e.ts <= deliveredMs);
-    const entry = waiting.find((e) => e.kind !== null) ?? waiting[0];
-    if (entry) entry.deliveredMs = deliveredMs;
-  }
-  for (const entry of enqueues) {
-    if (entry.kind === "human" && entry.deliveredMs !== null && !entry.messaged) {
-      entry.messaged = true;
-      addMessage(entry.ts, entry.deliveredMs);
+  // A standalone attachment's stamp is the earliest moment the record
+  // shows for its message, and its answer runs from there.
+  for (const candidate of candidates) {
+    if (candidate.standalone && candidate.deliveredMs === null) {
+      candidate.deliveredMs = candidate.evidenceMs;
     }
   }
 
+  type Simple = { deliveredMs: number; sortMs: number };
+  const simple: Simple[] = [];
   for (const userRow of userRows) {
     if (userRow.source === "typed" || userRow.source === undefined) {
-      // A human row with no promptSource is a prompt the record does
-      // not source; it stands alone like a typed one.
-      addMessage(null, userRow.ts);
+      simple.push({ deliveredMs: userRow.ts, sortMs: userRow.ts });
       continue;
     }
     if (userRow.source === "queued") {
-      // The same message in user-row form: report the latest enqueue
-      // of this turn still waiting for its kind, timed by its delivery
-      // where it has one and by this row where it has none. Where an
-      // attachment already counted that message in this turn, the row
-      // is its second form and adds nothing; a delivery or an enqueue
-      // from an earlier turn never takes the row.
-      const turnStart = turns.filter((t) => t <= userRow.ts).pop() ?? null;
-      let waiting: Enqueue | undefined;
-      for (const entry of enqueues) {
-        if (entry.kind !== null || entry.messaged) continue;
-        if (entry.ts > userRow.ts) continue;
-        if (turnStart !== null && entry.ts <= turnStart) continue;
-        if (!waiting || entry.ts > waiting.ts) waiting = entry;
-      }
-      if (waiting) {
-        waiting.messaged = true;
-        const deliveredMs =
-          waiting.deliveredMs !== null && waiting.deliveredMs <= userRow.ts
-            ? waiting.deliveredMs
-            : userRow.ts;
-        addMessage(waiting.ts, deliveredMs);
-      } else if (
-        !enqueues.some(
-          (e) =>
-            e.messaged &&
-            e.deliveredMs !== null &&
-            e.deliveredMs <= userRow.ts &&
-            (turnStart === null || e.deliveredMs > turnStart),
-        ) &&
-        !standalone.some((ts) => ts <= userRow.ts && (turnStart === null || ts > turnStart))
-      ) {
-        addMessage(null, userRow.ts);
+      const match = candidates.find(
+        (c) =>
+          c.kind === "human" &&
+          !c.rowMatched &&
+          turnOf(c.evidenceMs) === turnOf(userRow.ts),
+      );
+      if (match) {
+        match.rowMatched = true;
+        if (match.deliveredMs === null) match.deliveredMs = userRow.ts;
+      } else {
+        candidates.push({
+          deliveredMs: userRow.ts,
+          enqueueMs: null,
+          evidenceMs: userRow.ts,
+          kind: "human",
+          rowMatched: true,
+          standalone: true,
+        });
       }
     }
   }
 
-  messages.sort((a, b) => a.deliveredMs - b.deliveredMs);
-  turns.sort((a, b) => a - b);
+  // E2, per turn: exactly one candidate still waiting and exactly one
+  // unidentified delivery in that turn belong together.
+  const turnIds = new Set([...candidates.map((c) => turnOf(c.evidenceMs)), ...unidentified.map(turnOf)]);
+  for (const turn of turnIds) {
+    const waiting = candidates.filter(
+      (c) => c.deliveredMs === null && turnOf(c.evidenceMs) === turn,
+    );
+    const standing = unidentified.filter((ts) => turnOf(ts) === turn);
+    if (waiting.length === 1 && standing.length === 1 && waiting[0]) {
+      waiting[0].deliveredMs = standing[0] ?? null;
+    }
+  }
+
+  const messages: MessageWait[] = [];
+  for (const s of simple) {
+    messages.push({
+      answerUnknown: false,
+      answerWaitMs: null,
+      deliveredMs: s.deliveredMs,
+      seenUnknown: false,
+      seenWaitMs: null,
+    });
+  }
+  const humanCandidates = candidates
+    .filter((c) => c.kind === "human")
+    .sort((a, b) => (a.deliveredMs ?? a.evidenceMs) - (b.deliveredMs ?? b.evidenceMs));
+  for (const candidate of humanCandidates) {
+    const seenUnknown = candidate.enqueueMs === null || candidate.deliveredMs === null;
+    messages.push({
+      answerUnknown: candidate.deliveredMs === null,
+      answerWaitMs: null,
+      deliveredMs: candidate.deliveredMs,
+      seenUnknown,
+      seenWaitMs: seenUnknown
+        ? null
+        : Math.max(0, (candidate.deliveredMs ?? 0) - (candidate.enqueueMs ?? 0)),
+    });
+  }
+  const order = new Map(messages.map((m, i) => [m, i] as const));
+  messages.sort((a, b) => {
+    const ka = a.deliveredMs ?? Number.POSITIVE_INFINITY;
+    const kb = b.deliveredMs ?? Number.POSITIVE_INFINITY;
+    return ka - kb || (order.get(a) ?? 0) - (order.get(b) ?? 0);
+  });
   for (const message of messages) {
-    const end = turns.find((t) => t >= message.deliveredMs);
+    if (message.deliveredMs === null) continue;
+    const end = turns.find((t) => t >= (message.deliveredMs ?? 0));
     message.answerWaitMs = end === undefined ? null : Math.max(0, end - message.deliveredMs);
   }
   return { compactions, messages };
@@ -298,9 +302,16 @@ export const formatReport = (report: ResponsivenessReport): string => {
     `messages: ${report.messages.length}`,
     `compactions: ${report.compactions}`,
     ...report.messages.map((message, index) => {
-      const seen = message.seenWaitMs === null ? "no wait" : formatDuration(message.seenWaitMs);
-      const answer =
-        message.answerWaitMs === null ? "not finished" : formatDuration(message.answerWaitMs);
+      const seen = message.seenUnknown
+        ? "unknown"
+        : message.seenWaitMs === null
+          ? "no wait"
+          : formatDuration(message.seenWaitMs);
+      const answer = message.answerUnknown
+        ? "unknown"
+        : message.answerWaitMs === null
+          ? "not finished"
+          : formatDuration(message.answerWaitMs);
       return `message ${index + 1}: seen: ${seen}; answer: ${answer}`;
     }),
   ];

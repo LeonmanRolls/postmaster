@@ -99,7 +99,7 @@ describe("responsiveness record spellings", () => {
       (path) => {
         const r = run(RUN, ["responsiveness", path]);
         expect(r.code).toBe(0);
-        expect(r.out).toContain("message 1: seen: 10 s; answer: 60 s");
+        expect(r.out).toContain("message 1: seen: unknown; answer: 60 s");
       },
     );
   });
@@ -124,7 +124,7 @@ describe("responsiveness record spellings", () => {
         const r = run(RUN, ["responsiveness", path]);
         expect(r.code).toBe(0);
         expect(r.out).toContain("messages: 1");
-        expect(r.out).toContain("message 1: seen: 5 s; answer: 60 s");
+        expect(r.out).toContain("message 1: seen: unknown; answer: 60 s");
       },
     );
   });
@@ -245,7 +245,7 @@ describe("responsiveness record spellings", () => {
       (path) => {
         const r = run(RUN, ["responsiveness", path]);
         expect(r.code).toBe(0);
-        expect(r.out).toContain("message 1: seen: 10 s; answer: 40 s");
+        expect(r.out).toContain("message 1: seen: unknown; answer: 40 s");
       },
     );
   });
@@ -264,7 +264,7 @@ describe("responsiveness record spellings", () => {
     );
   });
 
-  test("a keyed delivery no attachment claims joins the keyless pool", () => {
+  test("a keyed delivery no attachment claims identifies nothing", () => {
     withRecord(
       [
         { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
@@ -292,8 +292,8 @@ describe("responsiveness record spellings", () => {
         const r = run(RUN, ["responsiveness", path]);
         expect(r.code).toBe(0);
         expect(r.out).toContain("messages: 2");
-        expect(r.out).toContain("message 1: seen: 20 s; answer: 80 s");
-        expect(r.out).toContain("message 2: seen: 20 s; answer: 70 s");
+        expect(r.out).toContain("message 1: seen: unknown; answer: unknown");
+        expect(r.out).toContain("message 2: seen: unknown; answer: unknown");
       },
     );
   });
@@ -316,7 +316,7 @@ describe("responsiveness record spellings", () => {
         const r = run(RUN, ["responsiveness", path]);
         expect(r.code).toBe(0);
         expect(r.out).toContain("messages: 1");
-        expect(r.out).toContain("message 1: seen: 10 s; answer: 40 s");
+        expect(r.out).toContain("message 1: seen: unknown; answer: 40 s");
       },
     );
   });
@@ -336,7 +336,7 @@ describe("responsiveness record spellings", () => {
         const r = run(RUN, ["responsiveness", path]);
         expect(r.code).toBe(0);
         expect(r.out).toContain("messages: 1");
-        expect(r.out).toContain("message 1: seen: no wait; answer: 100 s");
+        expect(r.out).toContain("message 1: seen: unknown; answer: 100 s");
       },
     );
   });
@@ -386,7 +386,7 @@ describe("responsiveness record spellings", () => {
         const r = run(RUN, ["responsiveness", path]);
         expect(r.code).toBe(0);
         expect(r.out).toContain("messages: 1");
-        expect(r.out).toContain("message 1: seen: 10 s; answer: 50 s");
+        expect(r.out).toContain("message 1: seen: unknown; answer: unknown");
       },
     );
   });
@@ -439,7 +439,7 @@ describe("responsiveness record spellings", () => {
         const r = run(RUN, ["responsiveness", path]);
         expect(r.code).toBe(0);
         expect(r.out).toContain("messages: 1");
-        expect(r.out).toContain("message 1: seen: no wait; answer: 70 s");
+        expect(r.out).toContain("message 1: seen: unknown; answer: 70 s");
       },
     );
   });
@@ -451,5 +451,159 @@ describe("responsiveness record spellings", () => {
       expect(`${r.out}\n${r.err}`.trim().split("\n")).toHaveLength(1);
       expect(`${r.out}\n${r.err}`).toContain("unsupported");
     });
+  });
+});
+
+describe("pairing specification corpus", () => {
+  const humanAttach = (ts: number, extra: Record<string, unknown> = {}) => ({
+    attachment: { origin: { kind: "human" }, type: "queued_command", ...extra },
+    timestamp: iso(ts),
+    type: "attachment",
+  });
+  test("an older attachment with no kind is not counted", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        { operation: "remove", timestamp: iso(10), type: "queue-operation" },
+        { attachment: { type: "queued_command" }, timestamp: iso(0), type: "attachment" },
+        { subtype: "turn_duration", timestamp: iso(70), type: "system" },
+      ],
+      (path) => {
+        expect(run(RUN, ["responsiveness", path]).out).toContain("messages: 0");
+      },
+    );
+  });
+  test("channel and peer attachments are not counted", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        { operation: "remove", timestamp: iso(10), type: "queue-operation" },
+        {
+          attachment: { origin: { kind: "channel" }, type: "queued_command" },
+          timestamp: iso(0),
+          type: "attachment",
+        },
+        {
+          attachment: { origin: { kind: "peer" }, type: "queued_command" },
+          timestamp: iso(0),
+          type: "attachment",
+        },
+        { subtype: "turn_duration", timestamp: iso(70), type: "system" },
+      ],
+      (path) => {
+        expect(run(RUN, ["responsiveness", path]).out).toContain("messages: 0");
+      },
+    );
+  });
+  test("a keyless human alone in its turn takes the turn's delivery (E2)", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        { operation: "remove", timestamp: iso(20), type: "queue-operation" },
+        humanAttach(0),
+        { subtype: "turn_duration", timestamp: iso(80), type: "system" },
+      ],
+      (path) => {
+        expect(run(RUN, ["responsiveness", path]).out).toContain(
+          "message 1: seen: 20 s; answer: 60 s",
+        );
+      },
+    );
+  });
+  test("two keyless humans pending together stay unknown", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        { operation: "enqueue", timestamp: iso(10), type: "queue-operation" },
+        { operation: "remove", timestamp: iso(20), type: "queue-operation" },
+        { operation: "remove", timestamp: iso(30), type: "queue-operation" },
+        humanAttach(0),
+        humanAttach(10),
+        { subtype: "turn_duration", timestamp: iso(90), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.out).toContain("messages: 2");
+        expect(r.out).toContain("message 1: seen: unknown; answer: unknown");
+        expect(r.out).toContain("message 2: seen: unknown; answer: unknown");
+      },
+    );
+  });
+  test("a task candidate keeps a human message's delivery unidentified (E2)", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        { operation: "enqueue", timestamp: iso(10), type: "queue-operation" },
+        { operation: "remove", timestamp: iso(20), type: "queue-operation" },
+        {
+          attachment: { origin: { kind: "task-notification" }, type: "queued_command" },
+          timestamp: iso(0),
+          type: "attachment",
+        },
+        humanAttach(10),
+        { subtype: "turn_duration", timestamp: iso(90), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.out).toContain("messages: 1");
+        expect(r.out).toContain("message 1: seen: unknown; answer: unknown");
+      },
+    );
+  });
+  test("a message never delivered is counted with unknown waits", () => {
+    withRecord(
+      [{ operation: "enqueue", timestamp: iso(0), type: "queue-operation" }, humanAttach(0)],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.out).toContain("messages: 1");
+        expect(r.out).toContain("message 1: seen: unknown; answer: unknown");
+      },
+    );
+  });
+});
+
+describe("pairing properties", () => {
+  test("no wait is negative and no delivery is spent twice over generated shapes", async () => {
+    const { readResponsiveness } = await import("./responsiveness.ts");
+    let seed = 42;
+    const rnd = (): number => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648;
+    };
+    for (let trial = 0; trial < 60; trial++) {
+      const rows: Record<string, unknown>[] = [];
+      let t = 0;
+      let humans = 0;
+      const steps = 3 + Math.floor(rnd() * 8);
+      for (let i = 0; i < steps; i++) {
+        t += Math.floor(rnd() * 20);
+        const pick = rnd();
+        if (pick < 0.3) rows.push({ operation: "enqueue", timestamp: iso(t), type: "queue-operation" });
+        else if (pick < 0.55)
+          rows.push({ operation: "remove", timestamp: iso(t), type: "queue-operation" });
+        else if (pick < 0.8) {
+          humans++;
+          rows.push({
+            attachment: { origin: { kind: "human" }, type: "queued_command" },
+            timestamp: iso(t),
+            type: "attachment",
+          });
+        } else if (pick < 0.9)
+          rows.push({
+            origin: { kind: "human" },
+            promptSource: "queued",
+            timestamp: iso(t),
+            type: "user",
+          });
+        else rows.push({ subtype: "turn_duration", timestamp: iso(t), type: "system" });
+      }
+      const content = rows.map((r) => JSON.stringify(r)).join("\n");
+      const report = readResponsiveness("claude", content);
+      for (const m of report.messages) {
+        if (m.seenWaitMs !== null) expect(m.seenWaitMs).toBeGreaterThanOrEqual(0);
+        if (m.answerWaitMs !== null) expect(m.answerWaitMs).toBeGreaterThanOrEqual(0);
+      }
+      expect(report.messages.length).toBeLessThanOrEqual(humans + steps);
+    }
   });
 });
