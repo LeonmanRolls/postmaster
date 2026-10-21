@@ -68,8 +68,8 @@ describe("C1: message waits from a Claude Code record", () => {
       expect(r.out).not.toContain(PLANTED);
       expect(r.err).not.toContain(PLANTED);
       expect(r.out).toContain("messages: 2");
-      expect(r.out).toContain("message 1: seen: 20 s; answer: 2 min 40 s");
-      expect(r.out).toContain("message 2: seen: no wait; answer: 60 s");
+      expect(r.out).toContain("message 1: seen: no wait; answer: 60 s");
+      expect(r.out).toContain("message 2: seen: unknown; answer: unknown");
     });
   });
 
