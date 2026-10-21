@@ -439,7 +439,7 @@ describe("responsiveness record spellings", () => {
         const r = run(RUN, ["responsiveness", path]);
         expect(r.code).toBe(0);
         expect(r.out).toContain("messages: 1");
-        expect(r.out).toContain("message 1: seen: unknown; answer: 70 s");
+        expect(r.out).toContain("message 1: seen: unknown; answer: 60 s");
       },
     );
   });
@@ -584,6 +584,64 @@ describe("pairing specification corpus", () => {
         expect(r.out).toContain("messages: 2");
         expect(r.out).toContain("message 1: seen: 10 s; answer: 60 s");
         expect(r.out).toContain("message 2: seen: unknown; answer: unknown");
+      },
+    );
+  });
+  test("a queued row does not join a candidate whose delivery is known", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        { operation: "enqueue", timestamp: iso(10), type: "queue-operation" },
+        {
+          commandUuid: "cmd-a",
+          operation: "remove",
+          timestamp: iso(30),
+          type: "queue-operation",
+        },
+        {
+          attachment: {
+            origin: { kind: "human" },
+            source_uuid: "cmd-a",
+            type: "queued_command",
+          },
+          timestamp: iso(0),
+          type: "attachment",
+        },
+        humanAttach(10),
+        { operation: "remove", timestamp: iso(50), type: "queue-operation" },
+        {
+          origin: { kind: "human" },
+          promptSource: "queued",
+          timestamp: iso(50),
+          type: "user",
+        },
+        { subtype: "turn_duration", timestamp: iso(100), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.out).toContain("messages: 2");
+        expect(r.out).toContain("message 2: seen: 40 s; answer: 50 s");
+      },
+    );
+  });
+  test("an attachment and its queued row in different turns count once", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        humanAttach(0),
+        { subtype: "turn_duration", timestamp: iso(10), type: "system" },
+        {
+          origin: { kind: "human" },
+          promptSource: "queued",
+          timestamp: iso(11),
+          type: "user",
+        },
+        { subtype: "turn_duration", timestamp: iso(40), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.out).toContain("messages: 1");
+        expect(r.out).toContain("message 1: seen: 11 s; answer: 29 s");
       },
     );
   });

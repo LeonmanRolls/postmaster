@@ -206,12 +206,20 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
       continue;
     }
     if (userRow.source === "queued") {
+      // A row joins the earliest human candidate it can be the delivery
+      // form of: one still waiting for a delivery, or a standalone
+      // attachment, in its own turn or the turn it was enqueued in. A
+      // candidate whose delivery is already known absorbs nothing.
       const match = candidates.find(
-        (c) => c.kind === "human" && !c.rowMatched && turnOf(c.evidenceMs) === turnOf(userRow.ts),
+        (c) =>
+          c.kind === "human" &&
+          !c.rowMatched &&
+          c.evidenceMs <= userRow.ts &&
+          (c.deliveredMs === null || c.standalone),
       );
       if (match) {
         match.rowMatched = true;
-        if (match.deliveredMs === null) {
+        if (match.deliveredMs === null || match.standalone) {
           match.deliveredMs = userRow.ts;
           // The row is that delivery in its second form: spend it, so
           // E2 cannot hand the same delivery to another candidate.
