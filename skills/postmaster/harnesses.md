@@ -680,13 +680,14 @@ origin kind is `task-notification` is not a user message, and a delivery nothing
 human is not counted as one either. A queued message can also arrive as a `user` line
 with `promptSource` `queued`, which names the delivery still waiting for its kind.
 
-Known limits of the pairing, from run 167's review. Each one is a record shape the
-report reads wrong today, and each is latent on current records:
-
-- A message whose enqueue and attachment stand with no delivery row is not counted at
-  all. No sampled record has that shape.
-- Where `turn_duration` rows stand out of timestamp order in the file, a queued user
-  row can be timed against the wrong turn. No sampled record orders them so.
+Where no key links a delivery to a message, the report prints the wait as unknown
+rather than pairing by order or timing: an attachment's stamp is its enqueue time, a
+queued user row's time is its delivery time, and a lone candidate in a turn takes that
+turn's lone unidentified delivery, task candidates counting for that rule so a task
+delivery never takes a human message's place. A message with no delivery row, and
+one whose turn rows stand out of order, can therefore read unknown. Measured on
+3,320 real records with this reader: 1,595 of 4,961 messages (about one in three)
+have an unknown seen wait, and 388 an unknown answer wait.
 
 ## The pane view
 
