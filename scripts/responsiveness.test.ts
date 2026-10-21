@@ -550,6 +550,43 @@ describe("pairing specification corpus", () => {
       },
     );
   });
+  test("an unidentified delivery before the candidate is not paired (E2)", () => {
+    withRecord(
+      [
+        { operation: "remove", timestamp: iso(0), type: "queue-operation" },
+        { operation: "enqueue", timestamp: iso(10), type: "queue-operation" },
+        humanAttach(10),
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.out).toContain("message 1: seen: unknown; answer: unknown");
+      },
+    );
+  });
+  test("a queued row spends its delivery so E2 cannot spend it again", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        { operation: "enqueue", timestamp: iso(5), type: "queue-operation" },
+        { operation: "remove", timestamp: iso(10), type: "queue-operation" },
+        humanAttach(0),
+        humanAttach(5),
+        {
+          origin: { kind: "human" },
+          promptSource: "queued",
+          timestamp: iso(10),
+          type: "user",
+        },
+        { subtype: "turn_duration", timestamp: iso(70), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.out).toContain("messages: 2");
+        expect(r.out).toContain("message 1: seen: 10 s; answer: 60 s");
+        expect(r.out).toContain("message 2: seen: unknown; answer: unknown");
+      },
+    );
+  });
   test("a message never delivered is counted with unknown waits", () => {
     withRecord(
       [{ operation: "enqueue", timestamp: iso(0), type: "queue-operation" }, humanAttach(0)],

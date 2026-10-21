@@ -211,7 +211,13 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
       );
       if (match) {
         match.rowMatched = true;
-        if (match.deliveredMs === null) match.deliveredMs = userRow.ts;
+        if (match.deliveredMs === null) {
+          match.deliveredMs = userRow.ts;
+          // The row is that delivery in its second form: spend it, so
+          // E2 cannot hand the same delivery to another candidate.
+          const spent = unidentified.findIndex((ts) => turnOf(ts) === turnOf(userRow.ts));
+          if (spent !== -1) unidentified.splice(spent, 1);
+        }
       } else {
         candidates.push({
           deliveredMs: userRow.ts,
@@ -236,7 +242,12 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
       (c) => c.deliveredMs === null && turnOf(c.evidenceMs) === turn,
     );
     const standing = unidentified.filter((ts) => turnOf(ts) === turn);
-    if (waiting.length === 1 && standing.length === 1 && waiting[0]) {
+    if (
+      waiting.length === 1 &&
+      standing.length === 1 &&
+      waiting[0] &&
+      (standing[0] ?? 0) >= waiting[0].evidenceMs
+    ) {
       waiting[0].deliveredMs = standing[0] ?? null;
     }
   }
