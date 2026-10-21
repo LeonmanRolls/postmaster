@@ -578,7 +578,8 @@ describe("pairing properties", () => {
       for (let i = 0; i < steps; i++) {
         t += Math.floor(rnd() * 20);
         const pick = rnd();
-        if (pick < 0.3) rows.push({ operation: "enqueue", timestamp: iso(t), type: "queue-operation" });
+        if (pick < 0.3)
+          rows.push({ operation: "enqueue", timestamp: iso(t), type: "queue-operation" });
         else if (pick < 0.55)
           rows.push({ operation: "remove", timestamp: iso(t), type: "queue-operation" });
         else if (pick < 0.8) {

@@ -180,8 +180,7 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
       }
     }
     if (nearest) nearest.consumed = true;
-    const keyed =
-      attachment.key === null ? undefined : keyedDeliveries.get(attachment.key);
+    const keyed = attachment.key === null ? undefined : keyedDeliveries.get(attachment.key);
     candidates.push({
       deliveredMs: keyed ?? null,
       enqueueMs: nearest ? attachment.ts : null,
@@ -208,10 +207,7 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
     }
     if (userRow.source === "queued") {
       const match = candidates.find(
-        (c) =>
-          c.kind === "human" &&
-          !c.rowMatched &&
-          turnOf(c.evidenceMs) === turnOf(userRow.ts),
+        (c) => c.kind === "human" && !c.rowMatched && turnOf(c.evidenceMs) === turnOf(userRow.ts),
       );
       if (match) {
         match.rowMatched = true;
@@ -231,7 +227,10 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
 
   // E2, per turn: exactly one candidate still waiting and exactly one
   // unidentified delivery in that turn belong together.
-  const turnIds = new Set([...candidates.map((c) => turnOf(c.evidenceMs)), ...unidentified.map(turnOf)]);
+  const turnIds = new Set([
+    ...candidates.map((c) => turnOf(c.evidenceMs)),
+    ...unidentified.map(turnOf),
+  ]);
   for (const turn of turnIds) {
     const waiting = candidates.filter(
       (c) => c.deliveredMs === null && turnOf(c.evidenceMs) === turn,
