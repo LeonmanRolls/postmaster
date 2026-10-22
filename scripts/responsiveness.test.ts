@@ -739,3 +739,86 @@ describe("round 8 closure", () => {
     );
   });
 });
+
+describe("round 8 row matching", () => {
+  const humanAttach = (ts: number) => ({
+    attachment: { origin: { kind: "human" }, type: "queued_command" },
+    timestamp: iso(ts),
+    type: "attachment",
+  });
+  test("a queued row prefers a candidate in its own turn", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        humanAttach(0),
+        { subtype: "turn_duration", timestamp: iso(30), type: "system" },
+        { subtype: "turn_duration", timestamp: iso(40), type: "system" },
+        { operation: "enqueue", timestamp: iso(50), type: "queue-operation" },
+        humanAttach(50),
+        { operation: "remove", timestamp: iso(55), type: "queue-operation" },
+        {
+          origin: { kind: "human" },
+          promptSource: "queued",
+          timestamp: iso(55),
+          type: "user",
+        },
+        { subtype: "turn_duration", timestamp: iso(100), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.out).toContain("message 1: seen: 5 s; answer: 45 s");
+      },
+    );
+  });
+  test("the spend takes the delivery at the row's own time", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        humanAttach(0),
+        { operation: "enqueue", timestamp: iso(50), type: "queue-operation" },
+        humanAttach(50),
+        { operation: "remove", timestamp: iso(60), type: "queue-operation" },
+        { operation: "remove", timestamp: iso(200), type: "queue-operation" },
+        {
+          origin: { kind: "human" },
+          promptSource: "queued",
+          timestamp: iso(200),
+          type: "user",
+        },
+        { subtype: "turn_duration", timestamp: iso(300), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.out).toContain("message 1: seen: 10 s; answer: 4 min 0 s");
+      },
+    );
+  });
+  test("a keyed attachment claims its enqueue before a keyless one at the same stamp", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        humanAttach(0),
+        {
+          attachment: {
+            origin: { kind: "human" },
+            source_uuid: "cmd-u",
+            type: "queued_command",
+          },
+          timestamp: iso(0),
+          type: "attachment",
+        },
+        {
+          commandUuid: "cmd-u",
+          operation: "remove",
+          timestamp: iso(30),
+          type: "queue-operation",
+        },
+        { subtype: "turn_duration", timestamp: iso(100), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.out).toContain("seen: 30 s; answer: 70 s");
+      },
+    );
+  });
+});

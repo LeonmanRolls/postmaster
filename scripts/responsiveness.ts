@@ -171,7 +171,11 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
   }
 
   const candidates: Candidate[] = [];
-  for (const attachment of attachments) {
+  const orderedAttachments = [
+    ...attachments.filter((a) => a.key !== null),
+    ...attachments.filter((a) => a.key === null),
+  ];
+  for (const attachment of orderedAttachments) {
     let nearest: Enqueue | undefined;
     for (const entry of enqueues) {
       if (entry.consumed) continue;
@@ -212,20 +216,24 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
       // form of: one still waiting for a delivery, or a standalone
       // attachment, in its own turn or the turn it was enqueued in. A
       // candidate whose delivery is already known absorbs nothing.
-      const match = candidates.find(
-        (c) =>
-          c.kind === "human" &&
-          !c.rowMatched &&
-          c.evidenceMs <= userRow.ts &&
-          (c.deliveredMs === null || (c.standalone && !c.keyedDelivery)),
-      );
+      const waiting = (c: Candidate): boolean =>
+        c.kind === "human" &&
+        !c.rowMatched &&
+        c.evidenceMs <= userRow.ts &&
+        (c.deliveredMs === null || (c.standalone && !c.keyedDelivery));
+      const match =
+        candidates.find((c) => waiting(c) && turnOf(c.evidenceMs) === turnOf(userRow.ts)) ??
+        candidates.find(waiting);
       if (match) {
         match.rowMatched = true;
         if (match.deliveredMs === null || match.standalone) {
           match.deliveredMs = userRow.ts;
           // The row is that delivery in its second form: spend it, so
           // E2 cannot hand the same delivery to another candidate.
-          const spent = unidentified.findIndex((ts) => turnOf(ts) === turnOf(userRow.ts));
+          let spent = unidentified.findIndex((ts) => ts === userRow.ts);
+          if (spent === -1) {
+            spent = unidentified.findIndex((ts) => turnOf(ts) === turnOf(userRow.ts));
+          }
           if (spent !== -1) unidentified.splice(spent, 1);
         }
       } else if (
