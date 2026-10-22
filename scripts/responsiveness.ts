@@ -88,6 +88,7 @@ type Candidate = {
   deliveredMs: number | null;
   enqueueMs: number | null;
   evidenceMs: number;
+  keyedDelivery: boolean;
   kind: unknown;
   rowMatched: boolean;
   standalone: boolean;
@@ -183,8 +184,9 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
     const keyed = attachment.key === null ? undefined : keyedDeliveries.get(attachment.key);
     candidates.push({
       deliveredMs: keyed ?? null,
-      enqueueMs: nearest ? attachment.ts : null,
+      enqueueMs: attachment.ts,
       evidenceMs: attachment.ts,
+      keyedDelivery: keyed !== undefined,
       kind: attachment.kind,
       rowMatched: false,
       standalone: !nearest,
@@ -215,7 +217,7 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
           c.kind === "human" &&
           !c.rowMatched &&
           c.evidenceMs <= userRow.ts &&
-          (c.deliveredMs === null || c.standalone),
+          (c.deliveredMs === null || (c.standalone && !c.keyedDelivery)),
       );
       if (match) {
         match.rowMatched = true;
@@ -226,11 +228,23 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
           const spent = unidentified.findIndex((ts) => turnOf(ts) === turnOf(userRow.ts));
           if (spent !== -1) unidentified.splice(spent, 1);
         }
+      } else if (
+        candidates.some(
+          (c) => c.kind === "human" && !c.rowMatched && c.evidenceMs <= userRow.ts,
+        )
+      ) {
+        // The row repeats a message already counted with its delivery
+        // known: it is that message's second form and adds nothing.
+        const counted = candidates.find(
+          (c) => c.kind === "human" && !c.rowMatched && c.evidenceMs <= userRow.ts,
+        );
+        if (counted) counted.rowMatched = true;
       } else {
         candidates.push({
           deliveredMs: userRow.ts,
           enqueueMs: null,
           evidenceMs: userRow.ts,
+          keyedDelivery: false,
           kind: "human",
           rowMatched: true,
           standalone: true,
@@ -274,7 +288,8 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
     .filter((c) => c.kind === "human")
     .sort((a, b) => (a.deliveredMs ?? a.evidenceMs) - (b.deliveredMs ?? b.evidenceMs));
   for (const candidate of humanCandidates) {
-    const seenUnknown = candidate.enqueueMs === null || candidate.deliveredMs === null;
+    const seenUnknown =
+      (candidate.standalone && !candidate.keyedDelivery) || candidate.deliveredMs === null;
     messages.push({
       answerUnknown: candidate.deliveredMs === null,
       answerWaitMs: null,

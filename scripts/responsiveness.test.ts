@@ -703,3 +703,39 @@ describe("pairing properties", () => {
     }
   });
 });
+
+describe("round 8 closure", () => {
+  test("a queued row does not overwrite a keyed delivery", () => {
+    withRecord(
+      [
+        {
+          attachment: {
+            origin: { kind: "human" },
+            source_uuid: "cmd-x",
+            type: "queued_command",
+          },
+          timestamp: iso(100),
+          type: "attachment",
+        },
+        {
+          commandUuid: "cmd-x",
+          operation: "remove",
+          timestamp: iso(110),
+          type: "queue-operation",
+        },
+        {
+          origin: { kind: "human" },
+          promptSource: "queued",
+          timestamp: iso(120),
+          type: "user",
+        },
+        { subtype: "turn_duration", timestamp: iso(200), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.out).toContain("messages: 1");
+        expect(r.out).toContain("message 1: seen: 10 s; answer: 90 s");
+      },
+    );
+  });
+});
