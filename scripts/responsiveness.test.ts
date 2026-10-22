@@ -715,7 +715,7 @@ describe("pairing properties", () => {
 });
 
 describe("round 8 closure", () => {
-  test("a queued row does not overwrite a keyed delivery", () => {
+  test("a queued row beside a keyed delivery keeps it and is its own message", () => {
     withRecord(
       [
         {
@@ -743,8 +743,11 @@ describe("round 8 closure", () => {
       ],
       (path) => {
         const r = run(RUN, ["responsiveness", path]);
-        expect(r.out).toContain("messages: 1");
+        // The keyed pair keeps its delivery; the row, at another
+        // instant, is a message delivered at its own time.
+        expect(r.out).toContain("messages: 2");
         expect(r.out).toContain("message 1: seen: 10 s; answer: 90 s");
+        expect(r.out).toContain("message 2: seen: unknown; answer: 80 s");
       },
     );
   });
@@ -1013,7 +1016,8 @@ describe("pure per-turn pairing", () => {
         const r = run(RUN, ["responsiveness", path]);
         expect(r.out).toContain("messages: 2");
         expect(r.out).toContain("message 1: seen: 10 s; answer: 70 s");
-        expect(r.out).toContain("message 2: seen: unknown; answer: unknown");
+        // The second row is a message delivered at its own time.
+        expect(r.out).toContain("message 2: seen: unknown; answer: 60 s");
       },
     );
   });
@@ -1091,6 +1095,114 @@ describe("round 10 closure", () => {
       ],
       (path) => {
         expect(run(RUN, ["responsiveness", path]).out).toContain("messages: 0");
+      },
+    );
+  });
+});
+
+describe("turn boundaries at equal stamps", () => {
+  test("a typed row after a turn end at the same stamp is answered by the next turn", () => {
+    withRecord(
+      [
+        { subtype: "turn_duration", timestamp: iso(30), type: "system" },
+        {
+          origin: { kind: "human" },
+          promptSource: "typed",
+          timestamp: iso(30),
+          type: "user",
+        },
+        { subtype: "turn_duration", timestamp: iso(90), type: "system" },
+      ],
+      (path) => {
+        expect(run(RUN, ["responsiveness", path]).out).toContain(
+          "message 1: seen: no wait; answer: 60 s",
+        );
+      },
+    );
+  });
+  test("a typed row before a turn end at the same stamp is answered by that turn", () => {
+    withRecord(
+      [
+        {
+          origin: { kind: "human" },
+          promptSource: "typed",
+          timestamp: iso(30),
+          type: "user",
+        },
+        { subtype: "turn_duration", timestamp: iso(30), type: "system" },
+        { subtype: "turn_duration", timestamp: iso(90), type: "system" },
+      ],
+      (path) => {
+        expect(run(RUN, ["responsiveness", path]).out).toContain(
+          "message 1: seen: no wait; answer: 0 s",
+        );
+      },
+    );
+  });
+});
+
+describe("round 11 closure", () => {
+  test("a pair sharing only the second key field still pairs", () => {
+    withRecord(
+      [
+        {
+          deliveryId: "D1",
+          operation: "remove",
+          timestamp: iso(20),
+          type: "queue-operation",
+        },
+        {
+          attachment: {
+            delivery_id: "D1",
+            origin: { kind: "human" },
+            source_uuid: "S1",
+            type: "queued_command",
+          },
+          timestamp: iso(0),
+          type: "attachment",
+        },
+        { subtype: "turn_duration", timestamp: iso(80), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.out).toContain("message 1: seen: 20 s; answer: 60 s");
+      },
+    );
+  });
+  test("a row beside a keyed candidate is not absorbed by it", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(5), type: "queue-operation" },
+        {
+          attachment: {
+            origin: { kind: "human" },
+            source_uuid: "k1",
+            type: "queued_command",
+          },
+          timestamp: iso(5),
+          type: "attachment",
+        },
+        {
+          commandUuid: "k1",
+          operation: "remove",
+          timestamp: iso(20),
+          type: "queue-operation",
+        },
+        { operation: "enqueue", timestamp: iso(25), type: "queue-operation" },
+        { operation: "remove", timestamp: iso(30), type: "queue-operation" },
+        {
+          origin: { kind: "human" },
+          promptSource: "queued",
+          timestamp: iso(30),
+          type: "user",
+        },
+        { subtype: "turn_duration", timestamp: iso(50), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.out).toContain("messages: 2");
+        expect(r.out).toContain("message 1: seen: 15 s; answer: 30 s");
+        expect(r.out).toContain("message 2: seen: unknown; answer: 20 s");
       },
     );
   });

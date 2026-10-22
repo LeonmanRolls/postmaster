@@ -105,32 +105,17 @@ const jsonRows = (content: string): Row[] => {
 
 const MAX_ATTACHMENT_SKEW_MS = 16;
 
-type Candidate = {
-  deliveredMs: number | null;
-  kind: unknown;
-  keyed: boolean;
-  standalone: boolean;
-  stamp: number;
-};
-
-type TurnGroup = {
-  deliveries: number[];
-  humanCandidates: number;
-  rows: number[];
-  waiting: Candidate[];
-};
-
 export const readClaude = (rows: Row[]): ResponsivenessReport => {
   const enqueues: number[] = [];
-  const keyedDeliveries = new Map<string, number>();
-  const keylessDeliveries: number[] = [];
-  const attachments: { key: string | null; kind: unknown; ts: number }[] = [];
-  const queuedRows: number[] = [];
-  const typedRows: number[] = [];
-  const turns: number[] = [];
+  const keyedDeliveries = new Map<string, { pos: number; ts: number }>();
+  const keylessDeliveries: { pos: number; ts: number }[] = [];
+  const attachments: { keyValues: string[]; kind: unknown; pos: number; ts: number }[] = [];
+  const queuedRows: { pos: number; ts: number }[] = [];
+  const typedRows: { pos: number; ts: number }[] = [];
+  const turns: { pos: number; ts: number }[] = [];
   let compactions = 0;
 
-  for (const row of rows) {
+  rows.forEach((row, pos) => {
     const ts = timestampMs(row);
     if (row.type === "queue-operation" && ts !== null) {
       if (row.operation === "enqueue") {
@@ -138,70 +123,102 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
       } else if (row.operation === "remove" || row.operation === "dequeue") {
         // A row written because the queued message was cleared on
         // cancel or dropped by a hook is not a delivery.
-        if (row.reason === "cleared_on_cancel" || row.reason === "dropped_by_hook") continue;
-        const key = [row.commandUuid, row.deliveryId].find(
+        if (row.reason === "cleared_on_cancel" || row.reason === "dropped_by_hook") return;
+        const keyValues = [row.commandUuid, row.deliveryId].filter(
           (v): v is string => typeof v === "string" && v !== "",
         );
-        if (key === undefined) keylessDeliveries.push(ts);
-        else keyedDeliveries.set(key, ts);
+        if (keyValues.length === 0) keylessDeliveries.push({ pos, ts });
+        else for (const key of keyValues) keyedDeliveries.set(key, { pos, ts });
       }
-      continue;
+      return;
     }
     if (
       row.type === "attachment" &&
       at(row, "attachment", "type") === "queued_command" &&
       ts !== null
     ) {
-      const key = [at(row, "attachment", "source_uuid"), at(row, "attachment", "delivery_id")].find(
-        (v): v is string => typeof v === "string" && v !== "",
-      );
+      const keyValues = [
+        at(row, "attachment", "source_uuid"),
+        at(row, "attachment", "delivery_id"),
+      ].filter((v): v is string => typeof v === "string" && v !== "");
       attachments.push({
-        key: key ?? null,
+        keyValues,
         kind: at(row, "attachment", "origin", "kind"),
+        pos,
         ts,
       });
-      continue;
+      return;
     }
     if (row.type === "user" && at(row, "origin", "kind") === "human" && ts !== null) {
-      if (row.promptSource === "queued") queuedRows.push(ts);
-      else if (row.promptSource === "typed" || row.promptSource === undefined) typedRows.push(ts);
-      continue;
+      if (row.promptSource === "queued") queuedRows.push({ pos, ts });
+      else if (row.promptSource === "typed" || row.promptSource === undefined)
+        typedRows.push({ pos, ts });
+      return;
     }
     if (row.type === "system" && row.subtype === "compact_boundary") {
       compactions++;
-      continue;
+      return;
     }
-    if (row.type === "system" && row.subtype === "turn_duration" && ts !== null) turns.push(ts);
-  }
-  turns.sort((a, b) => a - b);
-  // The turn a stamp belongs to: the first turn end at or after it, or
-  // one past the last turn. Binary search over the sorted ends.
-  const turnOf = (ts: number): number => {
+    if (row.type === "system" && row.subtype === "turn_duration" && ts !== null)
+      turns.push({ pos, ts });
+  });
+  turns.sort((a, b) => a.ts - b.ts || a.pos - b.pos);
+  // The turn a record belongs to, and the turn that answers a delivery:
+  // the first turn end after it. Stamps have millisecond precision, so
+  // at an exact tie the line order in the record decides: a line written
+  // after the turn end belongs to the next turn.
+  const turnOf = (ts: number, pos: number): number => {
     let lo = 0;
     let hi = turns.length;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      if ((turns[mid] ?? Number.POSITIVE_INFINITY) < ts) lo = mid + 1;
+      const turn = turns[mid];
+      if (turn && (turn.ts < ts || (turn.ts === ts && turn.pos < pos))) lo = mid + 1;
       else hi = mid;
     }
     return lo;
   };
+  const answerWait = (deliveredMs: number, deliveredPos: number): number | null => {
+    const end = turns[turnOf(deliveredMs, deliveredPos)];
+    return end === undefined ? null : Math.max(0, end.ts - deliveredMs);
+  };
 
+  type Candidate = {
+    deliveredMs: number | null;
+    deliveredPos: number;
+    keyed: boolean;
+    kind: unknown;
+    standalone: boolean;
+    stamp: number;
+    stampPos: number;
+  };
   const candidates: Candidate[] = attachments.map((attachment) => {
-    const keyedMs = attachment.key === null ? undefined : keyedDeliveries.get(attachment.key);
+    const keyedDelivery = attachment.keyValues
+      .map((key) => keyedDeliveries.get(key))
+      .find((delivery) => delivery !== undefined);
     const standalone = !enqueues.some(
       (enqueue) => Math.abs(enqueue - attachment.ts) <= MAX_ATTACHMENT_SKEW_MS,
     );
     return {
-      deliveredMs: keyedMs ?? (standalone ? attachment.ts : null),
-      keyed: keyedMs !== undefined,
+      deliveredMs: keyedDelivery?.ts ?? (standalone ? attachment.ts : null),
+      deliveredPos: keyedDelivery?.pos ?? attachment.pos,
+      keyed: keyedDelivery !== undefined,
       kind: attachment.kind,
       standalone,
       stamp: attachment.ts,
+      stampPos: attachment.pos,
     };
   });
 
   // Group one turn's records once; each group concludes on its own.
+  type TurnGroup = {
+    deliveries: { pos: number; ts: number }[];
+    humanCandidates: number;
+    rows: { pos: number; ts: number }[];
+    waiting: Candidate[];
+  };
+  // humanCandidates counts a turn's human candidates with no keyed
+  // delivery: the candidates a queued row in that turn can belong to.
   const groups = new Map<number, TurnGroup>();
   const groupOf = (turn: number): TurnGroup => {
     const found = groups.get(turn);
@@ -211,19 +228,14 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
     return made;
   };
   for (const candidate of candidates) {
-    const stampTurn = turnOf(candidate.stamp);
+    const stampTurn = turnOf(candidate.stamp, candidate.stampPos);
     const group = groupOf(stampTurn);
-    if (candidate.kind === "human") group.humanCandidates++;
+    if (candidate.kind === "human" && !candidate.keyed) group.humanCandidates++;
     if (!candidate.keyed && !candidate.standalone) group.waiting.push(candidate);
-    // A keyed delivery lands in its own turn: the message it concludes
-    // counts there too, so its queued row in that turn adds nothing.
-    if (candidate.kind === "human" && candidate.keyed && candidate.deliveredMs !== null) {
-      const deliveryTurn = turnOf(candidate.deliveredMs);
-      if (deliveryTurn !== stampTurn) groupOf(deliveryTurn).humanCandidates++;
-    }
   }
-  for (const ts of keylessDeliveries) groupOf(turnOf(ts)).deliveries.push(ts);
-  for (const ts of queuedRows) groupOf(turnOf(ts)).rows.push(ts);
+  for (const delivery of keylessDeliveries)
+    groupOf(turnOf(delivery.ts, delivery.pos)).deliveries.push(delivery);
+  for (const row of queuedRows) groupOf(turnOf(row.ts, row.pos)).rows.push(row);
 
   // E2, per turn: exactly one waiting candidate and exactly one
   // unidentified delivery in that turn belong together.
@@ -235,48 +247,51 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
       group.deliveries.length === 1 &&
       candidate &&
       delivery !== undefined &&
-      delivery >= candidate.stamp
+      delivery.ts >= candidate.stamp
     ) {
-      candidate.deliveredMs = delivery;
+      candidate.deliveredMs = delivery.ts;
+      candidate.deliveredPos = delivery.pos;
     }
   }
 
   const messages: MessageWait[] = [];
-  for (const ts of typedRows) {
+  for (const row of typedRows) {
     messages.push({
       answerUnknown: false,
-      answerWaitMs: null,
-      deliveredMs: ts,
+      answerWaitMs: answerWait(row.ts, row.pos),
+      deliveredMs: row.ts,
       seenUnknown: false,
       seenWaitMs: null,
     });
   }
-  for (const group of groups.values()) {
-    if (group.humanCandidates === 0) {
-      // No candidate in this turn can be these rows' other form: each
-      // row is a message delivered at its own time (E3).
-      for (const ts of group.rows) {
-        messages.push({
-          answerUnknown: false,
-          answerWaitMs: null,
-          deliveredMs: ts,
-          seenUnknown: true,
-          seenWaitMs: null,
-        });
-      }
-    } else {
-      // Rows up to the turn's human candidates are those messages'
-      // other form and add nothing; any beyond them are messages whose
-      // waits nothing identifies.
-      for (let extra = group.rows.length - group.humanCandidates; extra > 0; extra--) {
-        messages.push({
-          answerUnknown: true,
-          answerWaitMs: null,
-          deliveredMs: null,
-          seenUnknown: true,
-          seenWaitMs: null,
-        });
-      }
+  // A queued row at the instant of a delivery concluded in its turn is
+  // that delivery's second form and adds nothing. Rows beyond that and
+  // beyond the turn's human candidates with no keyed delivery are
+  // messages delivered at their own time (E3).
+  const concluded = new Map<number, Map<number, number>>();
+  for (const candidate of candidates) {
+    if (candidate.kind !== "human" || candidate.deliveredMs === null) continue;
+    const turn = turnOf(candidate.deliveredMs, candidate.deliveredPos);
+    const instants = concluded.get(turn) ?? new Map<number, number>();
+    instants.set(candidate.deliveredMs, (instants.get(candidate.deliveredMs) ?? 0) + 1);
+    concluded.set(turn, instants);
+  }
+  for (const [turn, group] of groups) {
+    const instants = concluded.get(turn);
+    const remaining = group.rows.filter((row) => {
+      const count = instants?.get(row.ts) ?? 0;
+      if (count === 0) return true;
+      instants?.set(row.ts, count - 1);
+      return false;
+    });
+    for (const row of remaining.slice(group.humanCandidates)) {
+      messages.push({
+        answerUnknown: false,
+        answerWaitMs: answerWait(row.ts, row.pos),
+        deliveredMs: row.ts,
+        seenUnknown: true,
+        seenWaitMs: null,
+      });
     }
   }
   for (const candidate of candidates) {
@@ -285,7 +300,10 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
       candidate.deliveredMs === null || (candidate.standalone && !candidate.keyed);
     messages.push({
       answerUnknown: candidate.deliveredMs === null,
-      answerWaitMs: null,
+      answerWaitMs:
+        candidate.deliveredMs === null
+          ? null
+          : answerWait(candidate.deliveredMs, candidate.deliveredPos),
       deliveredMs: candidate.deliveredMs,
       seenUnknown,
       seenWaitMs: seenUnknown ? null : Math.max(0, (candidate.deliveredMs ?? 0) - candidate.stamp),
@@ -297,12 +315,6 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
     const kb = b.deliveredMs ?? Number.POSITIVE_INFINITY;
     return ka - kb || (order.get(a) ?? 0) - (order.get(b) ?? 0);
   });
-  for (const message of messages) {
-    if (message.deliveredMs === null) continue;
-    const endIndex = turnOf(message.deliveredMs);
-    const end = endIndex < turns.length ? turns[endIndex] : undefined;
-    message.answerWaitMs = end === undefined ? null : Math.max(0, end - message.deliveredMs);
-  }
   return { compactions, messages };
 };
 
