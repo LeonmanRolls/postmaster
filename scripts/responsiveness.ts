@@ -164,7 +164,7 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
     }
     if (row.type === "user" && at(row, "origin", "kind") === "human" && ts !== null) {
       if (row.promptSource === "queued") queuedRows.push(ts);
-      else typedRows.push(ts);
+      else if (row.promptSource === "typed" || row.promptSource === undefined) typedRows.push(ts);
       continue;
     }
     if (row.type === "system" && row.subtype === "compact_boundary") {
@@ -211,9 +211,16 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
     return made;
   };
   for (const candidate of candidates) {
-    const group = groupOf(turnOf(candidate.stamp));
+    const stampTurn = turnOf(candidate.stamp);
+    const group = groupOf(stampTurn);
     if (candidate.kind === "human") group.humanCandidates++;
     if (!candidate.keyed && !candidate.standalone) group.waiting.push(candidate);
+    // A keyed delivery lands in its own turn: the message it concludes
+    // counts there too, so its queued row in that turn adds nothing.
+    if (candidate.kind === "human" && candidate.keyed && candidate.deliveredMs !== null) {
+      const deliveryTurn = turnOf(candidate.deliveredMs);
+      if (deliveryTurn !== stampTurn) groupOf(deliveryTurn).humanCandidates++;
+    }
   }
   for (const ts of keylessDeliveries) groupOf(turnOf(ts)).deliveries.push(ts);
   for (const ts of queuedRows) groupOf(turnOf(ts)).rows.push(ts);

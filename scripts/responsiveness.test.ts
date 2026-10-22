@@ -1036,3 +1036,62 @@ describe("pure per-turn pairing", () => {
     );
   });
 });
+
+describe("round 10 closure", () => {
+  test("a keyed message delivered at the next turn's start counts once", () => {
+    withRecord(
+      [
+        {
+          commandUuid: "cmd-x",
+          operation: "enqueue",
+          timestamp: iso(0),
+          type: "queue-operation",
+        },
+        {
+          attachment: {
+            origin: { kind: "human" },
+            source_uuid: "cmd-x",
+            type: "queued_command",
+          },
+          timestamp: iso(0),
+          type: "attachment",
+        },
+        { subtype: "turn_duration", timestamp: iso(30), type: "system" },
+        {
+          commandUuid: "cmd-x",
+          operation: "remove",
+          timestamp: iso(31),
+          type: "queue-operation",
+        },
+        {
+          origin: { kind: "human" },
+          promptSource: "queued",
+          timestamp: iso(31),
+          type: "user",
+        },
+        { subtype: "turn_duration", timestamp: iso(60), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.out).toContain("messages: 1");
+        expect(r.out).toContain("message 1: seen: 31 s; answer: 29 s");
+      },
+    );
+  });
+  test("a human row with an unlisted promptSource is not counted", () => {
+    withRecord(
+      [
+        {
+          origin: { kind: "human" },
+          promptSource: "command",
+          timestamp: iso(0),
+          type: "user",
+        },
+        { subtype: "turn_duration", timestamp: iso(30), type: "system" },
+      ],
+      (path) => {
+        expect(run(RUN, ["responsiveness", path]).out).toContain("messages: 0");
+      },
+    );
+  });
+});
