@@ -237,9 +237,7 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
           if (spent !== -1) unidentified.splice(spent, 1);
         }
       } else if (
-        candidates.some(
-          (c) => c.kind === "human" && !c.rowMatched && c.evidenceMs <= userRow.ts,
-        )
+        candidates.some((c) => c.kind === "human" && !c.rowMatched && c.evidenceMs <= userRow.ts)
       ) {
         // The row repeats a message already counted with its delivery
         // known: it is that message's second form and adds nothing.
