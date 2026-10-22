@@ -789,7 +789,10 @@ describe("round 8 row matching", () => {
       ],
       (path) => {
         const r = run(RUN, ["responsiveness", path]);
-        expect(r.out).toContain("message 1: seen: 10 s; answer: 4 min 0 s");
+        // Deliveries pair with enqueues in queue order: the row at 200
+        // is the second message's, so the first takes the delivery at 60.
+        expect(r.out).toContain("message 1: seen: 60 s; answer: 4 min 0 s");
+        expect(r.out).toContain("message 2: seen: 2 min 30 s; answer: 100 s");
       },
     );
   });
@@ -844,6 +847,93 @@ describe("round 9 closure", () => {
       (path) => {
         const r = run(RUN, ["responsiveness", path]);
         expect(r.out).toContain("message 1: seen: unknown; answer: unknown");
+      },
+    );
+  });
+});
+
+describe("round 9 row pairing", () => {
+  const humanAttach = (ts: number) => ({
+    attachment: { origin: { kind: "human" }, type: "queued_command" },
+    timestamp: iso(ts),
+    type: "attachment",
+  });
+  test("a queued row joins the candidate its delivery pairs with", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        humanAttach(0),
+        { operation: "enqueue", timestamp: iso(10), type: "queue-operation" },
+        humanAttach(10),
+        { operation: "remove", timestamp: iso(20), type: "queue-operation" },
+        { operation: "remove", timestamp: iso(61), type: "queue-operation" },
+        {
+          origin: { kind: "human" },
+          promptSource: "queued",
+          timestamp: iso(61),
+          type: "user",
+        },
+        { subtype: "turn_duration", timestamp: iso(100), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.out).toContain("message 1: seen: 20 s; answer: 80 s");
+        expect(r.out).toContain("message 2: seen: 51 s; answer: 39 s");
+      },
+    );
+  });
+  test("a standalone queued row spends its own delivery for E2", () => {
+    withRecord(
+      [
+        { operation: "remove", timestamp: iso(10), type: "queue-operation" },
+        {
+          origin: { kind: "human" },
+          promptSource: "queued",
+          timestamp: iso(10),
+          type: "user",
+        },
+        { operation: "enqueue", timestamp: iso(20), type: "queue-operation" },
+        humanAttach(20),
+        { operation: "remove", timestamp: iso(50), type: "queue-operation" },
+        { subtype: "turn_duration", timestamp: iso(100), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.out).toContain("message 2: seen: 30 s; answer: 50 s");
+      },
+    );
+  });
+  test("a later queued row is not absorbed by an earlier delivered message", () => {
+    withRecord(
+      [
+        {
+          attachment: {
+            origin: { kind: "human" },
+            source_uuid: "k1",
+            type: "queued_command",
+          },
+          timestamp: iso(0),
+          type: "attachment",
+        },
+        {
+          commandUuid: "k1",
+          operation: "remove",
+          timestamp: iso(10),
+          type: "queue-operation",
+        },
+        { subtype: "turn_duration", timestamp: iso(20), type: "system" },
+        { operation: "remove", timestamp: iso(100), type: "queue-operation" },
+        {
+          origin: { kind: "human" },
+          promptSource: "queued",
+          timestamp: iso(100),
+          type: "user",
+        },
+        { subtype: "turn_duration", timestamp: iso(130), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.out).toContain("messages: 2");
       },
     );
   });

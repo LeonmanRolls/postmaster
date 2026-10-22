@@ -223,8 +223,21 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
         !c.rowMatched &&
         c.evidenceMs <= userRow.ts &&
         (c.deliveredMs === null || (c.standalone && !c.keyedDelivery));
+      // Standing deliveries pair in queue order with the waiting
+      // candidates: the row joins the pair of the delivery at its time.
+      const turn = turnOf(userRow.ts);
+      const standingTurn = unidentified
+        .filter((ts) => turnOf(ts) === turn)
+        .sort((a, b) => a - b);
+      const paired = candidates.filter(
+        (c) => waiting(c) && turnOf(c.evidenceMs) === turn,
+      );
+      const deliveryIndex = standingTurn.indexOf(userRow.ts);
+      const exact =
+        deliveryIndex !== -1 ? paired[deliveryIndex] : undefined;
       const match =
-        candidates.find((c) => waiting(c) && turnOf(c.evidenceMs) === turnOf(userRow.ts)) ??
+        exact ??
+        candidates.find((c) => waiting(c) && turnOf(c.evidenceMs) === turn) ??
         candidates.find(waiting);
       if (match) {
         match.rowMatched = true;
@@ -239,12 +252,22 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
           if (spent !== -1) unidentified.splice(spent, 1);
         }
       } else if (
-        candidates.some((c) => c.kind === "human" && !c.rowMatched && c.evidenceMs <= userRow.ts)
+        candidates.some(
+          (c) =>
+            c.kind === "human" &&
+            !c.rowMatched &&
+            c.deliveredMs !== null &&
+            turnOf(c.deliveredMs) === turnOf(userRow.ts),
+        )
       ) {
         // The row repeats a message already counted with its delivery
         // known: it is that message's second form and adds nothing.
         const counted = candidates.find(
-          (c) => c.kind === "human" && !c.rowMatched && c.evidenceMs <= userRow.ts,
+          (c) =>
+            c.kind === "human" &&
+            !c.rowMatched &&
+            c.deliveredMs !== null &&
+            turnOf(c.deliveredMs) === turnOf(userRow.ts),
         );
         if (counted) counted.rowMatched = true;
       } else {
@@ -257,6 +280,8 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
           rowMatched: true,
           standalone: true,
         });
+        const spent = unidentified.findIndex((ts) => ts === userRow.ts);
+        if (spent !== -1) unidentified.splice(spent, 1);
       }
     }
   }

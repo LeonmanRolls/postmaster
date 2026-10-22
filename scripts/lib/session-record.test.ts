@@ -62,7 +62,7 @@ describe("findNewestPostmasterRecord", () => {
     withTemp((dir) => {
       const config = join(dir, "claude");
       const repo = join(dir, "app");
-      const folder = join(config, "projects", repo.replaceAll("/", "-"));
+      const folder = join(config, "projects", repo.replace(/[^a-zA-Z0-9]/g, "-"));
       write(
         join(folder, "renamed-away.jsonl"),
         `${JSON.stringify({ customTitle: "postmaster", type: "custom-title" })}\n${JSON.stringify({ customTitle: "booking clerk", type: "custom-title" })}\n`,
@@ -83,7 +83,7 @@ describe("findNewestPostmasterRecord", () => {
     withTemp((dir) => {
       const config = join(dir, "claude");
       const repo = join(dir, "app");
-      const folder = join(config, "projects", repo.replaceAll("/", "-"));
+      const folder = join(config, "projects", repo.replace(/[^a-zA-Z0-9]/g, "-"));
       write(
         join(folder, "old.jsonl"),
         `${JSON.stringify({ customTitle: "postmaster", type: "custom-title" })}\n`,
@@ -120,7 +120,7 @@ describe("findNewestPostmasterRecord", () => {
     withTemp((dir) => {
       const config = join(dir, "claude");
       const repo = join(dir, "app");
-      const folder = join(config, "projects", repo.replaceAll("/", "-"));
+      const folder = join(config, "projects", repo.replace(/[^a-zA-Z0-9]/g, "-"));
       write(
         join(folder, "old.jsonl"),
         `${JSON.stringify({ customTitle: "postmaster", type: "custom-title" })}\n`,
