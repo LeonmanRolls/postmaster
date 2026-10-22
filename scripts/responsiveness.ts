@@ -226,15 +226,10 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
       // Standing deliveries pair in queue order with the waiting
       // candidates: the row joins the pair of the delivery at its time.
       const turn = turnOf(userRow.ts);
-      const standingTurn = unidentified
-        .filter((ts) => turnOf(ts) === turn)
-        .sort((a, b) => a - b);
-      const paired = candidates.filter(
-        (c) => waiting(c) && turnOf(c.evidenceMs) === turn,
-      );
+      const standingTurn = unidentified.filter((ts) => turnOf(ts) === turn).sort((a, b) => a - b);
+      const paired = candidates.filter((c) => waiting(c) && turnOf(c.evidenceMs) === turn);
       const deliveryIndex = standingTurn.indexOf(userRow.ts);
-      const exact =
-        deliveryIndex !== -1 ? paired[deliveryIndex] : undefined;
+      const exact = deliveryIndex !== -1 ? paired[deliveryIndex] : undefined;
       const match =
         exact ??
         candidates.find((c) => waiting(c) && turnOf(c.evidenceMs) === turn) ??
