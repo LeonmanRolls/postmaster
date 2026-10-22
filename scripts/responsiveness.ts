@@ -167,7 +167,9 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
   for (const delivery of deliveries) {
     if (delivery.key !== null && claimedKeys.has(delivery.key)) {
       keyedDeliveries.set(delivery.key, delivery.ts);
-    } else unidentified.push(delivery.ts);
+    } else if (delivery.key === null) unidentified.push(delivery.ts);
+    // A keyed delivery no attachment claims belongs to no concluded
+    // message: it never enters the E2 pool.
   }
 
   const candidates: Candidate[] = [];

@@ -822,3 +822,29 @@ describe("round 8 row matching", () => {
     );
   });
 });
+
+describe("round 9 closure", () => {
+  test("an unclaimed keyed delivery stays out of the E2 pool", () => {
+    withRecord(
+      [
+        { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
+        {
+          attachment: { origin: { kind: "human" }, type: "queued_command" },
+          timestamp: iso(0),
+          type: "attachment",
+        },
+        {
+          commandUuid: "cmd-orphan",
+          operation: "remove",
+          timestamp: iso(20),
+          type: "queue-operation",
+        },
+        { subtype: "turn_duration", timestamp: iso(90), type: "system" },
+      ],
+      (path) => {
+        const r = run(RUN, ["responsiveness", path]);
+        expect(r.out).toContain("message 1: seen: unknown; answer: unknown");
+      },
+    );
+  });
+});
