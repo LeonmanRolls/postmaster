@@ -112,7 +112,7 @@ export const writeRecord = (dir: string, name: string, rows: Row[]): string => {
   return path;
 };
 
-export const encodeProject = (repo: string): string => repo.replace(/[^a-zA-Z0-9]/g, "-");
+export const encodeProject = (repo: string): string => repo.replace(/[^A-Za-z0-9]/gu, "-");
 
 export const writeClaudeRecord = (
   configDir: string,
