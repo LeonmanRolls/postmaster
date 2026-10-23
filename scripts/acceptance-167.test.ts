@@ -28,22 +28,28 @@ const withTemp = (body: (dir: string) => void): void => {
 };
 
 describe("C1: message waits from a Claude Code record", () => {
-  test("(a) a queued message reports its seen wait and its answer wait", () => {
+  // The made-up records below carry no key linking delivery to message.
+  // On the user's word of 2026-10-24 the reader stopped pairing keyless
+  // deliveries (the E2 rule and row absorption were removed after twelve
+  // review rounds kept finding shapes they miscounted), so a keyless
+  // queued message now reports both waits as unknown. Only a keyed
+  // delivery still times a seen wait.
+  test("(a) a keyless queued message reports unknown waits", () => {
     withTemp((dir) => {
       const record = writeRecord(dir, "session.jsonl", queuedHuman(0, 20, 720));
       const r = runResponsiveness([record]);
       expect(r.code).toBe(0);
       expect(r.out).toContain("Claude Code");
-      expect(r.out).toContain("message 1: seen: 20 s; answer: 11 min 40 s");
+      expect(r.out).toContain("message 1: seen: unknown; answer: unknown");
     });
   });
 
-  test("(b) an answer ending 90 s after delivery reports 90 s", () => {
+  test("(b) a keyless queued message reports unknown waits at any offset", () => {
     withTemp((dir) => {
       const record = writeRecord(dir, "session.jsonl", queuedHuman(1000, 1005, 1095));
       const r = runResponsiveness([record]);
       expect(r.code).toBe(0);
-      expect(r.out).toContain("message 1: seen: 5 s; answer: 90 s");
+      expect(r.out).toContain("message 1: seen: unknown; answer: unknown");
     });
   });
 
