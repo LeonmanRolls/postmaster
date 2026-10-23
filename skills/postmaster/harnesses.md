@@ -680,17 +680,16 @@ origin kind is `task-notification` is not a user message, and a delivery nothing
 human is not counted as one either. A queued message can also arrive as a `user` line
 with `promptSource` `queued`; that row's own time is its delivery time.
 
-Where no key links a delivery to a message, the report prints the wait as unknown
-rather than pairing by order or timing. The pairing is a pure function of each
-turn's records: an attachment's stamp is its enqueue time; a queued user row's
-own time is its delivery time and nothing more is concluded from it; and where
-a turn holds exactly one waiting candidate and exactly one unidentified
-delivery, they belong together, task, channel, peer and kindless candidates
-counting for that rule so a task delivery never takes a human message's place.
-A turn holding several candidates or deliveries, and anything standing in
-another turn, concludes nothing. Measured on 4,193 real records with this
-reader on 2026-10-22: 1,731 of 4,216 messages (about two in five) have an
-unknown seen wait, and 544 an unknown answer wait.
+Where no key links a delivery to a message, the report prints the wait as unknown:
+it never pairs by elimination, order or timing, and never takes a queued row to
+be another message's second form. The pairing is a pure function of each turn's
+records: an attachment's stamp is its enqueue time, and a queued user row's own
+time is its delivery time and nothing more is concluded from it. The reader once
+paired a turn's lone candidate with its lone unidentified delivery and absorbed
+queued rows into candidates by count; twelve review rounds kept finding shapes
+those rules miscounted, so both were removed on the user's word (2026-10-24).
+Measured on 4,254 real records with this reader on 2026-10-24: 1,982 of 4,390
+messages (45 percent) have an unknown seen wait, and 637 an unknown answer wait.
 
 ## The pane view
 

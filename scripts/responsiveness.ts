@@ -91,24 +91,21 @@ const jsonRows = (content: string): Row[] => {
 // - E1: an attachment's stamp is its enqueue time. An attachment with no
 //   enqueue within 16 ms of its stamp stands alone: its answer runs from
 //   its stamp and its seen wait is unknown.
-// - E2: where a turn holds exactly one waiting candidate (not keyed, not
-//   standalone) and exactly one unidentified delivery, they belong
-//   together. Task, channel, peer and kindless candidates wait too, so a
-//   delivery is never handed to a human message past another candidate.
 // - E3: a queued user row's own time is its delivery time, and nothing
-//   more is concluded from it. Rows beyond a turn's human candidates are
-//   messages of their own with unknown waits; a turn with no human
-//   candidate takes each row as a message delivered at its own time.
-// - Everything else is unknown: several candidates or deliveries in one
-//   turn, a delivery in another turn, a keyed delivery no attachment
-//   claims.
+//   more is concluded from it. Every queued row is a message of its own:
+//   no row is ever taken to be another message's second form.
+// - Everything else is unknown. A delivery no key links to a message is
+//   never paired with one, by elimination, order or timing: the reader
+//   once paired a turn's lone candidate with its lone unidentified
+//   delivery and absorbed queued rows into candidates by count, and
+//   twelve rounds of review kept finding shapes those two rules
+//   miscounted, so both were removed on the user's word (2026-10-24).
 
 const MAX_ATTACHMENT_SKEW_MS = 16;
 
 export const readClaude = (rows: Row[]): ResponsivenessReport => {
   const enqueues: number[] = [];
   const keyedDeliveries = new Map<string, { pos: number; ts: number }>();
-  const keylessDeliveries: { pos: number; ts: number }[] = [];
   const attachments: { keyValues: string[]; kind: unknown; pos: number; ts: number }[] = [];
   const queuedRows: { pos: number; ts: number }[] = [];
   const typedRows: { pos: number; ts: number }[] = [];
@@ -127,8 +124,8 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
         const keyValues = [row.commandUuid, row.deliveryId].filter(
           (v): v is string => typeof v === "string" && v !== "",
         );
-        if (keyValues.length === 0) keylessDeliveries.push({ pos, ts });
-        else for (const key of keyValues) keyedDeliveries.set(key, { pos, ts });
+        // A delivery with no key concludes nothing and is not kept.
+        for (const key of keyValues) keyedDeliveries.set(key, { pos, ts });
       }
       return;
     }
@@ -210,50 +207,8 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
     };
   });
 
-  // Group one turn's records once; each group concludes on its own.
-  type TurnGroup = {
-    deliveries: { pos: number; ts: number }[];
-    humanCandidates: number;
-    rows: { pos: number; ts: number }[];
-    waiting: Candidate[];
-  };
-  // humanCandidates counts a turn's human candidates with no keyed
-  // delivery: the candidates a queued row in that turn can belong to.
-  const groups = new Map<number, TurnGroup>();
-  const groupOf = (turn: number): TurnGroup => {
-    const found = groups.get(turn);
-    if (found) return found;
-    const made: TurnGroup = { deliveries: [], humanCandidates: 0, rows: [], waiting: [] };
-    groups.set(turn, made);
-    return made;
-  };
-  for (const candidate of candidates) {
-    const stampTurn = turnOf(candidate.stamp, candidate.stampPos);
-    const group = groupOf(stampTurn);
-    if (candidate.kind === "human" && !candidate.keyed) group.humanCandidates++;
-    if (!candidate.keyed && !candidate.standalone) group.waiting.push(candidate);
-  }
-  for (const delivery of keylessDeliveries)
-    groupOf(turnOf(delivery.ts, delivery.pos)).deliveries.push(delivery);
-  for (const row of queuedRows) groupOf(turnOf(row.ts, row.pos)).rows.push(row);
-
-  // E2, per turn: exactly one waiting candidate and exactly one
-  // unidentified delivery in that turn belong together.
-  for (const group of groups.values()) {
-    const candidate = group.waiting[0];
-    const delivery = group.deliveries[0];
-    if (
-      group.waiting.length === 1 &&
-      group.deliveries.length === 1 &&
-      candidate &&
-      delivery !== undefined &&
-      delivery.ts >= candidate.stamp
-    ) {
-      candidate.deliveredMs = delivery.ts;
-      candidate.deliveredPos = delivery.pos;
-    }
-  }
-
+  // Every queued row is a message of its own, delivered at its own
+  // time (E3). Nothing absorbs it and nothing pairs it.
   const messages: MessageWait[] = [];
   for (const row of typedRows) {
     messages.push({
@@ -264,35 +219,14 @@ export const readClaude = (rows: Row[]): ResponsivenessReport => {
       seenWaitMs: null,
     });
   }
-  // A queued row at the instant of a delivery concluded in its turn is
-  // that delivery's second form and adds nothing. Rows beyond that and
-  // beyond the turn's human candidates with no keyed delivery are
-  // messages delivered at their own time (E3).
-  const concluded = new Map<number, Map<number, number>>();
-  for (const candidate of candidates) {
-    if (candidate.kind !== "human" || candidate.deliveredMs === null) continue;
-    const turn = turnOf(candidate.deliveredMs, candidate.deliveredPos);
-    const instants = concluded.get(turn) ?? new Map<number, number>();
-    instants.set(candidate.deliveredMs, (instants.get(candidate.deliveredMs) ?? 0) + 1);
-    concluded.set(turn, instants);
-  }
-  for (const [turn, group] of groups) {
-    const instants = concluded.get(turn);
-    const remaining = group.rows.filter((row) => {
-      const count = instants?.get(row.ts) ?? 0;
-      if (count === 0) return true;
-      instants?.set(row.ts, count - 1);
-      return false;
+  for (const row of queuedRows) {
+    messages.push({
+      answerUnknown: false,
+      answerWaitMs: answerWait(row.ts, row.pos),
+      deliveredMs: row.ts,
+      seenUnknown: true,
+      seenWaitMs: null,
     });
-    for (const row of remaining.slice(group.humanCandidates)) {
-      messages.push({
-        answerUnknown: false,
-        answerWaitMs: answerWait(row.ts, row.pos),
-        deliveredMs: row.ts,
-        seenUnknown: true,
-        seenWaitMs: null,
-      });
-    }
   }
   for (const candidate of candidates) {
     if (candidate.kind !== "human") continue;

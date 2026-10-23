@@ -23,13 +23,22 @@ const withRecord = (rows: Record<string, unknown>[], body: (path: string) => voi
 };
 
 describe("responsiveness record spellings", () => {
-  test("a dequeue delivers a queued message like a remove", () => {
+  test("a keyed dequeue delivers a queued message like a keyed remove", () => {
     withRecord(
       [
         { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
-        { operation: "dequeue", timestamp: iso(10), type: "queue-operation" },
         {
-          attachment: { origin: { kind: "human" }, type: "queued_command" },
+          commandUuid: "cmd-d",
+          operation: "dequeue",
+          timestamp: iso(10),
+          type: "queue-operation",
+        },
+        {
+          attachment: {
+            origin: { kind: "human" },
+            source_uuid: "cmd-d",
+            type: "queued_command",
+          },
           timestamp: iso(0),
           type: "attachment",
         },
@@ -200,12 +209,12 @@ describe("responsiveness record spellings", () => {
         expect(r.code).toBe(0);
         expect(r.out).toContain("messages: 2");
         expect(r.out).toContain("message 1: seen: 20 s; answer: 70 s");
-        expect(r.out).toContain("message 2: seen: 20 s; answer: 60 s");
+        expect(r.out).toContain("message 2: seen: unknown; answer: unknown");
       },
     );
   });
 
-  test("an orphan enqueue does not spend the next message's delivery", () => {
+  test("an orphan enqueue beside a keyless delivery concludes nothing", () => {
     withRecord(
       [
         { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
@@ -222,7 +231,7 @@ describe("responsiveness record spellings", () => {
         const r = run(RUN, ["responsiveness", path]);
         expect(r.code).toBe(0);
         expect(r.out).toContain("messages: 1");
-        expect(r.out).toContain("message 1: seen: 10 s; answer: 30 s");
+        expect(r.out).toContain("message 1: seen: unknown; answer: unknown");
       },
     );
   });
@@ -341,7 +350,7 @@ describe("responsiveness record spellings", () => {
     );
   });
 
-  test("a queued user row beside its own attachment counts once", () => {
+  test("a queued user row beside its own attachment is a second message", () => {
     withRecord(
       [
         { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
@@ -362,8 +371,10 @@ describe("responsiveness record spellings", () => {
       (path) => {
         const r = run(RUN, ["responsiveness", path]);
         expect(r.code).toBe(0);
-        expect(r.out).toContain("messages: 1");
-        expect(r.out).toContain("message 1: seen: 10 s; answer: 60 s");
+        // Nothing links the row to the attachment, so both count.
+        expect(r.out).toContain("messages: 2");
+        expect(r.out).toContain("message 1: seen: unknown; answer: 60 s");
+        expect(r.out).toContain("message 2: seen: unknown; answer: unknown");
       },
     );
   });
@@ -414,12 +425,12 @@ describe("responsiveness record spellings", () => {
         const r = run(RUN, ["responsiveness", path]);
         expect(r.code).toBe(0);
         expect(r.out).toContain("messages: 1");
-        expect(r.out).toContain("message 1: seen: 10 s; answer: 50 s");
+        expect(r.out).toContain("message 1: seen: unknown; answer: unknown");
       },
     );
   });
 
-  test("a queued user row beside a standalone attachment counts once", () => {
+  test("a queued user row beside a standalone attachment is a second message", () => {
     withRecord(
       [
         {
@@ -438,10 +449,11 @@ describe("responsiveness record spellings", () => {
       (path) => {
         const r = run(RUN, ["responsiveness", path]);
         expect(r.code).toBe(0);
-        expect(r.out).toContain("messages: 1");
-        // The row adds nothing beside a standalone attachment, whose
-        // answer runs from its own stamp; the row moves nothing.
+        expect(r.out).toContain("messages: 2");
+        // The standalone attachment answers from its own stamp; the
+        // row is a message of its own at its own time.
         expect(r.out).toContain("message 1: seen: unknown; answer: 70 s");
+        expect(r.out).toContain("message 2: seen: unknown; answer: 60 s");
       },
     );
   });
@@ -497,7 +509,7 @@ describe("pairing specification corpus", () => {
       },
     );
   });
-  test("a keyless human alone in its turn takes the turn's delivery (E2)", () => {
+  test("a keyless queued message alone in its turn is reported unknown", () => {
     withRecord(
       [
         { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
@@ -507,7 +519,7 @@ describe("pairing specification corpus", () => {
       ],
       (path) => {
         expect(run(RUN, ["responsiveness", path]).out).toContain(
-          "message 1: seen: 20 s; answer: 60 s",
+          "message 1: seen: unknown; answer: unknown",
         );
       },
     );
@@ -531,7 +543,7 @@ describe("pairing specification corpus", () => {
       },
     );
   });
-  test("a task candidate keeps a human message's delivery unidentified (E2)", () => {
+  test("a task beside a human leaves the human message unknown", () => {
     withRecord(
       [
         { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
@@ -552,7 +564,7 @@ describe("pairing specification corpus", () => {
       },
     );
   });
-  test("an unidentified delivery before the candidate is not paired (E2)", () => {
+  test("an unidentified delivery before the candidate is not paired", () => {
     withRecord(
       [
         { operation: "remove", timestamp: iso(0), type: "queue-operation" },
@@ -565,7 +577,7 @@ describe("pairing specification corpus", () => {
       },
     );
   });
-  test("a queued row picks neither of two waiting candidates", () => {
+  test("two waiting candidates and a queued row are three messages", () => {
     withRecord(
       [
         { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
@@ -583,11 +595,12 @@ describe("pairing specification corpus", () => {
       ],
       (path) => {
         const r = run(RUN, ["responsiveness", path]);
-        // Two candidates wait and one delivery stands: nothing says
-        // which message the delivery or the row belongs to.
-        expect(r.out).toContain("messages: 2");
-        expect(r.out).toContain("message 1: seen: unknown; answer: unknown");
+        // No key links the delivery to either candidate, and the row
+        // is a message of its own.
+        expect(r.out).toContain("messages: 3");
+        expect(r.out).toContain("message 1: seen: unknown; answer: 60 s");
         expect(r.out).toContain("message 2: seen: unknown; answer: unknown");
+        expect(r.out).toContain("message 3: seen: unknown; answer: unknown");
       },
     );
   });
@@ -623,8 +636,10 @@ describe("pairing specification corpus", () => {
       ],
       (path) => {
         const r = run(RUN, ["responsiveness", path]);
-        expect(r.out).toContain("messages: 2");
-        expect(r.out).toContain("message 2: seen: 40 s; answer: 50 s");
+        expect(r.out).toContain("messages: 3");
+        expect(r.out).toContain("message 1: seen: 30 s; answer: 70 s");
+        expect(r.out).toContain("message 2: seen: unknown; answer: 50 s");
+        expect(r.out).toContain("message 3: seen: unknown; answer: unknown");
       },
     );
   });
@@ -708,7 +723,7 @@ describe("pairing properties", () => {
         if (m.seenWaitMs !== null) expect(m.seenWaitMs).toBeGreaterThanOrEqual(0);
         if (m.answerWaitMs !== null) expect(m.answerWaitMs).toBeGreaterThanOrEqual(0);
       }
-      expect(report.messages.length).toBeLessThanOrEqual(humans + queuedRowsTotal);
+      expect(report.messages.length).toBe(humans + queuedRowsTotal);
       queuedRowsTotal = 0;
     }
   });
@@ -759,7 +774,7 @@ describe("round 8 row matching", () => {
     timestamp: iso(ts),
     type: "attachment",
   });
-  test("E2 pairs within a turn and never reaches into an earlier one", () => {
+  test("candidates in different turns and a queued row stay apart", () => {
     withRecord(
       [
         { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
@@ -779,9 +794,10 @@ describe("round 8 row matching", () => {
       ],
       (path) => {
         const r = run(RUN, ["responsiveness", path]);
-        expect(r.out).toContain("messages: 2");
-        expect(r.out).toContain("message 1: seen: 5 s; answer: 45 s");
+        expect(r.out).toContain("messages: 3");
+        expect(r.out).toContain("message 1: seen: unknown; answer: 45 s");
         expect(r.out).toContain("message 2: seen: unknown; answer: unknown");
+        expect(r.out).toContain("message 3: seen: unknown; answer: unknown");
       },
     );
   });
@@ -804,11 +820,12 @@ describe("round 8 row matching", () => {
       ],
       (path) => {
         const r = run(RUN, ["responsiveness", path]);
-        // Two candidates wait and two deliveries stand: order in the
-        // file is not evidence, so both stay unknown.
-        expect(r.out).toContain("messages: 2");
-        expect(r.out).toContain("message 1: seen: unknown; answer: unknown");
+        // Two candidates wait and two deliveries stand: nothing links
+        // them, and the row is a message of its own.
+        expect(r.out).toContain("messages: 3");
+        expect(r.out).toContain("message 1: seen: unknown; answer: 100 s");
         expect(r.out).toContain("message 2: seen: unknown; answer: unknown");
+        expect(r.out).toContain("message 3: seen: unknown; answer: unknown");
       },
     );
   });
@@ -876,7 +893,7 @@ describe("round 9 row pairing", () => {
     timestamp: iso(ts),
     type: "attachment",
   });
-  test("deliveries are not paired with candidates in queue order", () => {
+  test("deliveries are not paired with candidates in queue order, and the row stands alone", () => {
     withRecord(
       [
         { operation: "enqueue", timestamp: iso(0), type: "queue-operation" },
@@ -895,9 +912,10 @@ describe("round 9 row pairing", () => {
       ],
       (path) => {
         const r = run(RUN, ["responsiveness", path]);
-        expect(r.out).toContain("messages: 2");
-        expect(r.out).toContain("message 1: seen: unknown; answer: unknown");
+        expect(r.out).toContain("messages: 3");
+        expect(r.out).toContain("message 1: seen: unknown; answer: 39 s");
         expect(r.out).toContain("message 2: seen: unknown; answer: unknown");
+        expect(r.out).toContain("message 3: seen: unknown; answer: unknown");
       },
     );
   });
@@ -918,10 +936,11 @@ describe("round 9 row pairing", () => {
       ],
       (path) => {
         const r = run(RUN, ["responsiveness", path]);
-        // Two deliveries stand in the turn, so E2 pairs neither; the
-        // row is the counted candidate's other form and adds nothing.
-        expect(r.out).toContain("messages: 1");
-        expect(r.out).toContain("message 1: seen: unknown; answer: unknown");
+        // The candidate stays unknown, and the row is a message of
+        // its own at its own time.
+        expect(r.out).toContain("messages: 2");
+        expect(r.out).toContain("message 1: seen: unknown; answer: 90 s");
+        expect(r.out).toContain("message 2: seen: unknown; answer: unknown");
       },
     );
   });
@@ -980,7 +999,7 @@ describe("pure per-turn pairing", () => {
       },
     );
   });
-  test("rows beyond a turn's human candidates are messages with unknown waits", () => {
+  test("every queued row beside a keyed candidate is a message of its own", () => {
     withRecord(
       [
         {
@@ -1014,10 +1033,10 @@ describe("pure per-turn pairing", () => {
       ],
       (path) => {
         const r = run(RUN, ["responsiveness", path]);
-        expect(r.out).toContain("messages: 2");
-        expect(r.out).toContain("message 1: seen: 10 s; answer: 70 s");
-        // The second row is a message delivered at its own time.
-        expect(r.out).toContain("message 2: seen: unknown; answer: 60 s");
+        expect(r.out).toContain("messages: 3");
+        expect(r.out).toContain("message 1: seen: unknown; answer: 70 s");
+        expect(r.out).toContain("message 2: seen: 10 s; answer: 70 s");
+        expect(r.out).toContain("message 3: seen: unknown; answer: 60 s");
       },
     );
   });
@@ -1042,7 +1061,7 @@ describe("pure per-turn pairing", () => {
 });
 
 describe("round 10 closure", () => {
-  test("a keyed message delivered at the next turn's start counts once", () => {
+  test("a keyed message and its row at the next turn's start are two messages", () => {
     withRecord(
       [
         {
@@ -1077,8 +1096,9 @@ describe("round 10 closure", () => {
       ],
       (path) => {
         const r = run(RUN, ["responsiveness", path]);
-        expect(r.out).toContain("messages: 1");
-        expect(r.out).toContain("message 1: seen: 31 s; answer: 29 s");
+        expect(r.out).toContain("messages: 2");
+        expect(r.out).toContain("message 1: seen: unknown; answer: 29 s");
+        expect(r.out).toContain("message 2: seen: 31 s; answer: 29 s");
       },
     );
   });
