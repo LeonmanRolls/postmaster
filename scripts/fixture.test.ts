@@ -55,7 +55,7 @@ import {
 } from "./fixture";
 import { scriptsDir, toolRoot } from "./lib/paths.ts";
 import { run } from "./lib/proc.ts";
-import { pyWords } from "./lib/text.ts";
+import { digitValue, pyWords } from "./lib/text.ts";
 
 const TOOL = toolRoot(import.meta);
 const HERE = scriptsDir(import.meta);
@@ -246,9 +246,18 @@ function failedDescribes(out: string): string[] {
   return found;
 }
 
-/** How many hidden tests passed, from the run's output. */
+/**
+ * How many hidden tests passed, from the run's summary, read as the score
+ * reads it. Bun prints the summary in every mode but leaves out each passing
+ * test's own line when it detects an agent (CLAUDECODE=1, AGENT=1 or
+ * REPL_ID=1), so counting those lines reads zero in an agent's session.
+ */
 function countPasses(out: string): number {
-  return out.split("\n").filter((line) => line.trim().startsWith("(pass)")).length;
+  let passes = 0;
+  for (const m of out.matchAll(HIDDEN_RE)) {
+    if (m[2] === "pass") passes = parseInt(digitValue(m[1]!), 10);
+  }
+  return passes;
 }
 
 /**
@@ -2224,7 +2233,8 @@ describe("score: waybill effort controls", () => {
     const result = runScore(dispatch, repo);
     expect(result.code).toBe(0);
     expect(result.out).toContain("ok   efforts");
-  }, 120_000);
+    // A full score costs about 17 s quiet; the limit sits at ten times that.
+  }, 180_000);
 
   test("the same score command rejects a changed Team effort", () => {
     const repo = join(tmp, `clean-${first}`, "repo");
@@ -2237,7 +2247,8 @@ describe("score: waybill effort controls", () => {
     const result = runScore(dispatch, repo);
     expect(result.code).toBe(2);
     expect(result.out).toContain("FAIL efforts");
-  }, 120_000);
+    // A full score costs about 17 s quiet; the limit sits at ten times that.
+  }, 180_000);
 
   test("a model containing a slash leaves the Team effort as its last field", () => {
     const dispatch = join(scratch, "dispatch");

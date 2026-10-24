@@ -1,0 +1,1 @@
+{"name":"g-peer","version":"0.0.0-dev","main":"index.js","peerDependencies":{"g-clean":"^1.0.0"}}

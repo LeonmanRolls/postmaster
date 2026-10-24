@@ -117,7 +117,8 @@ function trackerKind(repo: string): string {
   return requireScript("tracker-kind", [repo], `run tracker-kind ${repo} failed`).trim();
 }
 
-function parseTicketRead(out: string): { title: string } {
+/** The ticket's title from an adapter's read, headers only, as readTicket reads it. */
+export function parseTicketRead(out: string): { title: string } {
   let title = "";
   for (const raw of out.split("\n")) {
     const line = raw.replace(/\r$/u, "");

@@ -21,7 +21,8 @@
 //   exit 1  a harness was named that is not on PATH, the coachman shares a lane's model, fewer
 //           than two lanes were given, a reviewer or the surveyor is not a lane, an answer was missing, a round
 //           time limit was not a whole number of seconds from 1 to 86400, a planning review link
-//           omitted {path}, a planning stories value other than on or off, a mode other than
+//           omitted {path}, a planning stories value other than on or off, a draft pull
+//           requests value other than on or off, a mode other than
 //           synthesis, single-thread or alternate, a
 //           ticket_notes other than given or held-back, or an existing config was not overwritten
 //
@@ -252,10 +253,11 @@ function blankLinkClear(k: string, optional: boolean): boolean {
   return optional && (k === "review_link" || k === "planning.review_link");
 }
 
-// answersOnly <prompt> <k> <opts>: an answers-file key that is never asked,
-// so it stays out of the setup conversation. Missing or blank reads unset;
-// a found value is validated by the caller.
-function answersOnly(prompt: string, k: string, opts: AskOpts): string {
+// answersOnly <prompt> <k> <opts> <def>: an answers-file key that is never
+// asked, so it stays out of the setup conversation. Missing or blank reads
+// unset; a found value is validated by the caller. <def> is the effective
+// default an unanswered key prints in global mode, since callers differ.
+function answersOnly(prompt: string, k: string, opts: AskOpts, def: string): string {
   if (opts.answers === "") return "";
   let found: string | undefined;
   try {
@@ -270,7 +272,7 @@ function answersOnly(prompt: string, k: string, opts: AskOpts): string {
     /* fall through */
   }
   if (found === undefined || found === "") {
-    console.log(`${prompt}: ${PROJECT !== "" ? "(not set)" : "on (default)"}`);
+    console.log(`${prompt}: ${PROJECT !== "" ? "(not set)" : `${def} (default)`}`);
     return "";
   }
   if (PROJECT !== "") GIVEN.add(k);
@@ -423,6 +425,8 @@ limits.reviewer.tasks_max? (default)          reviewer process cap override`
     }
 tracker                    github             github, plane, local or other
 confine                    off                lane confinement, on or off (see run probe-confine)
+messages                   none               telegram messages when something needs you: none or telegram
+messages.env_file          ~/.postmaster/telegram.env   telegram only; holds TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID
 plane.url                  https://api.plane.so   plane only
 plane.workspace                               plane only; the slug in the workspace's web URL
 plane.env_file             ~/.postmaster/plane.env   plane only; holds PLANE_API_KEY=<key>
@@ -432,6 +436,7 @@ round_timeout_seconds      3600               seconds a review round may run, 1 
 merge_authority            user               user or postmaster
 checkpoint_mode            autonomous         autonomous or consult
 review_link?               (none)             template with {path}
+draft_pull_requests        off                draft pull requests: on or off (answers file only)
 planning.review_link?      (none)             code-server template with {path} for ticket drafts
 planning.stories           on                 clerk stories with ticket drafts: on or off (answers file only)
 overwrite                  no                 yes replaces an existing config
@@ -980,6 +985,37 @@ if (CONFINE === "on") {
 }
 
 console.log("");
+console.log("== Telegram messages when something needs you or a run lands. ==");
+const MSG = ask(
+  "Telegram messages (none, telegram)",
+  PROJECT !== "" ? "" : "none",
+  "messages",
+  opts,
+);
+if (MSG !== "" && MSG !== "none" && MSG !== "telegram")
+  die("setup: messages must be none or telegram", 1);
+let MSGENV = "";
+if (MSG === "telegram") {
+  MSGENV = ask(
+    "  file holding TELEGRAM_BOT_TOKEN=<token> and TELEGRAM_CHAT_ID=<chat>, written by you, never pasted here",
+    PROJECT !== "" ? "" : "~/.postmaster/telegram.env",
+    "messages.env_file",
+    opts,
+  );
+  if (PROJECT === "") {
+    console.log(
+      "  write that file yourself, then confirm with scripts/run notify test; " +
+        "where this machine limits network hosts, allow api.telegram.org first",
+    );
+  } else {
+    console.log(
+      `  write that file yourself, then confirm with scripts/run notify test ${PROJECT_ROOT}; ` +
+        "where this machine limits network hosts, allow api.telegram.org first",
+    );
+  }
+}
+
+console.log("");
 const PMC = ask(
   "May the postmaster create tickets without asking (yes/no)",
   PROJECT !== "" ? "" : "no",
@@ -1031,9 +1067,15 @@ const PRL = ask(
 if (PRL && !PRL.includes("{path}")) die("setup: planning.review_link must contain {path}", 1);
 // Stories start on and stay out of the setup conversation: the key is
 // answered by file or hand-edited, never asked.
-const STORIES = answersOnly("Stories with ticket drafts (on, off)", "planning.stories", opts);
+const STORIES = answersOnly("Stories with ticket drafts (on, off)", "planning.stories", opts, "on");
 if (STORIES !== "" && STORIES !== "on" && STORIES !== "off") {
   die("setup: planning.stories must be on or off", 1);
+}
+// Draft pull requests start off and stay out of the setup conversation: the
+// key is answered by file or hand-edited, never asked.
+const DPR = answersOnly("Draft pull requests (on, off)", "draft_pull_requests", opts, "off");
+if (DPR !== "" && DPR !== "on" && DPR !== "off") {
+  die("setup: draft_pull_requests must be on or off", 1);
 }
 
 let TRACKER_EXTRA = "";
@@ -1096,6 +1138,10 @@ if (PROJECT !== "") {
   if (OTHER !== "") trackerParts.push(`name = "${OTHER}"`);
   if (PMC !== "") trackerParts.push(`postmaster_may_create = ${PMC === "yes" ? "true" : "false"}`);
   if (trackerParts.length > 0) sections.push(`[tracker]\n${trackerParts.join("\n")}\n`);
+  const notifyParts: string[] = [];
+  if (MSG !== "") notifyParts.push(`channel = "${MSG}"`);
+  if (MSGENV !== "") notifyParts.push(`env_file = "${MSGENV}"`);
+  if (notifyParts.length > 0) sections.push(`[notify]\n${notifyParts.join("\n")}\n`);
   if (PS !== "") sections.push(`[postmaster]\npoll_seconds = ${PS}\n`);
   if (RT !== "") sections.push(`[review]\nround_timeout_seconds = ${RT}\n`);
   const planningParts: string[] = [];
@@ -1106,6 +1152,7 @@ if (PROJECT !== "") {
   if (MA !== "") shipParts.push(`merge_authority = "${MA}"`);
   if (CPM !== "") shipParts.push(`checkpoint_mode = "${CPM}"`);
   if (GIVEN.has("review_link")) shipParts.push(`review_link = "${RL}"`);
+  if (GIVEN.has("draft_pull_requests")) shipParts.push(`draft_pull_requests = "${DPR}"`);
   if (shipParts.length > 0) sections.push(`[ship]\n${shipParts.join("\n")}\n`);
 
   if (sections.length === 0) {
@@ -1332,6 +1379,8 @@ const dateStr = new Date().toISOString().slice(0, 10);
 const LIMITS_BLOCK = onLinux
   ? `[limits]\nmemory_max = "${LM}"\ntasks_max = ${LT}\n${LIMIT_ROLE_TABLES}\n`
   : "";
+const NOTIFY_BLOCK =
+  MSG === "telegram" ? `[notify]\nchannel = "telegram"\nenv_file = "${MSGENV}"\n\n` : "";
 const OUT = `# Written by scripts/run setup on ${dateStr}. Shape: config.example.toml.
 projects_roots = ${tomlList(ROOTS)}
 confine = "${CONFINE}"
@@ -1357,7 +1406,7 @@ kind = "${TK}"
 ${TRACKER_EXTRA}
 postmaster_may_create = ${PMC === "yes" ? "true" : "false"}
 
-[review]
+${NOTIFY_BLOCK}[review]
 round_timeout_seconds = ${RT}
 
 [planning]
@@ -1367,7 +1416,7 @@ ${STORIES !== "" ? `stories = "${STORIES}"\n` : ""}
 merge_authority = "${MA}"
 checkpoint_mode = "${CPM}"
 review_link = "${RL}"
-`;
+${DPR !== "" ? `draft_pull_requests = "${DPR}"\n` : ""}`;
 
 if (DRY === 1) {
   console.log(OUT.replace(/\n+$/u, ""));
