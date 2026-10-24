@@ -116,6 +116,28 @@ describe("findNewestPostmasterRecord", () => {
     });
   });
 
+  test("a colliding folder does not lend its records to the other repository", () => {
+    withTemp((dir) => {
+      const config = join(dir, "claude");
+      // /…/a-b and /…/a/b encode to the same project folder name.
+      const repoDash = join(dir, "a-b");
+      const repoSlash = join(dir, "a", "b");
+      const folder = join(config, "projects", repoSlash.replace(/[^A-Za-z0-9]/gu, "-"));
+      const titled = (cwd: string): string =>
+        `${JSON.stringify({ customTitle: "postmaster", type: "custom-title" })}\n${JSON.stringify({ cwd, type: "user" })}\n`;
+      write(join(folder, "dash-repo.jsonl"), titled(repoDash), 2000);
+      write(join(folder, "slash-repo.jsonl"), titled(repoSlash), 1000);
+      // The newer record belongs to the other repository, so the older
+      // record of the requested repository wins.
+      expect(findNewestPostmasterRecord(repoSlash, { CLAUDE_CONFIG_DIR: config })).toBe(
+        join(folder, "slash-repo.jsonl"),
+      );
+      expect(findNewestPostmasterRecord(repoDash, { CLAUDE_CONFIG_DIR: config })).toBe(
+        join(folder, "dash-repo.jsonl"),
+      );
+    });
+  });
+
   test("the newest postmaster-titled record wins over a newer clerk record", () => {
     withTemp((dir) => {
       const config = join(dir, "claude");

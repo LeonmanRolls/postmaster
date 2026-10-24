@@ -7,7 +7,7 @@
 import type { Dirent } from "node:fs";
 import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { BOUND_L, BOUND_R, D_CLASS, END_OF_STRING } from "./text.ts";
 
 export type SessionRecordEnv = {
@@ -102,35 +102,38 @@ export const findNativeRecord = (
   return withMtime[0]!.path;
 };
 
-const readCustomTitle = (path: string, onWarn?: (message: string) => void): string | null => {
+const readRecordIdentity = (
+  path: string,
+  onWarn?: (message: string) => void,
+): { cwd: string | null; title: string | null } => {
   let content: string;
   try {
     content = readFileSync(path, "utf8");
   } catch {
     onWarn?.(`cannot read session record ${path}; skipping it`);
-    return null;
+    return { cwd: null, title: null };
   }
   // The record is an append-only log: a rename appends a new title, so the
-  // last custom-title line is the session's current name.
+  // last custom-title line is the session's current name. The first line
+  // that states a working directory names the repository the session
+  // belongs to.
+  let cwd: string | null = null;
   let title: string | null = null;
   for (const line of content.split("\n")) {
     if (!line.trim()) continue;
     try {
       const row: unknown = JSON.parse(line);
-      if (
-        row !== null &&
-        typeof row === "object" &&
-        !Array.isArray(row) &&
-        (row as Record<string, unknown>).type === "custom-title" &&
-        typeof (row as Record<string, unknown>).customTitle === "string"
-      ) {
-        title = (row as Record<string, unknown>).customTitle as string;
+      if (row === null || typeof row !== "object" || Array.isArray(row)) continue;
+      const record = row as Record<string, unknown>;
+      if (cwd === null && typeof record.cwd === "string") cwd = record.cwd;
+      if (record.type === "custom-title" && typeof record.customTitle === "string") {
+        title = record.customTitle;
       }
     } catch {
-      // A line that is not JSON carries no title.
+      // A line that is not JSON carries no identity.
     }
   }
-  return title;
+  return { cwd, title };
 };
 
 const POSTMASTER_WORD = new RegExp(`${BOUND_L}postmaster${BOUND_R}`, "iu");
@@ -149,6 +152,7 @@ export const findNewestPostmasterRecord = (
   } catch {
     throw new Error(`no Claude Code project folder for ${repo}`);
   }
+  const requested = resolve(repo);
   const candidates = entries
     .filter((name) => name.endsWith(".jsonl"))
     .map((name) => join(folder, name))
@@ -160,8 +164,14 @@ export const findNewestPostmasterRecord = (
       }
     })
     .flatMap((path) => {
-      const title = readCustomTitle(path, onWarn);
-      return title !== null && namesPostmaster(title) ? [path] : [];
+      const { cwd, title } = readRecordIdentity(path, onWarn);
+      if (title === null || !namesPostmaster(title)) return [];
+      // The folder name is a lossy encoding of the repository path, so
+      // two repositories can share one folder. A record that states a
+      // working directory other than the requested repository is not
+      // that repository's record, whatever its title says.
+      if (cwd !== null && cwd !== requested) return [];
+      return [path];
     });
   if (candidates.length === 0) {
     throw new Error(`no postmaster record was found in ${folder}`);
