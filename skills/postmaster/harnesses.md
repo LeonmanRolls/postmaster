@@ -680,6 +680,45 @@ one falls back to summing its assistant messages. Mimo and pi per-step figures a
 Muse Code's `goal_usage_attribution` repeats its `model_completed` values per call, so the
 reader takes `model_completed` alone.
 
+## Responsiveness
+
+`<tool>/scripts/run responsiveness` is this file's executable form for how long a user's
+messages waited in a session: it reads a harness's own record of the session, beside the usage
+report, and prints times and counts only, never what a message said. It takes a record path, a
+session id found the way the session export finds it, or no session, in which case it reads the
+newest record in the target's project folder whose `custom-title` line names the postmaster.
+Its paired controls are made-up records in the record's exact shape, driven through the command
+itself (`<tool>/scripts/acceptance-167.test.ts`, `<tool>/scripts/responsiveness.test.ts`).
+
+| harness | where its record lives | lines it reads | result |
+|---|---|---|---|
+| claude | `CLAUDE_CONFIG_DIR` or `~/.claude`, under `projects/`, then the working directory with each non-alphanumeric character replaced by `-`, then `/<session id>.jsonl` | `queue-operation` `enqueue` then `remove` or `dequeue`, `attachment` `queued_command` with `origin.kind` `human`, `user` with `origin.kind` `human` and `promptSource` `typed` or `queued`, `system` `turn_duration`, `system` `compact_boundary` | seen wait, answer wait, compactions |
+| codex | its session store; this report does not read it | none | unsupported, one line, non-zero exit |
+| grok | its session store; this report does not read it | none | unsupported, one line, non-zero exit |
+| agy | its session store; this report does not read it | none | unsupported, one line, non-zero exit |
+| pi | its session store; this report does not read it | none | unsupported, one line, non-zero exit |
+| muse | its session store; this report does not read it | none | unsupported, one line, non-zero exit |
+| mimo | its session store; this report does not read it | none | unsupported, one line, non-zero exit |
+
+The claude lines are not documented by the vendor; they were read from records written by
+Claude Code 2.1.275 to 2.1.301. A queued message's seen wait runs from `enqueue` to its
+delivery, a message typed while the session is idle has no seen wait, the answer wait runs
+from delivery or the typed line to the next `turn_duration`, a `queued_command` whose
+origin kind is `task-notification` is not a user message, and a delivery nothing named
+human is not counted as one either. A queued message can also arrive as a `user` line
+with `promptSource` `queued`; that row's own time is its delivery time.
+
+Where no key links a delivery to a message, the report prints the wait as unknown:
+it never pairs by elimination, order or timing, and never takes a queued row to
+be another message's second form. The pairing is a pure function of each turn's
+records: an attachment's stamp is its enqueue time, and a queued user row's own
+time is its delivery time and nothing more is concluded from it. The reader once
+paired a turn's lone candidate with its lone unidentified delivery and absorbed
+queued rows into candidates by count; twelve review rounds kept finding shapes
+those rules miscounted, so both were removed on the user's word (2026-10-24).
+Measured on 4,254 real records with this reader on 2026-10-24: 1,982 of 4,390
+messages (45 percent) have an unknown seen wait, and 637 an unknown answer wait.
+
 ## The pane view
 
 `<tool>/scripts/run view-stream` is the other executable half of this file: it renders an events

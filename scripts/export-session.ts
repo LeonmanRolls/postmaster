@@ -6,13 +6,11 @@
 // thread id is read from that harness's stream. Each thread gets a separate file under
 // <dispatch>/sessions/<name>/, so coachman legs and review rounds do not overwrite one another.
 import { spawnSync } from "node:child_process";
-import type { Dirent } from "node:fs";
 import {
   chmodSync,
   copyFileSync,
   lstatSync,
   mkdirSync,
-  readdirSync,
   readFileSync,
   realpathSync,
   renameSync,
@@ -20,10 +18,10 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { mkstempSync, signalExitCode } from "./lib/proc.ts";
-import { D_CLASS, END_OF_STRING, pySplitLines } from "./lib/text.ts";
+import { findNativeRecord } from "./lib/session-record.ts";
+import { END_OF_STRING, pySplitLines } from "./lib/text.ts";
 
 const USAGE =
   "usage: run export-session <dispatch> <name> <harness> <cwd> <events> [<harness-data>]";
@@ -195,85 +193,14 @@ function sessionId(eventsPath: string, harness: string): string | null {
   return null;
 }
 
-// Every *.jsonl under root, file order; the walk stops at the first
-// unreadable directory, as main's rglob loop does under its OSError guard.
-function collectJsonl(root: string): string[] {
-  const found: string[] = [];
-  let failed = false;
-  const walk = (dir: string): void => {
-    if (failed) return;
-    let entries: Dirent[];
-    try {
-      entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
-      failed = true;
-      return;
-    }
-    for (const ent of entries) {
-      if (failed) return;
-      const full = join(dir, ent.name);
-      if (ent.isDirectory()) walk(full);
-      else if (ent.name.endsWith(".jsonl") && (ent.isFile() || ent.isSymbolicLink())) {
-        found.push(full);
-      }
-    }
-  };
-  walk(root);
-  return found;
-}
-
-// Python re.escape's effect outside a character class: syntax characters
-// backslashed, the rest (here - and _) literal. re.escape also backslashes
-// -, which a u pattern rejects outside a class, so - stays bare: it is
-// literal there in both languages.
-const REGEX_SPECIAL_RE = /[\^$\\.*+?()[\]{}|]/gu;
-function regexEscape(s: string): string {
-  return s.replace(REGEX_SPECIAL_RE, "\\$&");
-}
-
 function nativeRecord(harness: string, thread: string): string {
-  const home = homedir();
-  let root: string | null = null;
-  if (harness === "codex") root = join(process.env.CODEX_HOME ?? join(home, ".codex"), "sessions");
-  else if (harness === "claude")
-    root = join(process.env.CLAUDE_CONFIG_DIR ?? join(home, ".claude"), "projects");
-  else if (harness === "pi") root = join(home, ".pi", "agent", "sessions");
-  if (root === null) die(`unknown harness: ${harness}`);
-  if (!isDir(root)) die(`no durable ${harness} session store is available`);
-  // A store holds many threads, and one id can hide inside another
-  // (thread-1 inside thread-10, or inside other-thread-1), so neither a
-  // substring nor a bare dash-suffix is a match. Codex names files
-  // rollout-<timestamp>-<thread>.jsonl with a fixed timestamp shape, and only
-  // that shape is matched; claude and pi name the file for the thread exactly.
-  // If codex ever changes its timestamp shape this fails loudly, refusing the
-  // export, rather than silently misattributing another session.
-  const digit = `[${D_CLASS}]`;
-  const codexStem = new RegExp(
-    `^rollout-${digit}{4}-${digit}{2}-${digit}{2}T${digit}{2}-${digit}{2}-${digit}{2}-${regexEscape(thread)}${END_OF_STRING}`,
-    "u",
-  );
-  const exact: string[] = [];
-  const suffixed: string[] = [];
-  for (const path of collectJsonl(root)) {
-    const stem = basename(path).slice(0, -".jsonl".length);
-    if (stem === thread) exact.push(path);
-    else if (harness === "codex" && codexStem.test(stem)) suffixed.push(path);
+  try {
+    return findNativeRecord(harness, thread, process.env, (message) => {
+      console.error(`export-session: ${message}`);
+    });
+  } catch (error: unknown) {
+    die(error instanceof Error ? error.message : String(error));
   }
-  const found = exact.length > 0 ? exact : suffixed;
-  if (found.length === 0) die(`no durable ${harness} record was found for thread ${thread}`);
-  // Thread ids are unique, so several records for one thread should not happen;
-  // the newest is kept (a codex thread spanning midnight owns one file per day),
-  // loudly rather than silently.
-  if (found.length > 1) {
-    console.error(
-      `export-session: ${found.length} ${harness} records name thread ${thread}; keeping the newest`,
-    );
-  }
-  // Main orders by nanoseconds; the runtimes expose milliseconds, so two
-  // records stamped within one millisecond keep walk order between them.
-  const withMtime = found.map((p) => ({ p, ms: statSync(p).mtimeMs }));
-  withMtime.sort((a, b) => b.ms - a.ms);
-  return withMtime[0]!.p;
 }
 
 function externalExport(
